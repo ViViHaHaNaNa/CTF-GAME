@@ -1,11 +1,14 @@
 // Quick PvE balance check: breach rate, coins and duration per wave for a few base builds.
 // Usage: npx tsx shared/scripts/pve-balance.ts
-import { CONFIG, ZombieWave, newBase, type BaseState } from '../src/index.ts';
+import { CONFIG, ZombieWave, getWorld, newBase, type BaseState } from '../src/index.ts';
+
+// Average over a few plots so every graveyard direction is represented.
+const PLOTS = [0, 1, 8, 9, 27, 36].map((i) => getWorld().plots[i]!);
 
 function run(label: string, base: BaseState, n = 200) {
   let breaches = 0, coins = 0, ticks = 0;
   for (let s = 1; s <= n; s++) {
-    const w = new ZombieWave(base, s * 7919);
+    const w = new ZombieWave(base, s * 7919, PLOTS[s % PLOTS.length]!);
     w.runToEnd();
     if (w.breached) breaches++;
     coins += w.coins;

@@ -1,5 +1,5 @@
 import { io, type Socket } from 'socket.io-client';
-import type { BaseAction, PlayerView } from '@siege/shared';
+import type { BaseAction, PlayerView, RaidStatus } from '@siege/shared';
 import { SERVER_URL } from './config.ts';
 
 // Socket connection to the authoritative game server. The browser only sends intents.
@@ -53,6 +53,23 @@ export class Net {
 
   act(action: BaseAction) {
     return this.call<{ player: PlayerView }>('act', action);
+  }
+
+  /** The plots this screen is looking at (area of interest), nearest first. */
+  watch(plots: number[]) {
+    this.socket.emit('watch', { plots });
+  }
+
+  attack(plot: number) {
+    return this.call<{ raid: RaidStatus }>('attack', { plot });
+  }
+
+  deploy(kind: string, x: number, y: number) {
+    return this.call<{ coins: number }>('deploy', { kind, x, y });
+  }
+
+  retreat() {
+    this.socket.emit('retreat');
   }
 
   logout() {

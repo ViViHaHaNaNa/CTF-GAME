@@ -1,12 +1,12 @@
 import { CONFIG } from './config.ts';
-import { GRID } from './layout.ts';
 import type { Snapshot } from './types.ts';
 
 // Headless, deterministic combat engine (fixed ticks, seeded RNG, no wall clock).
 // Used on the server for both zombie waves and PvP; clients only render the snapshots it produces.
 //
-// Units walk straight at their target. Anything solid in the way (a wall, a post) gets attacked
-// until it falls, then they carry on. Posts shoot the nearest unit in range.
+// Coordinates are world tiles. Units walk straight at their target. Anything solid in the way (a wall,
+// a post) gets attacked until it falls, then they carry on. Posts shoot the nearest unit in range.
+// Zombies go for the Main Tower; raiders go for the nearest non-wall building.
 
 export type BuildingKind = 'hq' | 'post' | 'wall';
 
@@ -42,6 +42,8 @@ export interface UnitStats {
   range: number;
   /** damage multiplier against walls */
   wallMult: number;
+  /** 'hq': head for the Main Tower (zombies). 'nearest': nearest non-wall building (raiders). */
+  target?: 'hq' | 'nearest';
 }
 
 export interface Building extends BuildingDef {
@@ -59,7 +61,9 @@ export interface Unit {
   hp: number;
   maxHp: number;
   stats: UnitStats;
-  state: 'move' | 'attack' | 'dead';
+  /** 'rise' = climbing out of the ground: harmless and untargetable until `wakeAt`. */
+  state: 'rise' | 'move' | 'attack' | 'dead';
+  wakeAt: number;
   facing: 1 | -1;
   targetId: number;
   cooldown: number;
@@ -83,6 +87,7 @@ export function mulberry32(seed: number): () => number {
 }
 
 const DEAD_LINGER_TICKS = 12;
+const STATE_CODE = { move: 0, attack: 1, dead: 2, rise: 3 } as const;
 
 export class Combat {
   tick = 0;
@@ -101,7 +106,7 @@ export class Combat {
     for (const d of defs) {
       const b: Building = { ...d, maxHp: d.hp, alive: true, reload: 0 };
       this.buildings.set(d.id, b);
-      for (let y = d.y; y < d.y + d.h; y++) for (let x = d.x; x < d.x + d.w; x++) this.solid.set(y * GRID + x, d.id);
+      for (let y = d.y; y < d.y + d.h; y++) for (let x = d.x; x < d.x + d.w; x++) this.solid.set(y * 4096 + x, d.id);
     }
   }
 
@@ -118,7 +123,8 @@ export class Combat {
     return this.units.filter((u) => u.state !== 'dead').length;
   }
 
-  addUnit(kind: number, stats: UnitStats, x: number, y: number): Unit {
+  /** `riseTicks` > 0: the unit first climbs out of the ground for that long. */
+  addUnit(kind: number, stats: UnitStats, x: number, y: number, riseTicks = 0): Unit {
     const u: Unit = {
       id: this.nextUnitId++,
       kind,
@@ -127,7 +133,8 @@ export class Combat {
       hp: stats.hp,
       maxHp: stats.hp,
       stats,
-      state: 'move',
+      state: riseTicks > 0 ? 'rise' : 'move',
+      wakeAt: this.tick + riseTicks,
       facing: 1,
       targetId: -1,
       cooldown: 0,
@@ -145,26 +152,38 @@ export class Combat {
   }
 
   private solidAt(x: number, y: number): Building | undefined {
-    const tx = Math.floor(x);
-    const ty = Math.floor(y);
-    if (tx < 0 || ty < 0 || tx >= GRID || ty >= GRID) return undefined;
-    const id = this.solid.get(ty * GRID + tx);
+    const id = this.solid.get(Math.floor(y) * 4096 + Math.floor(x));
     const b = id === undefined ? undefined : this.buildings.get(id);
     return b?.alive ? b : undefined;
   }
 
-  /** Units go for the HQ; if it's gone, the nearest surviving building. */
+  /** Zombies: the HQ. Raiders: the nearest non-wall building. Fallback: the nearest anything. */
   private pickTarget(u: Unit): Building | undefined {
     const hq = this.hq;
-    if (hq?.alive) return hq;
+    if ((u.stats.target ?? 'hq') === 'hq' && hq?.alive) return hq;
     let best: Building | undefined;
     let bestD = Infinity;
-    for (const b of this.buildings.values()) {
-      if (!b.alive) continue;
-      const d = this.distTo(b, u.x, u.y);
-      if (d < bestD) (best = b), (bestD = d);
+    for (const pass of [false, true]) {
+      for (const b of this.buildings.values()) {
+        if (!b.alive || (!pass && b.kind === 'wall')) continue;
+        const d = this.distTo(b, u.x, u.y);
+        if (d < bestD) (best = b), (bestD = d);
+      }
+      if (best) break;
     }
     return best;
+  }
+
+  /** Share of non-wall buildings destroyed (0..1): the PvP "destruction" score. */
+  destruction(): number {
+    let all = 0;
+    let down = 0;
+    for (const b of this.buildings.values()) {
+      if (b.kind === 'wall') continue;
+      all++;
+      if (!b.alive) down++;
+    }
+    return all ? down / all : 0;
   }
 
   private damage(b: Building, amount: number, res: StepResult) {
@@ -195,6 +214,10 @@ export class Combat {
     // 1. Units move or attack.
     for (const u of this.units) {
       if (u.state === 'dead') continue;
+      if (u.state === 'rise') {
+        if (this.tick < u.wakeAt) continue;
+        u.state = 'move';
+      }
       let target = this.buildings.get(u.targetId);
       if (!target?.alive) {
         target = this.pickTarget(u);
@@ -208,6 +231,8 @@ export class Combat {
         if (u.cooldown === 0) {
           this.damage(target, u.stats.damage * (target.kind === 'wall' ? u.stats.wallMult : 1), res);
           u.cooldown = u.stats.cooldown;
+          // Ranged attackers leave a visible shot (posts' shots are recorded below).
+          if (u.stats.range > 1) this.shots.push([u.id, Math.round((target.x + target.w / 2) * 16), Math.round((target.y + target.h / 2) * 16)]);
         }
         continue;
       }
@@ -241,7 +266,7 @@ export class Combat {
       let best: Unit | undefined;
       let bestD = Infinity;
       for (const u of this.units) {
-        if (u.state === 'dead') continue;
+        if (u.state === 'dead' || u.state === 'rise') continue;
         const d = Math.hypot(u.x - cx, u.y - cy);
         if (d <= b.gun.range && d < bestD) (best = u), (bestD = d);
       }
@@ -251,7 +276,7 @@ export class Combat {
       if (b.gun.splash > 0) {
         const tx = best.x;
         const ty = best.y;
-        for (const u of this.units) if (u.state !== 'dead' && Math.hypot(u.x - tx, u.y - ty) <= b.gun.splash) this.hurt(u, b.gun.damage, res);
+        for (const u of this.units) if (u.state !== 'dead' && u.state !== 'rise' && Math.hypot(u.x - tx, u.y - ty) <= b.gun.splash) this.hurt(u, b.gun.damage, res);
       } else {
         this.hurt(best, b.gun.damage, res);
       }
@@ -288,7 +313,7 @@ export class Combat {
     }
     return {
       t: this.tick,
-      u: this.units.map((u) => [u.id, u.kind, Math.round(u.x * 16), Math.round(u.y * 16), Math.round((100 * u.hp) / u.maxHp), u.state === 'move' ? 0 : u.state === 'attack' ? 1 : 2, u.facing]),
+      u: this.units.map((u) => [u.id, u.kind, Math.round(u.x * 16), Math.round(u.y * 16), Math.round((100 * u.hp) / u.maxHp), STATE_CODE[u.state], u.facing]),
       b,
       s,
     };

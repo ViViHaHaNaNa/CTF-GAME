@@ -25,7 +25,11 @@ const io = new Server(app.server, {
   pingInterval: 10_000,
   pingTimeout: 8_000,
 });
-const game = new GameServer(store, { toPlayer: (id, ev, data) => io.to(`p:${id}`).emit(ev, data) });
+const game = new GameServer(store, {
+  toPlayer: (id, ev, data) => io.to(`p:${id}`).emit(ev, data),
+  toBase: (plot, ev, data) => io.to(`base:${plot}`).emit(ev, data),
+  toAll: (ev, data) => io.emit(ev, data),
+});
 attachSockets(io, game);
 
 app.get('/api/health', async () => ({ ok: true, players: game.players.size }));

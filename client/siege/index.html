@@ -16,9 +16,32 @@
         <div class="hud-stat" title="Trophies"><span class="trophy">&#9819;</span><span id="hud-trophies">0</span></div>
         <button class="icon-btn" id="menu-btn" aria-label="Menu">&#9776;</button>
       </header>
-      <div class="wave-banner" id="wave-banner" hidden></div>
+      <button class="wave-banner" id="wave-banner" hidden></button>
       <main class="stage">
-        <div class="board-wrap" id="board-wrap"><canvas id="board"></canvas></div>
+        <div class="board-wrap" id="board-wrap">
+          <canvas id="board"></canvas>
+          <canvas class="minimap" id="minimap" width="180" height="180" aria-label="Map"></canvas>
+          <div class="map-tools" id="map-tools" hidden>
+            <button class="tool" id="home-btn">My base</button>
+            <button class="tool" id="ranks-btn">Ranks</button>
+            <button class="tool" id="live-btn">Live <span class="badge" id="live-count" hidden>0</span></button>
+          </div>
+          <div class="zoom-tools">
+            <button class="tool sq" id="zoom-in" aria-label="Zoom in">+</button>
+            <button class="tool sq" id="zoom-out" aria-label="Zoom out">&minus;</button>
+          </div>
+          <div class="feed" id="feed"></div>
+          <div class="attack-bar" id="attack-bar" hidden>
+            <div class="attack-top">
+              <span id="raid-title"></span>
+              <span class="raid-stat"><b id="raid-time">3:00</b> left</span>
+              <span class="raid-stat"><b id="raid-dmg">0%</b> destroyed</span>
+              <button class="tool danger" id="retreat-btn">Retreat</button>
+            </div>
+            <div class="troops" id="troops"></div>
+            <p class="attack-hint">Tap the red ground outside their walls to send a raider.</p>
+          </div>
+        </div>
         <aside class="panel" id="panel" hidden></aside>
       </main>
       <div class="toasts" id="toasts"></div>
@@ -28,7 +51,7 @@
       </div>
       <section class="login" id="login" hidden>
         <h1>Code Siege</h1>
-        <p class="lead">Hold your base. Survive the swarm.</p>
+        <p class="lead">Hold your base. Raid your rivals. Survive the swarm.</p>
         <form id="login-form" autocomplete="off">
           <label>Display name<input id="login-name" maxlength="16" required autocapitalize="words" /></label>
           <label>Roll number<input id="login-roll" maxlength="20" required autocapitalize="characters" inputmode="text" /></label>

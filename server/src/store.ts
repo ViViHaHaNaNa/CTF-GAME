@@ -14,7 +14,11 @@ export interface PlayerRecord {
   token: string;
   coins: number;
   trophies: number;
+  /** World plot this base sits on (assigned at registration, never changes). */
+  plot: number;
   base: BaseState;
+  /** Server ms until which this base can't be raided. */
+  shieldUntil: number;
   /** Coins earned by offline waves, credited at next login (capped). */
   bank: number;
   /** What happened while the player was away (reset at login). */

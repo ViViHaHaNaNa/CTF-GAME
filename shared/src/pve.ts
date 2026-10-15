@@ -1,25 +1,29 @@
-import { CONFIG, ZOMBIE_KINDS, postStats, type ZombieKind } from './config.ts';
+import { CONFIG, UNIT_KINDS, ZOMBIE_KINDS, postStats, type ZombieKind } from './config.ts';
 import { Combat, mulberry32, type BuildingDef, type UnitStats } from './engine.ts';
-import { GRID, HQ_RECT, SIDES, SLOTS, WALLS, type Side } from './layout.ts';
+import { HQ_RECT, SLOTS, WALLS } from './layout.ts';
 import type { BaseState, WaveSummary } from './types.ts';
+import { getWorld, type WorldPlot } from './world.ts';
 
-// Zombie waves (PvE). A wave is fully described by the base, the HQ level and a seed, so the same
-// inputs always play out the same way — online (streamed live) or offline (resolved headlessly).
+// Zombie waves (PvE). A wave is fully described by the base, its plot and a seed, so the same inputs
+// always play out the same way: online (streamed live) or offline (resolved headlessly).
+// Zombies rise from the graves of the base's own graveyard and only ever attack that base.
 
 export const HQ_ID = 1;
 export const wallId = (i: number) => 100 + i;
 export const postId = (slot: number) => 200 + slot;
 
-/** Combat buildings for a base. Waves never cause permanent damage: every wave starts from this. */
-export function baseBuildings(base: BaseState): BuildingDef[] {
-  const defs: BuildingDef[] = [{ id: HQ_ID, kind: 'hq', ...HQ_RECT, hp: CONFIG.hq.hp(base.hq) }];
+/** A base's buildings placed on its plot (world tiles). Every fight starts from this: no lasting damage. */
+export function baseBuildings(base: BaseState, plot: { x: number; y: number }): BuildingDef[] {
+  const ox = plot.x;
+  const oy = plot.y;
+  const defs: BuildingDef[] = [{ id: HQ_ID, kind: 'hq', x: ox + HQ_RECT.x, y: oy + HQ_RECT.y, w: HQ_RECT.w, h: HQ_RECT.h, hp: CONFIG.hq.hp(base.hq) }];
   const wallHp = CONFIG.walls.hp(base.walls);
-  for (const w of WALLS) defs.push({ id: wallId(w.i), kind: 'wall', x: w.x, y: w.y, w: 1, h: 1, hp: wallHp });
+  for (const w of WALLS) defs.push({ id: wallId(w.i), kind: 'wall', x: ox + w.x, y: oy + w.y, w: 1, h: 1, hp: wallHp });
   base.posts.forEach((p, slot) => {
     if (!p) return;
     const s = SLOTS[slot]!;
     const st = postStats(p.type, p.level);
-    defs.push({ id: postId(slot), kind: 'post', x: s.x, y: s.y, w: 1, h: 1, hp: st.hp, gun: { range: st.range, damage: st.damage, cooldown: st.cooldown, splash: st.splash } });
+    defs.push({ id: postId(slot), kind: 'post', x: ox + s.x, y: oy + s.y, w: 1, h: 1, hp: st.hp, gun: { range: st.range, damage: st.damage, cooldown: st.cooldown, splash: st.splash } });
   });
   return defs;
 }
@@ -33,6 +37,7 @@ export function zombieStats(kind: ZombieKind, hq: number): UnitStats {
     cooldown: z.cooldown,
     range: z.range,
     wallMult: z.wallMult,
+    target: 'hq',
   };
 }
 
@@ -43,39 +48,34 @@ export function killCoins(kind: ZombieKind, hq: number): number {
 export interface PlannedSpawn {
   tick: number;
   kind: ZombieKind;
+  /** World tile (centre of a grave). */
   x: number;
   y: number;
 }
 
 export interface WavePlan {
-  sides: Side[];
+  graveyard: number;
   spawns: PlannedSpawn[];
 }
 
-/** Who comes, from where, and when. */
-export function planWave(hq: number, seed: number): WavePlan {
+/** Who rises, from which grave, and when. */
+export function planWave(hq: number, seed: number, plot: WorldPlot): WavePlan {
   const rng = mulberry32(seed ^ 0x9e3779b9);
-  const sideCount = 1 + Math.floor(rng() * CONFIG.waves.maxSides);
-  const sides: Side[] = [];
-  while (sides.length < sideCount) {
-    const s = SIDES[Math.floor(rng() * SIDES.length)]!;
-    if (!sides.includes(s)) sides.push(s);
-  }
+  const gy = getWorld().graveyards[plot.graveyard]!;
   const mix = CONFIG.waves.mix(hq);
   const total = mix.z_small + mix.z_big + mix.z_axe;
   const count = CONFIG.waves.count(hq);
   const spread = CONFIG.waves.spawnSpread * CONFIG.tickRate;
+  const start = Math.floor(rng() * gy.graves.length);
   const spawns: PlannedSpawn[] = [];
   for (let i = 0; i < count; i++) {
     const r = rng() * total;
     const kind: ZombieKind = r < mix.z_small ? 'z_small' : r < mix.z_small + mix.z_big ? 'z_big' : 'z_axe';
-    const side = sides[i % sides.length]!;
-    const along = 2 + rng() * (GRID - 4);
-    const [x, y] = side === 'n' ? [along, 0.5] : side === 's' ? [along, GRID - 0.5] : side === 'w' ? [0.5, along] : [GRID - 0.5, along];
-    spawns.push({ tick: Math.floor((i / count) * spread + rng() * CONFIG.tickRate), kind, x, y });
+    const grave = gy.graves[(start + i) % gy.graves.length]!;
+    spawns.push({ tick: Math.floor((i / count) * spread + rng() * CONFIG.tickRate), kind, x: grave.x + 0.5, y: grave.y + 0.85 });
   }
   spawns.sort((a, b) => a.tick - b.tick);
-  return { sides, spawns };
+  return { graveyard: gy.id, spawns };
 }
 
 /** A running zombie wave on top of the shared combat engine. */
@@ -88,18 +88,19 @@ export class ZombieWave {
   done = false;
   breached = false;
 
-  constructor(readonly base: BaseState, readonly seed: number) {
-    this.combat = new Combat(seed, baseBuildings(base));
-    this.plan = planWave(base.hq, seed);
+  constructor(readonly base: BaseState, readonly seed: number, readonly plot: WorldPlot) {
+    this.combat = new Combat(seed, baseBuildings(base, plot));
+    this.plan = planWave(base.hq, seed, plot);
   }
 
   /** One tick. Returns coins earned by kills this tick. */
   step(): number {
     if (this.done) return 0;
     const c = this.combat;
+    const rise = Math.round(CONFIG.waves.riseTime * CONFIG.tickRate);
     while (this.next < this.plan.spawns.length && this.plan.spawns[this.next]!.tick <= c.tick) {
       const s = this.plan.spawns[this.next++]!;
-      c.addUnit(ZOMBIE_KINDS.indexOf(s.kind), zombieStats(s.kind, this.base.hq), s.x, s.y);
+      c.addUnit(UNIT_KINDS.indexOf(s.kind), zombieStats(s.kind, this.base.hq), s.x, s.y, rise);
     }
     const r = c.step();
     let earned = 0;
@@ -115,7 +116,7 @@ export class ZombieWave {
     return earned;
   }
 
-  /** Play to the end instantly (offline bases, disconnects). */
+  /** Play to the end instantly (offline bases, unwatched bases, disconnects). */
   runToEnd(): void {
     while (!this.done) this.step();
   }

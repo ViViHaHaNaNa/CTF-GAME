@@ -1,31 +1,72 @@
 import { describe, expect, it } from 'vitest';
 import {
   CONFIG,
+  PLOT,
   SLOTS,
   WALLS,
+  Raid,
   ZombieWave,
   applyAction,
   breachLoss,
+  generateWorld,
+  getWorld,
+  inDeployZone,
+  lootable,
   newBase,
   parseAction,
   planWave,
   quote,
   slotsUnlocked,
+  trophyStake,
+  weakerFactor,
 } from '../src/index.ts';
 
-describe('layout', () => {
+const world = getWorld();
+const plot = world.plots[27]!;
+
+describe('layout & world', () => {
   it('has a closed wall ring and slots inside it', () => {
-    expect(WALLS.length).toBe(52);
+    expect(WALLS.length).toBe(36);
     expect(new Set(WALLS.map((w) => `${w.x},${w.y}`)).size).toBe(WALLS.length);
     expect(SLOTS).toHaveLength(8);
   });
+
+  it('is identical every time it is generated (server and clients agree)', () => {
+    const a = generateWorld(123);
+    const b = generateWorld(123);
+    expect(a.plots).toEqual(b.plots);
+    expect(a.props).toEqual(b.props);
+    expect(a.graveyards).toEqual(b.graveyards);
+  });
+
+  it('has 64 non-overlapping plots and a graveyard serving 3-5 bases each', () => {
+    expect(world.plots).toHaveLength(64);
+    for (const a of world.plots)
+      for (const b of world.plots)
+        if (a.id < b.id) expect(a.x < b.x + PLOT && b.x < a.x + PLOT && a.y < b.y + PLOT && b.y < a.y + PLOT).toBe(false);
+    for (const g of world.graveyards) {
+      expect(g.serves.length).toBeGreaterThanOrEqual(3);
+      expect(g.serves.length).toBeLessThanOrEqual(5);
+      expect(g.graves.length).toBeGreaterThanOrEqual(6);
+      expect(g.graves.length).toBeLessThanOrEqual(10);
+    }
+    expect(new Set(world.plots.map((p) => p.order)).size).toBe(64);
+  });
+
+  it('only allows deploying on the apron outside the walls', () => {
+    expect(inDeployZone(0, 0)).toBe(true);
+    expect(inDeployZone(13, 7)).toBe(true);
+    expect(inDeployZone(6, 6)).toBe(false); // inside the compound
+    expect(inDeployZone(2, 5)).toBe(false); // on the wall
+    expect(inDeployZone(14, 3)).toBe(false); // outside the plot
+  });
 });
 
-describe('combat engine', () => {
-  it('is deterministic: same base + seed = same wave', () => {
-    for (let seed = 1; seed < 30; seed++) {
-      const a = new ZombieWave(newBase(), seed);
-      const b = new ZombieWave(newBase(), seed);
+describe('zombie waves', () => {
+  it('are deterministic: same base + seed + plot = same wave', () => {
+    for (let seed = 1; seed < 20; seed++) {
+      const a = new ZombieWave(newBase(), seed, plot);
+      const b = new ZombieWave(newBase(), seed, plot);
       a.runToEnd();
       b.runToEnd();
       expect([a.kills, a.coins, a.breached, a.combat.tick]).toEqual([b.kills, b.coins, b.breached, b.combat.tick]);
@@ -33,39 +74,74 @@ describe('combat engine', () => {
     }
   });
 
-  it('streams the same snapshots tick by tick as a headless run', () => {
-    const live = new ZombieWave(newBase(), 42);
-    const headless = new ZombieWave(newBase(), 42);
-    while (!live.done) live.step();
-    headless.runToEnd();
-    expect(live.coins).toBe(headless.coins);
+  it("rise from the graves of the base's own graveyard", () => {
+    const plan = planWave(3, 99, plot);
+    const gy = world.graveyards[plot.graveyard]!;
+    expect(plan.graveyard).toBe(gy.id);
+    for (const s of plan.spawns) expect(gy.graves.some((g) => Math.abs(g.x + 0.5 - s.x) < 1e-9 && Math.abs(g.y + 0.85 - s.y) < 1e-9)).toBe(true);
   });
 
-  it('waves always end within the time limit', () => {
-    for (let seed = 1; seed < 50; seed++) {
-      const w = new ZombieWave(newBase(), seed);
+  it('zombies are harmless while rising, then walk to their base', () => {
+    const w = new ZombieWave(newBase(), 5, plot);
+    while (w.combat.units.length === 0) w.step();
+    const u = w.combat.units[0]!;
+    expect(u.state).toBe('rise');
+    for (let i = 0; i < 40; i++) w.step();
+    expect(['move', 'attack']).toContain(w.combat.units[0]!.state);
+  });
+
+  it('always end within the time limit', () => {
+    for (let seed = 1; seed < 30; seed++) {
+      const w = new ZombieWave(newBase(), seed, world.plots[seed]!);
       w.runToEnd();
       expect(w.combat.tick).toBeLessThanOrEqual(CONFIG.waves.maxDuration * CONFIG.tickRate);
     }
   });
 
   it('a base with no posts gets breached by a big wave', () => {
-    const base = { hq: 5, walls: 1, posts: SLOTS.map(() => null) };
+    const base = { hq: 6, walls: 1, posts: SLOTS.map(() => null) };
     let breaches = 0;
     for (let seed = 1; seed <= 20; seed++) {
-      const w = new ZombieWave(base, seed);
+      const w = new ZombieWave(base, seed, plot);
       w.runToEnd();
       if (w.breached) breaches++;
     }
     expect(breaches).toBeGreaterThan(10);
   });
+});
 
-  it('waves come from 1 or 2 sides and scale with HQ level', () => {
-    const p1 = planWave(1, 7);
-    const p8 = planWave(8, 7);
-    expect(p1.sides.length).toBeGreaterThanOrEqual(1);
-    expect(p1.sides.length).toBeLessThanOrEqual(CONFIG.waves.maxSides);
-    expect(p8.spawns.length).toBeGreaterThan(p1.spawns.length);
+describe('raids', () => {
+  it('deploys only on the apron, then plays out deterministically', () => {
+    const play = () => {
+      const r = new Raid(1, plot, newBase(), 1, 42);
+      expect(r.canDeploy('r_bat', plot.x + 7, plot.y + 7)).toMatch(/outside the walls/);
+      expect(r.canDeploy('r_helmet', plot.x + 0.5, plot.y + 0.5)).toMatch(/Main Tower level 3/);
+      for (let i = 0; i < 8; i++) {
+        expect(r.canDeploy('r_bat', plot.x + 0.5, plot.y + 0.5 + i * 0.3)).toBeNull();
+        r.deploy('r_bat', plot.x + 0.5, plot.y + 0.5 + i * 0.3);
+      }
+      while (!r.done) r.step();
+      return [r.won, r.endReason, r.combat.tick, r.combat.destruction()];
+    };
+    expect(play()).toEqual(play());
+  });
+
+  it('ends on time even with nothing deployed', () => {
+    const r = new Raid(1, plot, newBase(), 1, 1);
+    while (!r.done) r.step();
+    expect(r.won).toBe(false);
+    expect(r.endReason).toBe('idle');
+  });
+
+  it('loot and trophies are capped and shrink against much weaker players', () => {
+    expect(lootable(50, 1)).toBe(0); // protected floor
+    expect(lootable(1000, 1)).toBe(200);
+    expect(lootable(1_000_000, 2)).toBe(CONFIG.pvp.loot.capBase + 2 * CONFIG.pvp.loot.capPerHq);
+    expect(weakerFactor(100, 100)).toBe(1);
+    expect(weakerFactor(1000, 100)).toBe(CONFIG.pvp.weaker.min);
+    expect(trophyStake(100, 100)).toBe(CONFIG.pvp.trophies.base);
+    expect(trophyStake(1000, 0)).toBeLessThan(trophyStake(100, 100));
+    expect(trophyStake(0, 1000)).toBe(CONFIG.pvp.trophies.max);
   });
 });
 

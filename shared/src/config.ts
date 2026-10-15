@@ -8,6 +8,13 @@ export type PostType = (typeof POST_TYPES)[number];
 export const ZOMBIE_KINDS = ['z_small', 'z_big', 'z_axe'] as const;
 export type ZombieKind = (typeof ZOMBIE_KINDS)[number];
 
+export const RAIDER_KINDS = ['r_bat', 'r_pistol', 'r_helmet', 'r_shotgun'] as const;
+export type RaiderKind = (typeof RAIDER_KINDS)[number];
+
+/** Every unit kind the engine streams, in snapshot index order. */
+export const UNIT_KINDS = [...ZOMBIE_KINDS, ...RAIDER_KINDS] as const;
+export type UnitKind = (typeof UNIT_KINDS)[number];
+
 export const CONFIG = {
   /** Simulation rate of the combat engine (ticks per second). */
   tickRate: 20,
@@ -67,14 +74,16 @@ export const CONFIG = {
     maxDuration: 40,
     /** Zombies trickle in over this many seconds. */
     spawnSpread: 12,
+    /** Seconds a zombie spends climbing out of its grave (harmless and untargetable). */
+    riseTime: 0.6,
+    /** Seconds of warning shown above the graveyard before a wave. */
+    warning: 5,
     count: (hq: number) => 4 + 2 * (hq - 1),
     /** Relative spawn weights by HQ level. */
     mix: (hq: number) => ({ z_small: 0.65 - 0.03 * (hq - 1), z_big: 0.15 + 0.015 * (hq - 1), z_axe: 0.2 + 0.015 * (hq - 1) }),
     hpScale: (hq: number) => 1 + 0.25 * (hq - 1),
     damageScale: (hq: number) => 1 + 0.15 * (hq - 1),
     coinScale: (hq: number) => 1 + 0.12 * (hq - 1),
-    /** Each wave comes from 1 or 2 sides of the map. */
-    maxSides: 2,
     breach: {
       /** Share of coins lost when the HQ falls... */
       lossPct: 0.1,
@@ -83,6 +92,46 @@ export const CONFIG = {
       /** ...and never dropping the player below this. */
       protectedFloor: 100,
     },
+  },
+
+  pvp: {
+    /** Battle length in seconds. */
+    duration: 180,
+    /** Destruction share (non-wall buildings) that wins the raid. Losing the Main Tower also wins it. */
+    winDestruction: 0.5,
+    /** The raid ends early if no raider is alive and nothing was deployed for this long. */
+    idleEnd: 20,
+    maxDeploys: 40,
+    /** Raider stats grow with the attacker's Main Tower level. */
+    troopScale: (hq: number) => 1 + 0.15 * (hq - 1),
+    raiders: {
+      r_bat: { unlockHq: 1, cost: 20, hp: 55, speed: 1.6, damage: 10, cooldown: 0.7, range: 0.5, wallMult: 1 },
+      r_pistol: { unlockHq: 2, cost: 25, hp: 40, speed: 1.2, damage: 7, cooldown: 0.8, range: 3, wallMult: 0.6 },
+      r_helmet: { unlockHq: 3, cost: 50, hp: 160, speed: 0.8, damage: 10, cooldown: 1.0, range: 0.55, wallMult: 1.5 },
+      r_shotgun: { unlockHq: 4, cost: 45, hp: 65, speed: 1.0, damage: 20, cooldown: 1.4, range: 1.8, wallMult: 1 },
+    } as Record<RaiderKind, { unlockHq: number; cost: number; hp: number; speed: number; damage: number; cooldown: number; range: number; wallMult: number }>,
+    loot: {
+      /** Share of the defender's coins a winning raid steals... */
+      pct: 0.2,
+      /** ...capped at base + perHq * defender HQ level... */
+      capBase: 300,
+      capPerHq: 150,
+      /** ...and never taking the defender below this. */
+      protectedFloor: 100,
+    },
+    trophies: {
+      base: 30,
+      /** Extra/less trophies per point of trophy difference (defender - attacker). */
+      perDiff: 0.05,
+      min: 5,
+      max: 50,
+      /** A failed raid costs the attacker this share of what a win would have paid. */
+      lossFactor: 0.5,
+    },
+    /** Raiding a much weaker player (fewer trophies) pays less loot: factor shrinks to `min` at `span` trophies below. */
+    weaker: { span: 400, min: 0.25 },
+    /** After being raided, a base is protected from raids for this long. */
+    autoShield: 120,
   },
 
   offline: {
