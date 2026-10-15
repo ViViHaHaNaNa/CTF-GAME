@@ -22,14 +22,14 @@ async function start() {
     toBase: (plot, ev, data) => io.to(`base:${plot}`).emit(ev, data),
     toAll: (ev, data) => io.emit(ev, data),
   });
-  attachSockets(io, game);
+  const sessions = attachSockets(io, game);
   await new Promise<void>((r) => http.listen(0, '127.0.0.1', r));
   const url = `http://127.0.0.1:${(http.address() as AddressInfo).port}`;
   cleanup.push(() => {
     io.close();
     http.close();
   });
-  return { game, url };
+  return { game, url, sessions };
 }
 
 function client(url: string, auth: object): Socket {
@@ -65,5 +65,40 @@ describe('spectator sockets', () => {
     const { url } = await start();
     const s = client(url, {});
     await next(s, 'needLogin');
+  });
+});
+
+describe('reconnects', () => {
+  it('a player who drops comes back as the same player, still in their raid', async () => {
+    const { game, url } = await start();
+    const d = game.login('Defender', 'R1002');
+    const first = client(url, {});
+    await next(first, 'needLogin');
+    const res = await new Promise<{ ok: boolean; token: string }>((r) => first.emit('login', { name: 'Raider', roll: 'R1001' }, r));
+    expect(res.ok).toBe(true);
+    const attacked = await new Promise<{ ok: boolean }>((r) => first.emit('attack', { plot: d.plot }, r));
+    expect(attacked.ok).toBe(true);
+    first.close();
+
+    // A new connection with the saved token: no login screen, same player, raid still on.
+    const again = client(url, { token: res.token });
+    const [welcome, world] = await Promise.all([
+      next<{ player: { name: string } }>(again, 'welcome'),
+      next<{ raids: { attacker: string; plot: number }[] }>(again, 'world'),
+    ]);
+    expect(welcome.player.name).toBe('Raider');
+    expect(world.raids).toMatchObject([{ attacker: 'Raider', plot: d.plot }]);
+  });
+
+  it('a deleted player is sent back to the login screen on every open screen', async () => {
+    const { game, url, sessions } = await start();
+    const p = game.login('Gone', 'R2001');
+    const s = client(url, { token: p.token });
+    await next(s, 'welcome');
+    const kicked = next(s, 'needLogin');
+    sessions.kick(p.id);
+    game.deletePlayer(p.id);
+    await kicked;
+    expect(sessions.counts().players).toBe(0);
   });
 });

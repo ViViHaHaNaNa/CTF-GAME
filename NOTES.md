@@ -28,8 +28,12 @@ Phones on the same wifi use the LAN address printed at startup.
 | Game server port / bind | `SIEGE_PORT`, `SIEGE_HOST` | `3000`, `0.0.0.0` |
 | Database file | `SIEGE_DB` | `server/data/siege.db` |
 | Crate question bank | `SIEGE_QUESTIONS` | `server/data/questions.json` |
+| Admin passphrase | `SIEGE_ADMIN_PASS` (or `server/.env`) | empty = admin off |
+| Backups folder | `SIEGE_BACKUPS` | `server/data/backups` |
 
-Moving the game server to the cloud: run `server` there, set `VITE_SIEGE_SERVER_URL` to its URL, rebuild the client.
+Moving the game server to the cloud: run `server` there, set `VITE_SIEGE_SERVER_URL` to its URL, rebuild the client. If the site and game server end up on different origins, the admin page's HTTP calls would also need CORS on `/api/admin` (sockets already allow any origin).
+
+How to run it at the event, the admin page, load test, backups and the event-day checklist: see [README.md](README.md).
 
 ## Layout
 
@@ -63,6 +67,10 @@ client/public/game-assets/graveyard/        grave_1..4.png (our own; replace fre
 - **Crate rewards**: rarity green 60% / blue 30% / red 10% (`CONFIG.crates.weights`), and the rarity sets the strength. A random boost the player doesn't already have at a stronger level: attack (+25/40/60% raider damage, next 3 raids), defence (+25/40/60% post damage and health for 30 min, in waves and raids), loot (+50/75/100% on the next raid, still never taking a defender below 100 coins). One boost of each type; an equal or stronger one replaces it. If every type is already stronger, the winner gets coins instead.
 - **Spectating**: the Live Arena connects as a spectator (socket auth `{spectator: true}`, no login, no token). It gets the world summary, feed and crate, can watch at most 2 bases, and every other request is refused. It joins the same per-base battle stream (`base:<plot>` room) the attacker and defender use, so it sees exactly what they see. It auto-picks a live battle and moves to the next one when it ends (after a 6 s result card). Projector mode also rotates between live battles every 20 s, uses big type, and shows a large leaderboard over a slowly drifting map when nothing is happening. Players can also spectate inside the game (a base's card or the Live list).
 - **Feed** also announces rank changes: climbing into the top 3, or to #1, after a raid.
+- **Admin** (`/siege/admin/`): a plain HTTP API (`/api/admin/*`) checked against `SIEGE_ADMIN_PASS` in an `x-admin-pass` header (constant-time compare, 5 wrong tries per minute per address, then a 1-minute lockout); the page keeps the passphrase in sessionStorage only. Pause stops the simulation but not summaries, and on resume shifts every wall-clock timer by the pause. Freeze is display-only (summaries show a trophy snapshot). Pause/freeze survive a restart (store meta `admin`). Deleting a player first logs out their open screens, since SQLite can hand a deleted id to the next newcomer.
+- **Robustness**: the game loop catches and counts errors per tick instead of crashing the process; health numbers (tick time, loop lag, memory, errors) are on `/api/health` and the admin page. Server settings can live in `server/.env` (gitignored).
+- **Load test** (`npm run loadtest`): starts a throwaway server + database, then 50 bots and 3 spectators behave like players (upgrades, raids, crate races, reconnects). On the dev laptop: p95 5 ms, ticks ≤ 4 ms, 112 MB, exactly one winner per crate.
+- **Known limit**: raids in progress when the server restarts are dropped (coins already spent on raiders are not refunded). Everything else survives.
 - **Dev server gotcha**: `tsx watch` can miss edits to `shared/`; if the server behaves like old code, restart `npm run dev`.
 - **Survivor posts** are layered sprites (body without hands + weapon-with-hands + helmet from Lv 4). Layer offsets live in `client/src/siege/sprites.ts` if anything looks misaligned.
 - **Main Tower** has no sprite in the pack: it's a shipping container that changes colour and gains antennas/AC/barrels with level.
@@ -78,5 +86,6 @@ PostApocalypse_AssetPack_v1.1.2 by TheLazyStone: free for **non-commercial** use
 
 - **Phase 1** (core loop): done. Login, fixed base, posts/walls/Main Tower upgrades, live + offline zombie waves, coins, persistence, reconnect.
 - **Phase 2** (open world + PvP): shared map, graveyards, raids in place, spectating, minimap, leaderboard, live-battle list, event feed. Not yet: matchmaking "next target" list (the leaderboard big screen came in phase 4).
+- **Phase 5** (event hardening): admin page (pause, freeze, crates, reset/delete, backups, health), crash-proof loop, labelled LAN addresses, load test, backup script, README with the event-day checklist.
 - **Phase 4** (spectating): Live Arena page, spectator connections, scoreboard and result cards, projector mode with auto-cycling and the big-screen leaderboard, rank-change feed items.
 - **Phase 3** (immunity + crates): immunity purchase, the global crate race with rarities, attack/defence/loot boosts applied in combat and loot, 30-question bank.

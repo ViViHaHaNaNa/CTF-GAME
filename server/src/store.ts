@@ -6,6 +6,12 @@ import type { BaseState, Boosts, OfflineSummary } from '@siege/shared';
 // Storage behind a thin interface. Today: one SQLite file. Swapping to another backend only means
 // implementing Store again. Every change is written immediately (synchronous, a few µs per row).
 
+/** Backup file name in local time, e.g. siege-2026-10-16_14-05-09.db (sorts by date). */
+export function backupFileName(d = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `siege-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}.db`;
+}
+
 export interface PlayerRecord {
   id: number;
   /** Normalised roll number (upper case, letters/digits): the account key. */
@@ -37,6 +43,9 @@ export interface Store {
   loadPlayers(): PlayerRecord[];
   /** Insert or update. Assigns `id` on first save. */
   savePlayer(p: Omit<PlayerRecord, 'id'> & { id?: number }): PlayerRecord;
+  deletePlayer(id: number): void;
+  /** Write a consistent copy of the whole database (safe while the game runs). */
+  backup(file: string): Promise<void>;
   /** Small named JSON blobs for game-wide state (the crate schedule). */
   getMeta<T>(key: string): T | null;
   setMeta(key: string, value: unknown): void;
@@ -86,6 +95,15 @@ export class SqliteStore implements Store {
     }
     this.update.run(p.roll, p.token, data, Date.now(), id);
     return { ...rest, id };
+  }
+
+  deletePlayer(id: number) {
+    this.db.prepare('DELETE FROM players WHERE id = ?').run(id);
+  }
+
+  async backup(file: string) {
+    mkdirSync(dirname(file), { recursive: true });
+    await this.db.backup(file);
   }
 
   getMeta<T>(key: string): T | null {

@@ -88,6 +88,14 @@ interface CrateState {
   reward?: string;
 }
 
+/** Organiser switches, saved so a restart keeps them. */
+interface AdminMeta {
+  paused: boolean;
+  pausedAt: number;
+  /** Trophies shown on the leaderboard while it's frozen (player id -> trophies); null = live. */
+  frozen: Record<number, number> | null;
+}
+
 /** Persisted crate schedule (store meta "crates"), so a restart neither repeats questions nor resets the timer. */
 interface CrateMeta {
   seq: number;
@@ -123,6 +131,10 @@ export class GameServer {
   private summaries = new Map<number, BaseSummary>();
   private raidSeq = 0;
   private crate: CrateMeta;
+  /** Organiser controls (persisted in store meta "admin"). */
+  private admin: AdminMeta;
+  /** Loop calls, counting paused ones (summaries keep flowing while paused). */
+  private loopNo = 0;
   /** Wrong-answer rate limit per player, for the current crate. */
   private attempts = new Map<number, { crate: number; wrong: number; until: number }>();
   readonly feed: FeedItem[] = [];
@@ -136,6 +148,7 @@ export class GameServer {
     private readonly questions: Question[] = [],
   ) {
     const t = now();
+    this.admin = store.getMeta<AdminMeta>('admin') ?? { paused: false, pausedAt: 0, frozen: null };
     for (const p of store.loadPlayers()) {
       // Records from older versions get a plot (and the new fields) on load.
       p.shieldUntil ??= 0;
@@ -151,7 +164,7 @@ export class GameServer {
     }
     for (const p of this.players.values()) this.summaries.set(p.plot, this.summarize(p));
     this.crate = store.getMeta<CrateMeta>('crates') ?? { seq: 0, used: [], current: null, nextAt: 0 };
-    if (this.crate.nextAt < t) {
+    if (this.crate.nextAt < t && !this.admin.paused) {
       // Down past the drop time (or first run): the next crate comes shortly after starting.
       this.crate.nextAt = t + CONFIG.crates.firstDelay * 1000;
       if (this.crate.current) this.crate.current.expiresAt = this.crate.nextAt;
@@ -337,6 +350,7 @@ export class GameServer {
 
   /** Build or upgrade. Changes take effect from the next fight. */
   act(id: number, raw: unknown): PlayerView {
+    this.assertRunning();
     const p = this.players.get(id);
     if (!p) throw new GameError('no_player', 'Not logged in');
     const action = parseAction(raw);
@@ -366,6 +380,7 @@ export class GameServer {
   }
 
   attack(attackerId: number, plot: number): RaidStatus {
+    this.assertRunning();
     const block = this.raidBlock(attackerId, Number(plot));
     if (block) throw new GameError('blocked', block);
     const a = this.players.get(attackerId)!;
@@ -405,6 +420,7 @@ export class GameServer {
   }
 
   deploy(attackerId: number, rawKind: unknown, rawX: unknown, rawY: unknown): { coins: number } {
+    this.assertRunning();
     const rid = this.raidByAttacker.get(attackerId);
     if (rid === undefined) throw new GameError('no_raid', 'You are not raiding anyone');
     if (!isRaiderKind(rawKind)) throw new GameError('bad_kind', 'Unknown raider');
@@ -452,14 +468,17 @@ export class GameServer {
 
   /** Advance one server tick. */
   tick() {
-    this.tickNo++;
-    for (const [plot, l] of this.live) this.tickLive(plot, l);
-    for (const r of this.raids.values()) this.tickRaid(r);
-    if (this.tickNo % CONFIG.tickRate === 0) {
-      this.tickOffline(5);
-      if (this.questions.length && this.now() >= this.crate.nextAt) this.spawnCrate();
+    this.loopNo++;
+    if (!this.admin.paused) {
+      this.tickNo++;
+      for (const [plot, l] of this.live) this.tickLive(plot, l);
+      for (const r of this.raids.values()) this.tickRaid(r);
+      if (this.tickNo % CONFIG.tickRate === 0) {
+        this.tickOffline(5);
+        if (this.questions.length && this.now() >= this.crate.nextAt) this.spawnCrate();
+      }
     }
-    if (this.tickNo % (CONFIG.tickRate / 2) === 0) this.flushSummaries();
+    if (this.loopNo % (CONFIG.tickRate / 2) === 0) this.flushSummaries();
   }
 
   /** Coins from kills go straight to an online owner, or into the capped offline bank. */
@@ -577,7 +596,7 @@ export class GameServer {
     this.pushFeed(raid.won ? `${a.name} raided ${d.name} for ${loot} coins (+${trophies} trophies)` : `${d.name} fought off ${a.name}`, 'raid');
     // Climbing into the top 3 (or to #1) is news.
     const rankAfter = this.rankOf(a.id);
-    if (rankAfter < rankBefore && rankAfter <= 3 && a.trophies > 0) this.pushFeed(rankAfter === 1 ? `${a.name} is now #1!` : `${a.name} climbed to #${rankAfter}`, 'rank');
+    if (!this.admin.frozen && rankAfter < rankBefore && rankAfter <= 3 && a.trophies > 0) this.pushFeed(rankAfter === 1 ? `${a.name} is now #1!` : `${a.name} climbed to #${rankAfter}`, 'rank');
     // Zombies come back a little after the raiders leave.
     const l = this.live.get(plot);
     if (l) l.calmUntil = this.tickNo + CONFIG.waves.calm * CONFIG.tickRate;
@@ -638,6 +657,7 @@ export class GameServer {
 
   /** Buy PvP immunity (minutes must be one of the offered options). Extends any running immunity. */
   buyImmunity(id: number, rawMinutes: unknown): PlayerView {
+    this.assertRunning();
     const p = this.players.get(id);
     if (!p) throw new GameError('no_player', 'Not logged in');
     const opt = CONFIG.immunity.options.find((o) => o.minutes === Number(rawMinutes));
@@ -710,6 +730,7 @@ export class GameServer {
    * game thread (no await in between), so exactly one player can ever win a crate.
    */
   answer(id: number, rawCrate: unknown, rawAnswer: unknown): { correct: boolean; retryIn?: number; reward?: string } {
+    this.assertRunning();
     const p = this.players.get(id);
     if (!p) throw new GameError('no_player', 'Not logged in');
     const c = this.crate.current;
@@ -743,6 +764,138 @@ export class GameServer {
     return { correct: true, reward: g.text };
   }
 
+  // ---- organiser controls (admin page) ----------------------------------------------------------
+
+  /** What every screen is told about the organiser switches. */
+  status(): { paused: boolean; frozen: boolean } {
+    return { paused: this.admin.paused, frozen: this.admin.frozen !== null };
+  }
+
+  get paused() {
+    return this.admin.paused;
+  }
+
+  private assertRunning() {
+    if (this.admin.paused) throw new GameError('paused', 'The game is paused by the organisers');
+  }
+
+  private saveAdmin() {
+    this.store.setMeta('admin', this.admin);
+    this.out.toAll('status', this.status());
+  }
+
+  /**
+   * Pause: no waves, raids, offline waves or crates, and players can't act (they can still look).
+   * On resume, every wall-clock timer (crate, shields, immunity, defence boosts, offline waves) is
+   * pushed back by the pause, so nobody loses protection or a crate to the break.
+   */
+  setPaused(on: boolean) {
+    if (on === this.admin.paused) return;
+    const t = this.now();
+    if (on) {
+      this.admin.pausedAt = t;
+    } else {
+      const d = Math.max(0, t - this.admin.pausedAt);
+      const from = this.admin.pausedAt;
+      this.crate.nextAt += d;
+      if (this.crate.current) this.crate.current.expiresAt = this.crate.nextAt;
+      this.saveCrates();
+      for (const [id, due] of this.nextOffline) this.nextOffline.set(id, due + d);
+      for (const p of this.players.values()) {
+        let changed = false;
+        if (p.shieldUntil > from) (p.shieldUntil += d), (changed = true);
+        if (p.immuneUntil > from) (p.immuneUntil += d), (changed = true);
+        if (p.boosts.defence && p.boosts.defence.until > from) {
+          p.boosts = { ...p.boosts, defence: { ...p.boosts.defence, until: p.boosts.defence.until + d } };
+          changed = true;
+        }
+        if (changed) {
+          this.save(p);
+          this.markDirty(p.plot);
+          this.out.toPlayer(p.id, 'player', this.view(p));
+        }
+      }
+      this.out.toAll('crate', this.crateView());
+    }
+    this.admin.paused = on;
+    this.saveAdmin();
+    this.pushFeed(on ? 'The organisers paused the game' : 'The game is back on!', 'info');
+  }
+
+  /** Freeze: the leaderboard everyone sees stops changing (raids still count; unfreezing reveals them). */
+  setFrozen(on: boolean) {
+    if (on === (this.admin.frozen !== null)) return;
+    this.admin.frozen = on ? Object.fromEntries([...this.players.values()].map((p) => [p.id, p.trophies])) : null;
+    for (const p of this.players.values()) this.markDirty(p.plot);
+    this.saveAdmin();
+    this.pushFeed(on ? 'The leaderboard is frozen' : 'The leaderboard is live again', 'rank');
+  }
+
+  /** Back to a fresh base (same account, name and plot). Not while they're in a raid. */
+  resetPlayer(id: number): PlayerView {
+    const p = this.players.get(id);
+    if (!p) throw new GameError('no_player', 'No such player');
+    if (this.raidByAttacker.has(id) || this.raidByPlot.has(p.plot)) throw new GameError('in_raid', 'They are in a raid right now; try again when it ends');
+    p.coins = CONFIG.start.coins;
+    p.trophies = 0;
+    p.base = newBase();
+    p.shieldUntil = 0;
+    p.immuneUntil = 0;
+    p.boosts = {};
+    p.bank = 0;
+    p.offline = emptyOffline();
+    if (this.admin.frozen) this.admin.frozen[id] = 0;
+    this.save(p);
+    // A wave running there was built from the old base: stop it; the next one uses the new base.
+    const l = this.live.get(p.plot);
+    if (l) {
+      l.phase = 'calm';
+      l.wave = null;
+      l.warned = false;
+      l.calmUntil = this.tickNo + CONFIG.waves.calm * CONFIG.tickRate;
+      this.setWaveFlag(p.plot, 0);
+      this.out.toBase(p.plot, 'wave', this.baseLive(p.plot));
+    }
+    this.markDirty(p.plot);
+    this.out.toPlayer(id, 'player', this.view(p));
+    return this.view(p);
+  }
+
+  /** Remove an account entirely (test accounts, mistakes): frees the plot. Not while in a raid. */
+  deletePlayer(id: number) {
+    const p = this.players.get(id);
+    if (!p) throw new GameError('no_player', 'No such player');
+    if (this.raidByAttacker.has(id) || this.raidByPlot.has(p.plot)) throw new GameError('in_raid', 'They are in a raid right now; try again when it ends');
+    if (this.live.has(p.plot)) this.stopLive(p.plot);
+    this.store.deletePlayer(id);
+    this.players.delete(id);
+    this.byRoll.delete(p.roll);
+    this.byToken.delete(p.token);
+    this.byPlot.delete(p.plot);
+    this.nextOffline.delete(id);
+    this.summaries.delete(p.plot);
+    if (this.admin.frozen) delete this.admin.frozen[id];
+    this.out.toAll('world', { bases: this.worldSummary(), now: this.now(), full: true, raids: this.liveRaids() });
+  }
+
+  /** Everything the admin page shows (including the current crate's answers). */
+  adminState() {
+    const q = this.crate.current && this.questions.find((x) => x.id === this.crate.current!.qid);
+    return {
+      ...this.status(),
+      now: this.now(),
+      nextCrateAt: this.crate.nextAt,
+      crate: this.crateView(),
+      crateAnswers: q ? q.answers : [],
+      questions: { total: this.questions.length, used: this.crate.used.length },
+      raids: this.liveRaids(),
+      feed: this.feed.slice(-15),
+      players: [...this.players.values()]
+        .map((p) => ({ id: p.id, name: p.name, roll: p.roll, plot: p.plot, hq: p.base.hq, coins: p.coins, trophies: p.trophies, online: this.isOnline(p.id), lastSeen: p.lastSeen }))
+        .sort((a, b) => b.trophies - a.trophies || a.id - b.id),
+    };
+  }
+
   // ---- world summary & feed ---------------------------------------------------------------------
 
   summarize(p: PlayerRecord): BaseSummary {
@@ -754,7 +907,7 @@ export class GameServer {
       hq: p.base.hq,
       walls: p.base.walls,
       posts: p.base.posts.map((s) => (s ? [POST_TYPES.indexOf(s.type), s.level] : null)),
-      trophies: p.trophies,
+      trophies: this.admin.frozen ? (this.admin.frozen[p.id] ?? 0) : p.trophies,
       shield: p.shieldUntil > this.now() ? p.shieldUntil : 0,
       immune: p.immuneUntil > this.now() ? p.immuneUntil : 0,
       raid,

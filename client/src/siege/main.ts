@@ -55,6 +55,8 @@ let watchKey = '';
 let crate: CrateView | null = null;
 /** What the panel last rendered (compared instead of innerHTML, which the browser normalises). */
 let panelHtml = '';
+/** Organiser switches: game paused, leaderboard frozen. */
+let org = { paused: false, frozen: false };
 
 const serverNow = () => Date.now() + skew;
 
@@ -196,6 +198,11 @@ function bindNet() {
     else toast(`Wave held: ${r.kills} zombies down, +${r.coins} coins`, 'good', 2500);
   });
   s.on('feed', (f: FeedItem) => addFeed(f));
+  s.on('status', (st: { paused: boolean; frozen: boolean }) => {
+    if (st.paused && !org.paused) toast('The organisers paused the game. Hang tight!', '', 5000);
+    org = st;
+    if (panel === 'ranks') renderPanel();
+  });
   s.on('crate', (c: CrateView | null) => setCrate(c, false));
 }
 
@@ -628,7 +635,9 @@ function renderBanner(now: number) {
   const b = $('wave-banner');
   let text = 'All quiet.';
   let attack = false;
-  if (l?.phase === 'raid') {
+  if (org.paused) {
+    text = '⏸ Game paused by the organisers';
+  } else if (l?.phase === 'raid') {
     text = `⚔ ${l.raid?.attacker ?? 'Someone'} is raiding your base! (${l.raid?.destruction ?? 0}% destroyed)`;
     attack = true;
   } else if (l?.phase === 'wave') {
@@ -761,7 +770,7 @@ function ranksPanel(): string {
   const rows = list
     .map((b, i) => `<li><button data-jump="${b.p}" class="${player && b.id === player.id ? 'me' : ''}"><span class="rank">#${i + 1}</span><span class="nm">${esc(b.name)} <small>Lv${b.hq}</small></span><span class="val">♛ ${b.trophies}</span></button></li>`)
     .join('');
-  return `${head('Leaderboard')}<p class="sub">Tap a name to fly to their base.</p><ul class="list">${rows || '<li class="empty">No one yet.</li>'}</ul>`;
+  return `${head('Leaderboard')}<p class="sub">${org.frozen ? '<span class="status shield">Frozen by the organisers</span> ' : ''}Tap a name to fly to their base.</p><ul class="list">${rows || '<li class="empty">No one yet.</li>'}</ul>`;
 }
 
 function livePanel(): string {

@@ -1,0 +1,43 @@
+/* Organiser page. Builds on siege.css (buttons, toasts, login). */
+
+body.admin { min-height: 100dvh; background: var(--bg); }
+body.admin .login { position: fixed; }
+.admin-main { max-width: 1200px; margin: 0 auto; padding: 12px 16px 40px; display: flex; flex-direction: column; gap: 14px; }
+.admin-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.admin-head h1 { margin: 0; flex: 1; font-family: var(--mono); font-size: 1.3rem; color: var(--accent); }
+.admin-head a.tool { text-decoration: none; }
+.admin-sync { color: var(--muted); font-size: 0.8rem; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+.card { background: var(--panel); border: 2px solid var(--line); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.card h2 { margin: 0; font-family: var(--mono); font-size: 0.85rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.card .btn { flex: 0 0 auto; }
+.card .note { margin: 0; }
+.card .q { margin: 0; font-weight: 600; }
+.card code { font-family: var(--mono); background: #15120e; padding: 1px 6px; border-radius: 3px; }
+.card-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.card-head h2 { flex: 1; }
+.card-head input { font: inherit; padding: 8px 10px; border-radius: 6px; border: 2px solid var(--line); background: var(--bg-2); color: var(--ink); min-width: 0; width: 220px; max-width: 100%; }
+.big { margin: 0; font-size: 1.5rem; font-weight: 800; font-family: var(--mono); }
+.big.good { color: var(--good); }
+.big.bad { color: var(--danger); }
+.big.cold { color: #a9cdf0; }
+.row { display: flex; flex-wrap: wrap; gap: 6px; }
+.row .btn { flex: 1 1 90px; min-height: 40px; }
+
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; font-size: 0.85rem; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-family: var(--mono); }
+
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; }
+td.acts { display: flex; gap: 6px; }
+td.acts .tool { min-height: 32px; font-size: 0.8rem; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #5a4f3d; margin-right: 6px; }
+.dot.on { background: var(--good); }
+.plain { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; }
+
+/* Toasts sit at the bottom here so they never cover the controls. */
+body.admin .toasts { position: fixed; top: auto; bottom: 16px; }

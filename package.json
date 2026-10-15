@@ -12,7 +12,9 @@
     "build": "npm run build -w client",
     "start": "npm run build && npm run start -w server",
     "test": "vitest run",
-    "typecheck": "tsc -p shared && tsc -p server && tsc -p client"
+    "typecheck": "tsc -p shared && tsc -p server && tsc -p client",
+    "loadtest": "tsx server/scripts/loadtest.ts",
+    "backup": "tsx server/scripts/backup.ts"
   },
   "devDependencies": {
     "concurrently": "^9.2.5",

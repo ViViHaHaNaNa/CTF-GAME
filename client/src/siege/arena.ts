@@ -68,6 +68,11 @@ async function boot() {
     setCrate(m.crate);
   });
   socket.on('crate', (c: CrateView | null) => setCrate(c));
+  socket.on('status', (st: { paused: boolean; frozen: boolean }) => {
+    const el = $('org-status');
+    el.hidden = !st.paused && !st.frozen;
+    el.textContent = st.paused ? '⏸ Paused' : 'Leaderboard frozen';
+  });
   socket.on('feed', (f: FeedItem) => {
     feed.push(f);
     if (feed.length > 12) feed.shift();

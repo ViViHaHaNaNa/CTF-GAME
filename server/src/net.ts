@@ -11,7 +11,7 @@ import { GameError, type GameServer } from './game.ts';
 //  deploy {kind, x, y} (ack)                raid RaidStatus / raidEnd RaidResult / underAttack
 //  retreat                                  coins {coins, delta} / player PlayerView / feed FeedItem
 //  immunity {minutes} (ack)                 crate CrateView            (a new crate, or it was claimed)
-//  answer {crate, answer} (ack)
+//  answer {crate, answer} (ack)             status {paused, frozen}    (organiser switches)
 //  logout                                   needLogin
 //
 // "Watching" = area of interest: a screen only gets live combat for the bases it's looking at
@@ -39,7 +39,16 @@ function limiter(burst: number, perSec: number) {
   };
 }
 
-export function attachSockets(io: Server, game: GameServer) {
+/** Handles the admin layer needs on live connections. */
+export interface Sessions {
+  /** Log a player out on every screen (before deleting their account). */
+  kick(playerId: number): void;
+  /** Connected screens: players and spectators. */
+  counts(): { players: number; spectators: number };
+}
+
+export function attachSockets(io: Server, game: GameServer): Sessions {
+  const sessions = new Map<Socket, { playerId: () => number | null; spectator: boolean; kick: () => void }>();
   io.on('connection', (socket: Socket) => {
     let playerId: number | null = null;
     let ownPlot: number | null = null;
@@ -74,6 +83,7 @@ export function attachSockets(io: Server, game: GameServer) {
       const w = game.connect(id);
       socket.emit('welcome', { token: p.token, ...w });
       socket.emit('world', { bases: game.worldSummary(), now: Date.now(), full: true, raids: game.liveRaids() });
+      socket.emit('status', game.status());
       startWatching(p.plot);
     };
     const detach = () => {
@@ -93,6 +103,7 @@ export function attachSockets(io: Server, game: GameServer) {
     else if (spectator) {
       socket.emit('world', { bases: game.worldSummary(), now: Date.now(), full: true, raids: game.liveRaids() });
       socket.emit('arena', { feed: game.feed.slice(-10), crate: game.crateView() });
+      socket.emit('status', game.status());
     } else socket.emit('needLogin');
 
     socket.on('login', (data: unknown, ack: unknown) => {
@@ -189,6 +200,32 @@ export function attachSockets(io: Server, game: GameServer) {
       socket.emit('needLogin');
     });
 
-    socket.on('disconnect', detach);
+    sessions.set(socket, {
+      playerId: () => playerId,
+      spectator,
+      kick: () => {
+        detach();
+        socket.emit('needLogin');
+      },
+    });
+    socket.on('disconnect', () => {
+      detach();
+      sessions.delete(socket);
+    });
   });
+
+  return {
+    kick(id) {
+      for (const s of sessions.values()) if (s.playerId() === id) s.kick();
+    },
+    counts() {
+      let players = 0;
+      let spectators = 0;
+      for (const s of sessions.values()) {
+        if (s.spectator) spectators++;
+        else if (s.playerId() !== null) players++;
+      }
+      return { players, spectators };
+    },
+  };
 }

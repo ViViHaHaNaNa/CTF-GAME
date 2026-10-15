@@ -22,6 +22,7 @@ export default defineConfig({
         home: resolve(__dirname, 'index.html'),
         siege: resolve(__dirname, 'siege/index.html'),
         arena: resolve(__dirname, 'siege/arena/index.html'),
+        admin: resolve(__dirname, 'siege/admin/index.html'),
       },
     },
   },
