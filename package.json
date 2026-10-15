@@ -1,0 +1,23 @@
+{
+  "name": "iete-sf-site",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "shared",
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n server,client -c yellow,cyan \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w client",
+    "start": "npm run build && npm run start -w server",
+    "test": "vitest run",
+    "typecheck": "tsc -p shared && tsc -p server && tsc -p client"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.5",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

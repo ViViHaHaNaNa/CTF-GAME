@@ -1,0 +1,149 @@
+[
+  {
+    "id": "py-blank-range",
+    "prompt": "Fill in the blank so the loop prints: 0 1 2 3 4",
+    "code": "for i in ____(5):\n    print(i, end=\" \")",
+    "lang": "python",
+    "kind": "fill-blank",
+    "answers": [
+      "range"
+    ],
+    "difficulty": 1
+  },
+  {
+    "id": "py-blank-len",
+    "prompt": "Fill in the blank so count() returns how many items are in the list.",
+    "code": "def count(items):\n    return ____(items)\n\nprint(count([\"orc\", \"orc\", \"tank\"]))  # 3",
+    "lang": "python",
+    "kind": "fill-blank",
+    "answers": [
+      "len"
+    ],
+    "difficulty": 1
+  },
+  {
+    "id": "py-output-slice",
+    "prompt": "What does this program print?",
+    "code": "word = \"siege\"\nprint(word[1:4])",
+    "lang": "python",
+    "kind": "predict-output",
+    "answers": [
+      "ieg"
+    ],
+    "difficulty": 1
+  },
+  {
+    "id": "py-output-alias",
+    "prompt": "What does this program print?",
+    "code": "a = [1, 2, 3]\nb = a\nb.append(4)\nprint(len(a), a[-1])",
+    "lang": "python",
+    "kind": "predict-output",
+    "answers": [
+      "4 4"
+    ],
+    "difficulty": 2
+  },
+  {
+    "id": "py-output-dict",
+    "prompt": "What does this program print?",
+    "code": "counts = {}\nfor ch in \"banana\":\n    counts[ch] = counts.get(ch, 0) + 1\nprint(counts[\"a\"], counts[\"n\"])",
+    "lang": "python",
+    "kind": "predict-output",
+    "answers": [
+      "3 2"
+    ],
+    "difficulty": 2
+  },
+  {
+    "id": "c-blank-printf",
+    "prompt": "Fill in the blank so the program prints the number 42.",
+    "code": "#include <stdio.h>\n\nint main(void) {\n    int answer = 42;\n    printf(\"____\\n\", answer);\n    return 0;\n}",
+    "lang": "c",
+    "kind": "fill-blank",
+    "answers": [
+      "%d",
+      "%i"
+    ],
+    "difficulty": 1
+  },
+  {
+    "id": "c-blank-loop",
+    "prompt": "Fill in both blanks so the loop adds up 1 + 2 + ... + 10 (sum ends as 55). Answer with both blanks in order, separated by a space.",
+    "code": "int sum = 0;\nfor (int i = 1; i ____ 10; i____) {\n    sum += i;\n}",
+    "lang": "c",
+    "kind": "fill-blank",
+    "answers": [
+      "<= ++",
+      "<= +=1",
+      "<= =i+1"
+    ],
+    "difficulty": 2
+  },
+  {
+    "id": "c-output-intdiv",
+    "prompt": "What does this program print?",
+    "code": "#include <stdio.h>\n\nint main(void) {\n    int a = 7, b = 2;\n    printf(\"%d %d\\n\", a / b, a % b);\n    return 0;\n}",
+    "lang": "c",
+    "kind": "predict-output",
+    "answers": [
+      "3 1"
+    ],
+    "difficulty": 1
+  },
+  {
+    "id": "c-output-postinc",
+    "prompt": "What does this program print?",
+    "code": "#include <stdio.h>\n\nint main(void) {\n    int x = 5;\n    int y = x++ + 2;\n    printf(\"%d %d\\n\", x, y);\n    return 0;\n}",
+    "lang": "c",
+    "kind": "predict-output",
+    "answers": [
+      "6 7"
+    ],
+    "difficulty": 2
+  },
+  {
+    "id": "cpp-blank-cout",
+    "prompt": "Fill in the blank so the program prints: Hello, Siege!",
+    "code": "#include <iostream>\n\nint main() {\n    std::cout ____ \"Hello, Siege!\" << std::endl;\n    return 0;\n}",
+    "lang": "cpp",
+    "kind": "fill-blank",
+    "answers": [
+      "<<"
+    ],
+    "difficulty": 1
+  },
+  {
+    "id": "cpp-blank-vector",
+    "prompt": "Fill in the blanks: add 5 to the end of the vector, then print how many items it has (4). Answer with both blanks in order, separated by a space.",
+    "code": "std::vector<int> v = {1, 2, 3};\nv.____(5);\nstd::cout << v.____() << \"\\n\";  // prints 4",
+    "lang": "cpp",
+    "kind": "fill-blank",
+    "answers": [
+      "push_back size",
+      "emplace_back size"
+    ],
+    "difficulty": 2
+  },
+  {
+    "id": "cpp-output-string",
+    "prompt": "What does this program print?",
+    "code": "#include <iostream>\n#include <string>\n\nint main() {\n    std::string s = \"tower\";\n    std::cout << s.size() << \" \" << s[0] << s.back() << \"\\n\";\n    return 0;\n}",
+    "lang": "cpp",
+    "kind": "predict-output",
+    "answers": [
+      "5 tr"
+    ],
+    "difficulty": 1
+  },
+  {
+    "id": "cpp-output-ref",
+    "prompt": "What does this program print?",
+    "code": "#include <iostream>\n\nvoid bump(int &n) { n += 10; }\nvoid copy(int n)  { n += 100; }\n\nint main() {\n    int x = 1;\n    bump(x);\n    copy(x);\n    std::cout << x << \"\\n\";\n    return 0;\n}",
+    "lang": "cpp",
+    "kind": "predict-output",
+    "answers": [
+      "11"
+    ],
+    "difficulty": 2
+  }
+]

@@ -1,0 +1,6 @@
+node_modules/
+client/dist/
+server/data/*.db
+server/data/*.db-*
+server/data/backups/
+.env

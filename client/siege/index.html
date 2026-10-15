@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#1b1712" />
+    <title>Code Siege</title>
+    <link rel="stylesheet" href="/src/site.css" />
+    <link rel="stylesheet" href="/src/siege/siege.css" />
+  </head>
+  <body class="siege">
+    <div id="app">
+      <header class="hud" id="hud" hidden>
+        <div class="hud-who"><span id="hud-name"></span><span class="hud-sub" id="hud-hq"></span></div>
+        <div class="hud-stat"><span class="coin"></span><span id="hud-coins">0</span><span class="delta" id="hud-delta"></span></div>
+        <div class="hud-stat" title="Trophies"><span class="trophy">&#9819;</span><span id="hud-trophies">0</span></div>
+        <button class="icon-btn" id="menu-btn" aria-label="Menu">&#9776;</button>
+      </header>
+      <div class="wave-banner" id="wave-banner" hidden></div>
+      <main class="stage">
+        <div class="board-wrap" id="board-wrap"><canvas id="board"></canvas></div>
+        <aside class="panel" id="panel" hidden></aside>
+      </main>
+      <div class="toasts" id="toasts"></div>
+      <div class="menu" id="menu" hidden>
+        <button id="logout-btn">Log out</button>
+        <button id="close-menu">Close</button>
+      </div>
+      <section class="login" id="login" hidden>
+        <h1>Code Siege</h1>
+        <p class="lead">Hold your base. Survive the swarm.</p>
+        <form id="login-form" autocomplete="off">
+          <label>Display name<input id="login-name" maxlength="16" required autocapitalize="words" /></label>
+          <label>Roll number<input id="login-roll" maxlength="20" required autocapitalize="characters" inputmode="text" /></label>
+          <button type="submit" id="login-go">Enter the siege</button>
+          <p class="error" id="login-error" role="alert"></p>
+          <p class="hint">One base per roll number. Use the same name and roll number to come back on any device.</p>
+        </form>
+      </section>
+      <div class="connecting" id="connecting">Connecting...</div>
+    </div>
+    <footer class="credit">Art: <a href="https://thelazystone.itch.io/post-apocalyptic-pixel-art-asset-pack" target="_blank" rel="noopener">Post-Apocalypse asset pack by TheLazyStone</a> · IETE-SF MPSTME</footer>
+    <script type="module" src="/src/siege/main.ts"></script>
+  </body>
+</html>
