@@ -1,8 +1,8 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { CONFIG, PLOT, getWorld, postUpgradeCost } from '@siege/shared';
+import { CONFIG, PLOT, checkAnswer, getWorld, postUpgradeCost, type CrateView, type Question } from '@siege/shared';
 import { GameServer, type Outbox } from '../src/game.ts';
 import { SqliteStore } from '../src/store.ts';
 
@@ -10,6 +10,17 @@ const dirs: string[] = [];
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
+
+const QUESTIONS: Question[] = ['a', 'b', 'c'].map((id, i) => ({
+  id,
+  prompt: `Question ${id}`,
+  code: '',
+  lang: 'python',
+  kind: 'predict-output',
+  answers: [`answer ${i}`],
+  difficulty: 1,
+}));
+const answerOf = (c: CrateView) => `answer ${QUESTIONS.findIndex((q) => q.prompt === c.prompt)}`;
 
 function setup(file = ':memory:') {
   const sent: { to: string; ev: string; data: unknown }[] = [];
@@ -20,7 +31,7 @@ function setup(file = ':memory:') {
   };
   let t = 1_000_000;
   const store = new SqliteStore(file);
-  const game = new GameServer(store, out, () => t);
+  const game = new GameServer(store, out, () => t, QUESTIONS);
   return { game, store, sent, advance: (ms: number) => (t += ms) };
 }
 
@@ -182,6 +193,114 @@ describe('raids', () => {
   });
 });
 
+describe('immunity', () => {
+  it('blocks raids, costs coins, and ends when the immune player attacks', () => {
+    const { game } = setup();
+    const a = game.login('Asha', 'I1001');
+    const d = game.login('Dhruv', 'I1002');
+    game.players.get(a.id)!.coins = 1000;
+    game.players.get(d.id)!.coins = 1000;
+    const v = game.buyImmunity(d.id, 5);
+    expect(v.coins).toBe(1000 - CONFIG.immunity.options[0]!.cost);
+    expect(game.raidBlock(a.id, d.plot)).toMatch(/Immune/);
+    expect(() => game.buyImmunity(d.id, 7)).toThrow(/5 or 10/);
+    game.buyImmunity(d.id, 10); // 15 minutes in total: allowed
+    expect(() => game.buyImmunity(d.id, 5)).toThrow(/15 minutes/);
+    // The immune player attacks someone: their immunity ends.
+    game.attack(d.id, a.plot);
+    expect(game.players.get(d.id)!.immuneUntil).toBe(0);
+  });
+});
+
+describe('crates', () => {
+  it('two players race: exactly one wins, the other is told who did', () => {
+    const { game, sent } = setup();
+    const p1 = game.login('First', 'C1001');
+    const p2 = game.login('Second', 'C1002');
+    const crate = game.spawnCrate('epic')!;
+    expect(crate).not.toHaveProperty('answer');
+    expect(sent.some((s) => s.ev === 'crate' && s.to === 'all')).toBe(true);
+    const r1 = game.answer(p1.id, crate.id, `  ${answerOf(crate).toUpperCase()}; `);
+    expect(r1.correct).toBe(true);
+    expect(() => game.answer(p2.id, crate.id, answerOf(crate))).toThrow(/First already claimed/);
+    const view = game.crateView()!;
+    expect(view.claimedBy).toBe('First');
+    expect(view.answer).toBe(answerOf(crate));
+    expect(Object.keys(game.players.get(p1.id)!.boosts)).toHaveLength(1);
+    expect(game.players.get(p2.id)!.boosts).toEqual({});
+    expect(sent.some((s) => s.ev === 'feed' && (s.data as { text: string }).text.includes('First cracked'))).toBe(true);
+  });
+
+  it('rate-limits wrong answers, with a longer lock every few misses', () => {
+    const { game, advance } = setup();
+    const p = game.login('Guesser', 'C2001');
+    const crate = game.spawnCrate()!;
+    expect(game.answer(p.id, crate.id, 'nope')).toEqual({ correct: false, retryIn: CONFIG.crates.wrongCooldown });
+    expect(() => game.answer(p.id, crate.id, answerOf(crate))).toThrow(/Wait/);
+    for (let i = 1; i < CONFIG.crates.lockAfter; i++) {
+      advance(CONFIG.crates.wrongCooldown * 1000);
+      const r = game.answer(p.id, crate.id, 'nope');
+      if (i === CONFIG.crates.lockAfter - 1) expect(r.retryIn).toBe(CONFIG.crates.lockFor);
+    }
+    advance(CONFIG.crates.wrongCooldown * 1000);
+    expect(() => game.answer(p.id, crate.id, answerOf(crate))).toThrow(/Wait/);
+    advance(CONFIG.crates.lockFor * 1000);
+    expect(game.answer(p.id, crate.id, answerOf(crate)).correct).toBe(true);
+  });
+
+  it('no repeated questions until the bank is used up; unclaimed crates expire when the next drops', () => {
+    const { game, sent, advance } = setup();
+    const p = game.login('Late', 'C3001');
+    const seen = new Set<string>();
+    let first: CrateView | null = null;
+    for (let i = 0; i < QUESTIONS.length; i++) {
+      advance(CONFIG.crates.every * 1000);
+      for (let k = 0; k < CONFIG.tickRate; k++) game.tick();
+      const c = game.crateView()!;
+      first ??= c;
+      seen.add(c.prompt);
+    }
+    expect(seen.size).toBe(QUESTIONS.length);
+    expect(() => game.answer(p.id, first!.id, answerOf(first!))).toThrow(/gone/);
+    expect(sent.some((s) => s.ev === 'feed' && (s.data as { text: string }).text.includes('Nobody cracked'))).toBe(true);
+  });
+
+  it('the crate schedule survives a restart (same crate, no repeat next)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'siege-'));
+    dirs.push(dir);
+    const file = join(dir, 'siege.db');
+    const a = setup(file);
+    const c1 = a.game.spawnCrate()!;
+    a.store.close();
+    const b = setup(file);
+    expect(b.game.crateView()?.id).toBe(c1.id);
+    expect(b.game.spawnCrate()!.prompt).not.toBe(c1.prompt);
+    b.store.close();
+  });
+});
+
+describe('boosts', () => {
+  it('attack and loot boosts are used up by a raid and change its result', () => {
+    const { game, sent } = setup();
+    const a = game.login('Booster', 'B1001');
+    const d = game.login('Target', 'B1002');
+    game.connect(a.id);
+    game.players.get(a.id)!.coins = 2000;
+    game.players.get(d.id)!.coins = 1000;
+    game.players.get(a.id)!.boosts = { attack: { pct: 0.6, uses: 3 }, loot: { pct: 1, uses: 1 } };
+    game.attack(a.id, d.plot);
+    expect(game.players.get(a.id)!.boosts).toEqual({ attack: { pct: 0.6, uses: 2 } });
+    const plot = getWorld().plots[d.plot]!;
+    for (let i = 0; i < 12; i++) game.deploy(a.id, 'r_bat', plot.x + 0.5, plot.y + 0.5 + (i % 4) * 0.5);
+    let guard = 0;
+    while (!sent.some((s) => s.ev === 'raidEnd') && guard++ < 10_000) game.tick();
+    const res = sent.find((s) => s.ev === 'raidEnd')!.data as { won: boolean; loot: number };
+    expect(res.won).toBe(true);
+    const normal = Math.min(1000 * CONFIG.pvp.loot.pct, CONFIG.pvp.loot.capBase + CONFIG.pvp.loot.capPerHq);
+    expect(res.loot).toBe(normal * 2);
+  });
+});
+
 describe('persistence', () => {
   it('a restarted server finds every base intact, on the same plot', () => {
     const dir = mkdtempSync(join(tmpdir(), 'siege-'));
@@ -202,5 +321,16 @@ describe('persistence', () => {
     expect(q.base.posts[2]).toEqual({ type: 'gun', level: 1 });
     expect(q.coins).toBe(coins);
     b.store.close();
+  });
+});
+
+describe('question bank', () => {
+  it('every question has a unique id and accepts its own answers', () => {
+    const bank = JSON.parse(readFileSync(join(import.meta.dirname, '../data/questions.json'), 'utf8')) as Question[];
+    expect(new Set(bank.map((q) => q.id)).size).toBe(bank.length);
+    for (const q of bank) {
+      expect(q.prompt.length).toBeGreaterThan(0);
+      for (const a of q.answers) expect(checkAnswer(q, a), q.id).toBe(true);
+    }
   });
 });

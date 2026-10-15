@@ -112,3 +112,30 @@ body.siege { overflow: hidden; display: flex; flex-direction: column; height: 10
   .attack-bar { left: 8px; right: auto; bottom: 8px; width: min(560px, calc(100% - 150px)); border: 2px solid #7a3424; border-radius: 6px; }
   .board-wrap.raiding .feed { bottom: 8px; left: auto; right: 140px; width: 320px; }
 }
+
+/* Phase 3: immunity, crates, boosts */
+.hud-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.chip { font-family: var(--mono); font-size: 0.7rem; font-weight: 700; padding: 0 6px; border-radius: 8px; background: #3a2f1f; color: var(--accent); border: 1px solid #5a4a2c; line-height: 16px; }
+.chip.shield { color: #a9cdf0; background: #1f2a36; border-color: #3d5873; }
+.panel h3 { margin: 14px 0 4px; font-size: 0.9rem; font-family: var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.boosts { margin: 0; padding-left: 18px; font-size: 0.85rem; line-height: 1.6; }
+.crate-tool.on { border-color: var(--accent); color: var(--accent); animation: crate-pulse 1.2s ease-in-out infinite; }
+@keyframes crate-pulse { 50% { box-shadow: 0 0 0 3px rgba(227, 179, 65, 0.35); } }
+.rarity { text-transform: capitalize; padding: 0 8px; border-radius: 4px; color: #1b1712; }
+.r-rare { background: #8fc46b; }
+.r-epic { background: #6ea0e6; }
+.r-legendary { background: #e0573f; color: #fff; }
+.q-prompt { margin: 8px 0 6px; font-weight: 600; line-height: 1.4; }
+.code { margin: 0 0 10px; padding: 10px 12px; background: #15120e; border: 1px solid var(--line); border-radius: 4px; font-family: var(--mono); font-size: 0.85rem; line-height: 1.45; overflow-x: auto; white-space: pre; color: #e9dcc0; position: relative; }
+.code::before { content: attr(data-lang); position: absolute; right: 8px; top: 4px; font-size: 0.65rem; color: var(--muted); text-transform: uppercase; }
+.crate-form { display: flex; gap: 8px; }
+.crate-form input { flex: 1; min-width: 0; font: inherit; font-family: var(--mono); font-size: 1rem; padding: 10px 12px; border-radius: 6px; border: 2px solid var(--line); background: var(--bg-2); color: var(--ink); }
+.crate-form input:focus { outline: none; border-color: var(--accent); }
+.crate-form .btn { flex: 0 0 auto; min-width: 96px; }
+.crate-msg { min-height: 1.3em; margin: 6px 0 0; font-size: 0.9rem; font-weight: 600; }
+.crate-msg.good { color: var(--good); }
+.crate-msg.bad { color: var(--danger); }
+.answer-reveal code { font-family: var(--mono); background: #15120e; padding: 2px 6px; border-radius: 3px; }
+.link { background: none; border: 0; padding: 4px 0; color: var(--accent); font: inherit; font-size: 0.85rem; text-decoration: underline; cursor: pointer; }
+.feed div.crate { border-left-color: #6ea0e6; color: var(--ink); }

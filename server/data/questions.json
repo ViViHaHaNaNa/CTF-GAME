@@ -145,5 +145,192 @@
       "11"
     ],
     "difficulty": 2
+  },
+  {
+    "id": "py-output-strmul",
+    "prompt": "What does this program print?",
+    "code": "word = \"ab\" * 3\nprint(word, len(word))",
+    "lang": "python",
+    "kind": "predict-output",
+    "answers": [
+      "ababab 6"
+    ],
+    "difficulty": 1
+  },
+  {
+    "id": "py-output-listcomp",
+    "prompt": "What does this program print?",
+    "code": "nums = [x * x for x in range(4)]\nprint(nums[-1], len(nums))",
+    "lang": "python",
+    "kind": "predict-output",
+    "answers": [
+      "9 4"
+    ],
+    "difficulty": 2
+  },
+  {
+    "id": "py-blank-append",
+    "prompt": "Fill in the blank so the list ends up as [1, 2, 5].",
+    "code": "items = [1, 2]\nitems.____(5)\nprint(items)",
+    "lang": "python",
+    "kind": "fill-blank",
+    "answers": [
+      "append"
+    ],
+    "difficulty": 1
+  },
+  {
+    "id": "py-output-join",
+    "prompt": "What does this program print?",
+    "code": "parts = [\"wall\", \"post\", \"tower\"]\nprint(\"-\".join(parts[::-1]))",
+    "lang": "python",
+    "kind": "predict-output",
+    "answers": [
+      "tower-post-wall"
+    ],
+    "difficulty": 2
+  },
+  {
+    "id": "py-output-bool",
+    "prompt": "What does this program print?",
+    "code": "a = 3 > 2 and 2 > 5\nb = not a or 1 == 2\nprint(a, b)",
+    "lang": "python",
+    "kind": "predict-output",
+    "answers": [
+      "False True"
+    ],
+    "difficulty": 2
+  },
+  {
+    "id": "py-blank-def",
+    "prompt": "Fill in the blank so this defines a function.",
+    "code": "____ greet(name):\n    return \"hi \" + name\n\nprint(greet(\"zombie\"))",
+    "lang": "python",
+    "kind": "fill-blank",
+    "answers": [
+      "def"
+    ],
+    "difficulty": 1
+  },
+  {
+    "id": "c-output-char",
+    "prompt": "What does this program print?",
+    "code": "#include <stdio.h>\n\nint main(void) {\n    char c = 'A' + 2;\n    printf(\"%c\\n\", c);\n    return 0;\n}",
+    "lang": "c",
+    "kind": "predict-output",
+    "answers": [
+      "C"
+    ],
+    "difficulty": 1
+  },
+  {
+    "id": "c-output-array",
+    "prompt": "What does this program print?",
+    "code": "#include <stdio.h>\n\nint main(void) {\n    int a[] = {4, 8, 15, 16};\n    printf(\"%d %d\\n\", a[2], a[0] + a[3]);\n    return 0;\n}",
+    "lang": "c",
+    "kind": "predict-output",
+    "answers": [
+      "15 20"
+    ],
+    "difficulty": 1
+  },
+  {
+    "id": "c-blank-return",
+    "prompt": "Fill in the blank so main ends and reports success.",
+    "code": "#include <stdio.h>\n\nint main(void) {\n    printf(\"hi\\n\");\n    ____ 0;\n}",
+    "lang": "c",
+    "kind": "fill-blank",
+    "answers": [
+      "return"
+    ],
+    "difficulty": 1
+  },
+  {
+    "id": "c-output-while",
+    "prompt": "What does this program print?",
+    "code": "#include <stdio.h>\n\nint main(void) {\n    int i = 0, s = 0;\n    while (i < 4) {\n        s += i;\n        i++;\n    }\n    printf(\"%d %d\\n\", i, s);\n    return 0;\n}",
+    "lang": "c",
+    "kind": "predict-output",
+    "answers": [
+      "4 6"
+    ],
+    "difficulty": 2
+  },
+  {
+    "id": "c-output-pointer",
+    "prompt": "What does this program print?",
+    "code": "#include <stdio.h>\n\nint main(void) {\n    int x = 3;\n    int *p = &x;\n    *p = *p * 4;\n    printf(\"%d\\n\", x);\n    return 0;\n}",
+    "lang": "c",
+    "kind": "predict-output",
+    "answers": [
+      "12"
+    ],
+    "difficulty": 2
+  },
+  {
+    "id": "c-blank-if",
+    "prompt": "Fill in the blank so the program prints \"even\" for even numbers.",
+    "code": "#include <stdio.h>\n\nint main(void) {\n    int n = 10;\n    if (n ____ 2 == 0) printf(\"even\\n\");\n    else printf(\"odd\\n\");\n    return 0;\n}",
+    "lang": "c",
+    "kind": "fill-blank",
+    "answers": [
+      "%"
+    ],
+    "difficulty": 1
+  },
+  {
+    "id": "cpp-output-swap",
+    "prompt": "What does this program print?",
+    "code": "#include <iostream>\n#include <utility>\n\nint main() {\n    int a = 1, b = 2;\n    std::swap(a, b);\n    std::cout << a << b << \"\\n\";\n    return 0;\n}",
+    "lang": "cpp",
+    "kind": "predict-output",
+    "answers": [
+      "21"
+    ],
+    "difficulty": 1
+  },
+  {
+    "id": "cpp-blank-endl",
+    "prompt": "Fill in the blank to end the line after printing.",
+    "code": "#include <iostream>\n\nint main() {\n    std::cout << \"hi\" << std::____;\n    return 0;\n}",
+    "lang": "cpp",
+    "kind": "fill-blank",
+    "answers": [
+      "endl"
+    ],
+    "difficulty": 1
+  },
+  {
+    "id": "cpp-output-countdown",
+    "prompt": "What does this program print?",
+    "code": "#include <iostream>\n\nint main() {\n    for (int i = 3; i > 0; i--) std::cout << i;\n    std::cout << \"\\n\";\n    return 0;\n}",
+    "lang": "cpp",
+    "kind": "predict-output",
+    "answers": [
+      "321"
+    ],
+    "difficulty": 1
+  },
+  {
+    "id": "cpp-output-bool",
+    "prompt": "What does this program print?",
+    "code": "#include <iostream>\n\nint main() {\n    bool ok = 5 > 3;\n    bool bad = 2 == 3;\n    std::cout << ok << bad << \"\\n\";\n    return 0;\n}",
+    "lang": "cpp",
+    "kind": "predict-output",
+    "answers": [
+      "10"
+    ],
+    "difficulty": 2
+  },
+  {
+    "id": "cpp-output-ternary",
+    "prompt": "What does this program print?",
+    "code": "#include <iostream>\n\nint main() {\n    int x = 7;\n    std::cout << (x % 2 == 0 ? \"even\" : \"odd\") << \" \" << x / 2 << \"\\n\";\n    return 0;\n}",
+    "lang": "cpp",
+    "kind": "predict-output",
+    "answers": [
+      "odd 3"
+    ],
+    "difficulty": 2
   }
 ]

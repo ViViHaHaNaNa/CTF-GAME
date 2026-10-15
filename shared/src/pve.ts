@@ -13,7 +13,8 @@ export const wallId = (i: number) => 100 + i;
 export const postId = (slot: number) => 200 + slot;
 
 /** A base's buildings placed on its plot (world tiles). Every fight starts from this: no lasting damage. */
-export function baseBuildings(base: BaseState, plot: { x: number; y: number }): BuildingDef[] {
+export function baseBuildings(base: BaseState, plot: { x: number; y: number }, defenceBoost = 0): BuildingDef[] {
+  const boost = 1 + defenceBoost;
   const ox = plot.x;
   const oy = plot.y;
   const defs: BuildingDef[] = [{ id: HQ_ID, kind: 'hq', x: ox + HQ_RECT.x, y: oy + HQ_RECT.y, w: HQ_RECT.w, h: HQ_RECT.h, hp: CONFIG.hq.hp(base.hq) }];
@@ -23,7 +24,7 @@ export function baseBuildings(base: BaseState, plot: { x: number; y: number }): 
     if (!p) return;
     const s = SLOTS[slot]!;
     const st = postStats(p.type, p.level);
-    defs.push({ id: postId(slot), kind: 'post', x: ox + s.x, y: oy + s.y, w: 1, h: 1, hp: st.hp, gun: { range: st.range, damage: st.damage, cooldown: st.cooldown, splash: st.splash } });
+    defs.push({ id: postId(slot), kind: 'post', x: ox + s.x, y: oy + s.y, w: 1, h: 1, hp: Math.round(st.hp * boost), gun: { range: st.range, damage: Math.round(st.damage * boost), cooldown: st.cooldown, splash: st.splash } });
   });
   return defs;
 }
@@ -88,8 +89,9 @@ export class ZombieWave {
   done = false;
   breached = false;
 
-  constructor(readonly base: BaseState, readonly seed: number, readonly plot: WorldPlot) {
-    this.combat = new Combat(seed, baseBuildings(base, plot));
+  /** `defenceBoost`: extra post damage/health from a crate boost (0.25 = +25%). */
+  constructor(readonly base: BaseState, readonly seed: number, readonly plot: WorldPlot, defenceBoost = 0) {
+    this.combat = new Combat(seed, baseBuildings(base, plot, defenceBoost));
     this.plan = planWave(base.hq, seed, plot);
   }
 

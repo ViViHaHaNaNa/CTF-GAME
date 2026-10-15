@@ -11,7 +11,7 @@
   <body class="siege">
     <div id="app">
       <header class="hud" id="hud" hidden>
-        <div class="hud-who"><span id="hud-name"></span><span class="hud-sub" id="hud-hq"></span></div>
+        <div class="hud-who"><span id="hud-name"></span><span class="hud-sub"><span id="hud-hq"></span><span class="chips" id="hud-chips"></span></span></div>
         <div class="hud-stat"><span class="coin"></span><span id="hud-coins">0</span><span class="delta" id="hud-delta"></span></div>
         <div class="hud-stat" title="Trophies"><span class="trophy">&#9819;</span><span id="hud-trophies">0</span></div>
         <button class="icon-btn" id="menu-btn" aria-label="Menu">&#9776;</button>
@@ -25,6 +25,7 @@
             <button class="tool" id="home-btn">My base</button>
             <button class="tool" id="ranks-btn">Ranks</button>
             <button class="tool" id="live-btn">Live <span class="badge" id="live-count" hidden>0</span></button>
+            <button class="tool crate-tool" id="crate-btn">Crate <span class="badge" id="crate-badge" hidden>!</span></button>
           </div>
           <div class="zoom-tools">
             <button class="tool sq" id="zoom-in" aria-label="Zoom in">+</button>

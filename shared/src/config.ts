@@ -134,6 +134,40 @@ export const CONFIG = {
     autoShield: 120,
   },
 
+  /** Bought PvP protection. Doesn't stop zombie waves; attacking someone ends it. */
+  immunity: {
+    options: [
+      { minutes: 5, cost: 150 },
+      { minutes: 10, cost: 250 },
+    ],
+    /** Buying more extends it, up to this much time left. */
+    maxMinutes: 15,
+  },
+
+  crates: {
+    /** A global crate drops this often (seconds); an unclaimed one expires when the next drops. */
+    every: 600,
+    /** First crate after a server start (seconds), unless one was already scheduled. */
+    firstDelay: 60,
+    /** Rarity weights (ammo-crate colours: green rare, blue epic, red legendary). */
+    weights: { rare: 60, epic: 30, legendary: 10 },
+    /** After a wrong answer a player waits this long (seconds)... */
+    wrongCooldown: 3,
+    /** ...and every `lockAfter`-th wrong answer locks them out for `lockFor` seconds. */
+    lockAfter: 5,
+    lockFor: 30,
+    boosts: {
+      /** Raider damage for the next `uses` raids. */
+      attack: { pct: { rare: 0.25, epic: 0.4, legendary: 0.6 }, uses: 3 },
+      /** Post damage and health (waves and raids) for `minutes`. */
+      defence: { pct: { rare: 0.25, epic: 0.4, legendary: 0.6 }, minutes: 30 },
+      /** Loot from the next raid. */
+      loot: { pct: { rare: 0.5, epic: 0.75, legendary: 1 }, uses: 1 },
+    },
+    /** Paid instead when every boost the crate could give is already active at a stronger level. */
+    consolation: { rare: 100, epic: 200, legendary: 400 },
+  },
+
   offline: {
     /** Coins earned by waves while offline are banked up to this cap, credited at next login. */
     bankCap: 500,

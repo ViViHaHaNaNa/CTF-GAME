@@ -10,6 +10,8 @@ import { GameError, type GameServer } from './game.ts';
 //  attack {plot} (ack)                      wave BaseLive / snap {p, ...Snapshot} / waveEnd
 //  deploy {kind, x, y} (ack)                raid RaidStatus / raidEnd RaidResult / underAttack
 //  retreat                                  coins {coins, delta} / player PlayerView / feed FeedItem
+//  immunity {minutes} (ack)                 crate CrateView            (a new crate, or it was claimed)
+//  answer {crate, answer} (ack)
 //  logout                                   needLogin
 //
 // "Watching" = area of interest: a screen only gets live combat for the bases it's looking at
@@ -40,6 +42,8 @@ export function attachSockets(io: Server, game: GameServer) {
     const watching = new Set<number>();
     const allowAct = limiter(10, 5);
     const allowDeploy = limiter(12, 8);
+    // Answers are also rate-limited per player inside the game (wrong-answer cooldowns).
+    const allowAnswer = limiter(4, 1);
     const reply = (ack: unknown, res: Parameters<Ack>[0]) => {
       if (typeof ack === 'function') (ack as Ack)(res);
     };
@@ -146,6 +150,27 @@ export function attachSockets(io: Server, game: GameServer) {
 
     socket.on('retreat', () => {
       if (playerId !== null) game.retreat(playerId);
+    });
+
+    socket.on('immunity', (data: unknown, ack: unknown) => {
+      if (playerId === null) return reply(ack, { ok: false, error: 'Not logged in' });
+      if (!allowAct()) return reply(ack, { ok: false, error: 'Slow down a little' });
+      try {
+        reply(ack, { ok: true, player: game.buyImmunity(playerId, (data as { minutes?: unknown })?.minutes) });
+      } catch (e) {
+        fail(ack, e);
+      }
+    });
+
+    socket.on('answer', (data: unknown, ack: unknown) => {
+      if (playerId === null) return reply(ack, { ok: false, error: 'Not logged in' });
+      if (!allowAnswer()) return reply(ack, { ok: false, error: 'Slow down a little' });
+      try {
+        const d = (data ?? {}) as { crate?: unknown; answer?: unknown };
+        reply(ack, { ok: true, ...game.answer(playerId, d.crate, d.answer) });
+      } catch (e) {
+        fail(ack, e);
+      }
     });
 
     socket.on('logout', () => {

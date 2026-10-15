@@ -7,8 +7,12 @@ import {
   Raid,
   ZombieWave,
   applyAction,
+  baseBuildings,
   breachLoss,
+  checkAnswer,
   generateWorld,
+  grantCrate,
+  rollRarity,
   getWorld,
   inDeployZone,
   lootable,
@@ -184,5 +188,48 @@ describe('economy', () => {
     expect(breachLoss(protectedFloor + 5)).toBeLessThanOrEqual(5);
     expect(breachLoss(1000)).toBe(Math.round(1000 * lossPct));
     expect(breachLoss(1_000_000)).toBe(maxLoss);
+  });
+});
+
+describe('crate rules', () => {
+  const q = { id: 'x', prompt: '', code: '', lang: 'c', kind: 'fill-blank', answers: ['<= +=1', '%d'], difficulty: 1 };
+
+  it('normalises answers leniently but not loosely', () => {
+    expect(checkAnswer(q, ' <=  += 1 ')).toBe(true);
+    expect(checkAnswer(q, '"%D";')).toBe(true);
+    expect(checkAnswer(q, '<=,+=1')).toBe(true);
+    expect(checkAnswer(q, '%s')).toBe(false);
+    expect(checkAnswer(q, '')).toBe(false);
+    const out = { ...q, kind: 'predict-output', answers: ['4 4'] };
+    expect(checkAnswer(out, '4, 4')).toBe(true);
+    expect(checkAnswer(out, '44')).toBe(false);
+  });
+
+  it('rolls rarities by weight', () => {
+    const n = { rare: 0, epic: 0, legendary: 0 };
+    for (let i = 0; i < 1000; i++) n[rollRarity(i / 1000)]++;
+    expect(n).toEqual({ rare: 600, epic: 300, legendary: 100 });
+  });
+
+  it('a stronger boost replaces a weaker one; a weaker crate never downgrades', () => {
+    const now = 1000;
+    const strong = { attack: { pct: 0.6, uses: 3 }, defence: { pct: 0.6, until: now + 1e6 }, loot: { pct: 1, uses: 1 } };
+    const g = grantCrate(strong, 'rare', now, 0.5);
+    expect(g.type).toBeUndefined();
+    expect(g.coins).toBe(CONFIG.crates.consolation.rare);
+    expect(g.boosts).toEqual(strong);
+    const g2 = grantCrate({ attack: { pct: 0.25, uses: 1 } }, 'legendary', now, 0);
+    expect(g2.boosts.attack).toEqual({ pct: 0.6, uses: CONFIG.crates.boosts.attack.uses });
+    // An expired boost doesn't block anything.
+    const g3 = grantCrate({ defence: { pct: 0.6, until: now - 1 } }, 'rare', now, 0.4);
+    expect(g3.type).toBe('defence');
+  });
+
+  it('a defence boost raises post damage and health in combat', () => {
+    const base = newBase();
+    const plain = baseBuildings(base, { x: 0, y: 0 }).find((b) => b.kind === 'post')!;
+    const boosted = baseBuildings(base, { x: 0, y: 0 }, 0.4).find((b) => b.kind === 'post')!;
+    expect(boosted.hp).toBe(Math.round(plain.hp * 1.4));
+    expect(boosted.gun!.damage).toBe(Math.round(plain.gun!.damage * 1.4));
   });
 });

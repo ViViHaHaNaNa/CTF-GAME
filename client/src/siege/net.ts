@@ -72,6 +72,14 @@ export class Net {
     this.socket.emit('retreat');
   }
 
+  buyImmunity(minutes: number) {
+    return this.call<{ player: PlayerView }>('immunity', { minutes });
+  }
+
+  answer(crate: number, answer: string) {
+    return this.call<{ correct: boolean; retryIn?: number; reward?: string }>('answer', { crate, answer });
+  }
+
   logout() {
     this.socket.emit('logout');
   }

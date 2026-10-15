@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { BaseState, OfflineSummary } from '@siege/shared';
+import type { BaseState, Boosts, OfflineSummary } from '@siege/shared';
 
 // Storage behind a thin interface. Today: one SQLite file. Swapping to another backend only means
 // implementing Store again. Every change is written immediately (synchronous, a few µs per row).
@@ -17,8 +17,12 @@ export interface PlayerRecord {
   /** World plot this base sits on (assigned at registration, never changes). */
   plot: number;
   base: BaseState;
-  /** Server ms until which this base can't be raided. */
+  /** Server ms until which this base can't be raided (automatic, after a raid). */
   shieldUntil: number;
+  /** Server ms until which bought immunity lasts. */
+  immuneUntil: number;
+  /** Active crate boosts. */
+  boosts: Boosts;
   /** Coins earned by offline waves, credited at next login (capped). */
   bank: number;
   /** What happened while the player was away (reset at login). */
@@ -33,6 +37,9 @@ export interface Store {
   loadPlayers(): PlayerRecord[];
   /** Insert or update. Assigns `id` on first save. */
   savePlayer(p: Omit<PlayerRecord, 'id'> & { id?: number }): PlayerRecord;
+  /** Small named JSON blobs for game-wide state (the crate schedule). */
+  getMeta<T>(key: string): T | null;
+  setMeta(key: string, value: unknown): void;
   close(): void;
 }
 
@@ -43,6 +50,10 @@ CREATE TABLE IF NOT EXISTS players (
   token      TEXT NOT NULL UNIQUE,
   data       TEXT NOT NULL,
   updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS meta (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
 );
 `;
 
@@ -75,6 +86,15 @@ export class SqliteStore implements Store {
     }
     this.update.run(p.roll, p.token, data, Date.now(), id);
     return { ...rest, id };
+  }
+
+  getMeta<T>(key: string): T | null {
+    const row = this.db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as { value: string } | undefined;
+    return row ? (JSON.parse(row.value) as T) : null;
+  }
+
+  setMeta(key: string, value: unknown) {
+    this.db.prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, JSON.stringify(value));
   }
 
   close() {

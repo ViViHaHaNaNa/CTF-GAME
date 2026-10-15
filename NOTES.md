@@ -21,6 +21,7 @@ Phones on the same wifi use the LAN address printed at startup.
 | Game server address (client) | `VITE_SIEGE_SERVER_URL` in `client/.env` | same address as the page |
 | Game server port / bind | `SIEGE_PORT`, `SIEGE_HOST` | `3000`, `0.0.0.0` |
 | Database file | `SIEGE_DB` | `server/data/siege.db` |
+| Crate question bank | `SIEGE_QUESTIONS` | `server/data/questions.json` |
 
 Moving the game server to the cloud: run `server` there, set `VITE_SIEGE_SERVER_URL` to its URL, rebuild the client.
 
@@ -28,7 +29,7 @@ Moving the game server to the cloud: run `server` there, set `VITE_SIEGE_SERVER_
 
 ```
 shared/   config.ts (ALL balance numbers), world.ts (the shared map), layout.ts (one base plot), engine.ts (combat),
-          pve.ts (waves), pvp.ts (raids), economy.ts (build/upgrade rules), types.ts
+          pve.ts (waves), pvp.ts (raids), crates.ts (answer checks, rarity, boosts), economy.ts, types.ts
 server/   index.ts (http + socket.io + game loop), game.ts (authoritative state), net.ts (protocol),
           store.ts (storage interface + SQLite), data/questions.json (crate question bank)
 client/   index.html (site home), siege/index.html (game page), src/siege/world.ts (map renderer), main.ts (UI)
@@ -50,11 +51,14 @@ client/public/game-assets/graveyard/        grave_1..4.png (our own; replace fre
 - **Area of interest**: each screen tells the server which bases it's looking at (up to 6 nearest in view at zoom 2 or more, plus its own and any raid target). Only those get live waves and snapshot streams; every other base resolves waves headlessly every 45 s. Everyone gets a small world summary (levels, trophies, shield, raid, wave flag) on connect and changes every 0.5 s.
 - **Rendering**: integer zoom only (crisp pixels). Ground, graves and scenery are baked into 512px chunks once; quiet bases are cached as one image; only watched bases animate. Name tags are drawn in screen pixels.
 - **Raids (PvP)** run on the map where the base is: the attacker taps the red zone around the target to send raiders (coins charged by the server). 3 minutes; win by destroying the Main Tower or 50% of buildings; ends early after 20 s with nobody left. Loot is 20% of the defender's coins (capped at 300 + 150 per Main Tower level, never taking them below 100), reduced when attacking much weaker players. Trophies: 30 +/- 5% of the gap (5-50); a loss costs the attacker half. The defender gets a 2-minute shield. Anyone can spectate from the Live list or a base's card.
+- **Immunity**: buy 5 min (150 coins) or 10 min (250) of protection from raids; buying again extends it, up to 15 min left. It doesn't stop zombies. Attacking anyone ends it. Immune bases show the shield icon and can't be targeted (the card says why).
+- **Crates**: one global crate every 10 minutes (first one 1 minute after the server starts), landing at the crossroads in the middle of the map with a question from the bank. No question repeats until the bank is used up; an unclaimed crate expires when the next one drops. The schedule, the used-question list and the current crate are saved in the database (`meta` table), so a restart doesn't reset them. Answers are checked only on the server and never sent to clients until the crate is claimed. Checking ignores case, outer quotes, a trailing `;`, commas and extra spaces (and for fill-in-the-blank, all spacing). Wrong answers: 3 s wait, and every 5th wrong answer locks you out for 30 s. **Exactly one winner**: the check and the claim run in one synchronous step on the single game thread, so two answers arriving together are handled one after the other and the second is told who won.
+- **Crate rewards**: rarity green 60% / blue 30% / red 10% (`CONFIG.crates.weights`), and the rarity sets the strength. A random boost the player doesn't already have at a stronger level: attack (+25/40/60% raider damage, next 3 raids), defence (+25/40/60% post damage and health for 30 min, in waves and raids), loot (+50/75/100% on the next raid, still never taking a defender below 100 coins). One boost of each type; an equal or stronger one replaces it. If every type is already stronger, the winner gets coins instead.
 - **Dev server gotcha**: `tsx watch` can miss edits to `shared/`; if the server behaves like old code, restart `npm run dev`.
 - **Survivor posts** are layered sprites (body without hands + weapon-with-hands + helmet from Lv 4). Layer offsets live in `client/src/siege/sprites.ts` if anything looks misaligned.
 - **Main Tower** has no sprite in the pack: it's a shipping container that changes colour and gains antennas/AC/barrels with level.
 - **Login**: display name + roll number; one account per roll number and the name must match on return. The session token lives in localStorage.
-- **Questions**: 13 short-answer questions (fill-in-the-blank, predict-the-output) carried over from v1. v1's write-a-function questions were dropped (they needed a code sandbox).
+- **Questions**: 30 short-answer questions (fill-in-the-blank, predict-the-output) in C, C++ and Python: 13 from v1 plus 17 new ones, each checked by actually running the code. v1's write-a-function questions were dropped (they needed a code sandbox). Add more by editing `server/data/questions.json` (id, prompt, code, lang, kind, answers, difficulty) and restarting the server; a test checks every question accepts its own answers.
 - **Pacing** (from `shared/scripts/pve-balance.ts`): about 22 coins/min at the start, 39/min with two pistols, around 93/min at Main Tower Lv 2; new players start with 120 coins, enough for a second post straight away.
 
 ## Asset licence (important)
@@ -65,3 +69,4 @@ PostApocalypse_AssetPack_v1.1.2 by TheLazyStone: free for **non-commercial** use
 
 - **Phase 1** (core loop): done. Login, fixed base, posts/walls/Main Tower upgrades, live + offline zombie waves, coins, persistence, reconnect.
 - **Phase 2** (open world + PvP): shared map, graveyards, raids in place, spectating, minimap, leaderboard, live-battle list, event feed. Not yet: leaderboard big-screen mode, matchmaking "next target" list.
+- **Phase 3** (immunity + crates): immunity purchase, the global crate race with rarities, attack/defence/loot boosts applied in combat and loot, 30-question bank.

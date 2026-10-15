@@ -3,7 +3,9 @@ import {
   PLOT,
   POST_TYPES,
   RAIDER_KINDS,
+  boostLabel,
   getWorld,
+  liveBoosts,
   postStats,
   quote,
   raiderUnlocked,
@@ -11,6 +13,7 @@ import {
   trophyStake,
   type BaseAction,
   type BaseSummary,
+  type CrateView,
   type FeedItem,
   type OfflineSummary,
   type PlayerView,
@@ -22,7 +25,7 @@ import {
 } from '@siege/shared';
 import { Net, saveToken } from './net.ts';
 import { loadSprites } from './sprites.ts';
-import { WorldView, type LiveState } from './world.ts';
+import { CRATE_SPOT, WorldView, type LiveState } from './world.ts';
 
 // Game page controller: login, HUD, the shared map (pan / zoom / tap), base cards, raids, lists.
 // Everything shown comes from the server; buttons only send intents.
@@ -35,7 +38,7 @@ interface BaseLive {
   raid?: RaidStatus;
 }
 
-type PanelMode = 'none' | 'mine' | 'other' | 'ranks' | 'live';
+type PanelMode = 'none' | 'mine' | 'other' | 'ranks' | 'live' | 'crate';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const world = getWorld();
@@ -57,6 +60,9 @@ let troop: RaiderKind = 'r_bat';
 let centred = false;
 let lastRaidEnd = 0;
 let watchKey = '';
+let crate: CrateView | null = null;
+/** What the panel last rendered (compared instead of innerHTML, which the browser normalises). */
+let panelHtml = '';
 
 const serverNow = () => Date.now() + skew;
 
@@ -82,7 +88,9 @@ async function boot() {
   bindNet();
   setInterval(updateWatch, 300);
   setInterval(() => {
-    if (panel === 'other' || panel === 'live') renderPanel();
+    if (panel === 'other' || panel === 'live' || panel === 'mine') renderPanel();
+    tickCountdowns();
+    renderChips();
   }, 500);
   requestAnimationFrame(frame);
 }
@@ -120,7 +128,7 @@ function bindNet() {
     for (const id of ['hud', 'panel', 'wave-banner', 'map-tools', 'attack-bar']) $(id).hidden = true;
     $('login').hidden = false;
   });
-  s.on('welcome', (w: { token: string; player: PlayerView; offline: (OfflineSummary & { credited: number }) | null; feed: FeedItem[] }) => {
+  s.on('welcome', (w: { token: string; player: PlayerView; offline: (OfflineSummary & { credited: number }) | null; feed: FeedItem[]; crate: CrateView | null }) => {
     saveToken(w.token);
     $('login').hidden = true;
     $('hud').hidden = false;
@@ -128,6 +136,7 @@ function bindNet() {
     $('map-tools').hidden = false;
     watchKey = '';
     setPlayer(w.player);
+    setCrate(w.crate, true);
     if (!centred) {
       view.centerOnPlot(w.player.plot, view.baseZoom());
       centred = true;
@@ -210,6 +219,7 @@ function bindNet() {
     else toast(`Wave held: ${r.kills} zombies down, +${r.coins} coins`, 'good', 2500);
   });
   s.on('feed', (f: FeedItem) => addFeed(f));
+  s.on('crate', (c: CrateView | null) => setCrate(c, false));
 }
 
 function onLive(b: BaseLive) {
@@ -342,6 +352,13 @@ function bindInput() {
   });
   $('ranks-btn').addEventListener('click', () => openPanel(panel === 'ranks' ? 'none' : 'ranks'));
   $('live-btn').addEventListener('click', () => openPanel(panel === 'live' ? 'none' : 'live'));
+  $('crate-btn').addEventListener('click', () => openPanel(panel === 'crate' ? 'none' : 'crate'));
+  $('panel').addEventListener('submit', (e) => {
+    const form = e.target as HTMLFormElement;
+    if (form.id !== 'crate-form') return;
+    e.preventDefault();
+    void submitAnswer();
+  });
   $('wave-banner').addEventListener('click', () => {
     if (player) view.centerOnPlot(player.plot, Math.max(view.cam.k, view.baseZoom()));
   });
@@ -379,6 +396,10 @@ async function tap(cssX: number, cssY: number) {
     } else toast(r.error, 'bad', 2000);
     return;
   }
+  if (view.crateAt(wx, wy)) {
+    openPanel('crate');
+    return;
+  }
   const p = view.plotAt(wx, wy);
   if (myRaid && p?.id === myRaid.plot) {
     toast('Send raiders from the red ground outside their walls', '', 2000);
@@ -400,8 +421,27 @@ async function panelClick(e: MouseEvent) {
   if (el.closest('[data-close]')) return openPanel('none');
   const jump = el.closest<HTMLElement>('[data-jump]');
   if (jump) return jumpTo(Number(jump.dataset.jump));
-  const btn = el.closest<HTMLButtonElement>('button[data-act], button[data-attack], button[data-spectate]');
+  if (el.closest('[data-crate-jump]')) {
+    view.cam.x = CRATE_SPOT.x;
+    view.cam.y = CRATE_SPOT.y;
+    view.cam.k = Math.max(view.cam.k, 2);
+    view.clamp();
+    return;
+  }
+  const btn = el.closest<HTMLButtonElement>('button[data-act], button[data-attack], button[data-spectate], button[data-immunity]');
   if (!btn || btn.disabled) return;
+  if (btn.dataset.immunity) {
+    btn.disabled = true;
+    const r = await net.buyImmunity(Number(btn.dataset.immunity));
+    if (r.ok) {
+      setPlayer(r.player);
+      toast(`Immune to raids for ${btn.dataset.immunity} more minutes`, 'good', 2500);
+    } else {
+      toast(r.error, 'bad');
+      renderPanel();
+    }
+    return;
+  }
   if (btn.dataset.spectate) {
     const plot = Number(btn.dataset.spectate);
     focusPlot = plot;
@@ -518,6 +558,10 @@ function drawMinimap(now: number) {
     g.fillStyle = w === 2 ? (pulse ? '#e0573f' : '#5a1f14') : w === 1 ? '#e38b41' : '#4a3b2c';
     g.fillRect(gy.x, gy.y, 5, 5);
   }
+  if (view.crate) {
+    g.fillStyle = pulse ? '#fff3b0' : view.crate.rarity === 'legendary' ? '#e0573f' : view.crate.rarity === 'epic' ? '#6ea0e6' : '#8fc46b';
+    g.fillRect(Math.round(CRATE_SPOT.x / 16) - 3, Math.round(CRATE_SPOT.y / 16) - 3, 6, 6);
+  }
   const [x0, y0, x1, y1] = view.viewRect();
   g.strokeStyle = '#f1e6cf';
   g.lineWidth = 1;
@@ -531,8 +575,79 @@ function setPlayer(p: PlayerView) {
   view.myPlot = p.plot;
   view.myBase = p.base;
   renderHud();
+  renderChips();
   if (panel === 'mine' || panel === 'other') renderPanel();
   renderAttackBar();
+}
+
+/** Small status chips under the name: immunity/shield and active boosts. */
+function renderChips() {
+  if (!player) return;
+  const now = serverNow();
+  const chips: string[] = [];
+  const prot = Math.max(player.immuneUntil, player.shieldUntil);
+  if (prot > now) chips.push(`<span class="chip shield">${player.immuneUntil > now ? 'Immune' : 'Shield'} ${clock(prot - now)}</span>`);
+  const b = liveBoosts(player.boosts, now);
+  if (b.attack) chips.push(`<span class="chip">ATK +${Math.round(b.attack.pct * 100)}% ×${b.attack.uses}</span>`);
+  if (b.defence) chips.push(`<span class="chip">DEF +${Math.round(b.defence.pct * 100)}% ${clock(b.defence.until - now)}</span>`);
+  if (b.loot) chips.push(`<span class="chip">LOOT +${Math.round(b.loot.pct * 100)}%</span>`);
+  const html = chips.join('');
+  const el = $('hud-chips');
+  if (el.dataset.html !== html) {
+    el.dataset.html = html;
+    el.innerHTML = html;
+  }
+}
+
+/** Countdowns inside panels: <span data-until="serverMs">, updated in place so panels don't re-render. */
+function tickCountdowns() {
+  for (const el of document.querySelectorAll<HTMLElement>('[data-until]')) el.textContent = clock(Number(el.dataset.until) - serverNow());
+}
+
+function setCrate(c: CrateView | null, quiet: boolean) {
+  const prev = crate;
+  crate = c;
+  const open = !!c && !c.claimedBy;
+  view.crate = open ? { rarity: c!.rarity } : null;
+  $('crate-badge').hidden = !open;
+  $('crate-btn').classList.toggle('on', open);
+  if (!quiet && c) {
+    if (!prev || prev.id !== c.id) toast(`A ${c.rarity} crate dropped at the crossroads! Tap Crate to answer.`, '', 5000);
+    else if (c.claimedBy && !prev.claimedBy && player && c.claimedBy !== player.name) toast(`${c.claimedBy} claimed the crate.`, '', 3500);
+  }
+  if (panel === 'crate') renderPanel();
+}
+
+let answerBusy = false;
+async function submitAnswer() {
+  const input = document.getElementById('crate-answer') as HTMLInputElement | null;
+  const msg = document.getElementById('crate-msg');
+  const btn = document.getElementById('crate-go') as HTMLButtonElement | null;
+  if (!crate || !input || !msg || !btn || answerBusy || !input.value.trim()) return;
+  answerBusy = true;
+  btn.disabled = true;
+  const r = await net.answer(crate.id, input.value);
+  answerBusy = false;
+  if (!r.ok) {
+    msg.className = 'crate-msg bad';
+    msg.textContent = r.error;
+    btn.disabled = false;
+    return;
+  }
+  if (r.correct) {
+    msg.className = 'crate-msg good';
+    msg.textContent = `Correct! You won: ${r.reward}`;
+    toast(`Crate claimed! ${r.reward}`, 'good', 5000);
+    return;
+  }
+  const wait = r.retryIn ?? 3;
+  msg.className = 'crate-msg bad';
+  msg.textContent = `Not quite. Try again in ${wait}s.`;
+  input.select();
+  setTimeout(() => {
+    btn.disabled = false;
+    if (msg.textContent?.startsWith('Not quite')) msg.textContent = '';
+  }, wait * 1000);
 }
 
 let deltaTimer = 0;
@@ -631,23 +746,48 @@ function renderPanel() {
   if (panel === 'mine') html = minePanel();
   else if (panel === 'other') html = otherPanel();
   else if (panel === 'ranks') html = ranksPanel();
+  else if (panel === 'crate') html = cratePanel();
   else html = livePanel();
-  if (el.innerHTML !== html) el.innerHTML = html;
+  if (html === panelHtml) return;
+  panelHtml = html;
+  el.innerHTML = html;
+  tickCountdowns();
+}
+
+/** A countdown filled in by tickCountdowns (empty here so the panel's HTML doesn't change every second). */
+const until = (ms: number) => `<span data-until="${ms}"></span>`;
+
+function cratePanel(): string {
+  const c = crate;
+  const prize = `<p class="note">Prize: one random boost (stronger crates give stronger boosts): ${boostLabel('attack', CONFIG.crates.boosts.attack.pct.rare).replace('+25%', '+25-60%')}, ${boostLabel('defence', CONFIG.crates.boosts.defence.pct.rare).replace('+25%', '+25-60%')} or ${boostLabel('loot', CONFIG.crates.boosts.loot.pct.rare).replace('+50%', '+50-100%')}.</p>`;
+  if (!c) return `${head('Crates')}<p class="sub">Every ${CONFIG.crates.every / 60} minutes a crate drops at the crossroads with a coding question. The first correct answer wins it.</p><p class="note">The first crate drops soon.</p>${prize}`;
+  const title = `<span class="rarity r-${c.rarity}">${c.rarity}</span> crate`;
+  const code = c.code ? `<pre class="code" data-lang="${esc(c.lang)}">${esc(c.code)}</pre>` : '';
+  const question = `<p class="q-prompt">${esc(c.prompt)}</p>${code}`;
+  if (c.claimedBy) {
+    const mine = player && c.claimedBy === player.name;
+    return `${head(title)}<p class="sub">${mine ? 'You' : esc(c.claimedBy)} cracked it: <b>${esc(c.reward ?? '')}</b></p>${question}<p class="answer-reveal">Answer: <code>${esc(c.answer ?? '')}</code></p><p class="note">Next crate in ${until(c.expiresAt)}.</p>`;
+  }
+  return `${head(title)}<p class="sub">First correct answer wins it. Expires in ${until(c.expiresAt)}.</p>${question}<form id="crate-form" class="crate-form" autocomplete="off"><input id="crate-answer" maxlength="120" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="${c.kind === 'fill-blank' ? 'What goes in the blank?' : 'What does it print?'}" /><button class="btn" id="crate-go">Submit</button></form><p class="crate-msg" id="crate-msg"></p><button class="link" data-crate-jump>Show it on the map</button>${prize}`;
 }
 
 function otherPanel(): string {
   const s = view.bases.get(selectedPlot);
   if (!s) return `${head('Ruins')}<p class="sub">Nobody lives here yet.</p>`;
-  const shieldLeft = s.shield - serverNow();
+  const now = serverNow();
+  const shielded = s.shield > now;
+  const immune = s.immune > now;
   let status = '<span class="status">Calm</span>';
   if (s.raid) status = `<span class="status bad">⚔ Under attack by ${esc(s.raider ?? 'someone')}</span>`;
-  else if (shieldLeft > 0) status = `<span class="status shield">Shielded ${clock(shieldLeft)}</span>`;
+  else if (immune) status = `<span class="status shield">Immune ${until(s.immune)}</span>`;
+  else if (shielded) status = `<span class="status shield">Shielded ${until(s.shield)}</span>`;
   else if (s.wave === 2) status = '<span class="status bad">Fighting zombies</span>';
   else if (s.wave === 1) status = '<span class="status">Zombies rising</span>';
   let why = '';
   if (myRaid) why = myRaid.plot === s.p ? "You're raiding this base" : 'Finish your current raid first';
   else if (s.raid) why = 'Already under attack';
-  else if (shieldLeft > 0) why = `Shielded for ${clock(shieldLeft)} after a raid`;
+  else if (immune) why = 'Bought immunity from raids';
+  else if (shielded) why = 'Shielded for a while after a raid';
   const win = trophyStake(player!.trophies, s.trophies);
   const posts = s.posts.filter(Boolean).length;
   return `${head(esc(s.name))}<p class="sub">${status}</p>${stats([
@@ -687,13 +827,29 @@ function minePanel(): string {
   const waveNote = l?.phase === 'wave' || l?.phase === 'raid' ? '<p class="note">A fight is on: changes join the next one.</p>' : '';
   if (!sel) {
     const posts = base.posts.filter(Boolean).length;
-    const shieldLeft = player!.shieldUntil - serverNow();
+    const now = serverNow();
+    const me = player!;
+    const prot = me.immuneUntil > now ? `Immune for ${until(me.immuneUntil)}` : me.shieldUntil > now ? `Shielded for ${until(me.shieldUntil)}` : 'Not protected';
+    const left = Math.max(0, me.immuneUntil - now);
+    const immunity = CONFIG.immunity.options
+      .map((o) => {
+        const tooLong = left + o.minutes * 60_000 > CONFIG.immunity.maxMinutes * 60_000;
+        const poor = me.coins < o.cost;
+        const sub = tooLong ? `Max ${CONFIG.immunity.maxMinutes} min` : poor ? `${o.cost} coins · Need ${o.cost - me.coins} more` : `${o.cost} coins`;
+        return `<button class="btn secondary" data-immunity="${o.minutes}" ${tooLong || poor || myRaid ? 'disabled' : ''}>${o.minutes} min immunity<small>${sub}</small></button>`;
+      })
+      .join('');
+    const b = liveBoosts(me.boosts, now);
+    const boosts = [
+      b.attack ? `<li>${esc(boostLabel('attack', b.attack.pct).replace(/\(.*\)/, ''))} · ${b.attack.uses} raid${b.attack.uses === 1 ? '' : 's'} left</li>` : '',
+      b.defence ? `<li>${esc(boostLabel('defence', b.defence.pct).replace(/\(.*\)/, ''))} · ${until(b.defence.until)} left</li>` : '',
+      b.loot ? `<li>${esc(boostLabel('loot', b.loot.pct))}</li>` : '',
+    ].join('');
     return `${head('Your base')}<p class="sub">Tap the Main Tower, a wall or a post slot to build and upgrade.</p>${stats([
       ['Main Tower', `Lv ${base.hq}`],
       ['Walls', `Lv ${base.walls}`],
       ['Posts', `${posts}/${slotsUnlocked(base.hq)}`],
-      ['Shield', shieldLeft > 0 ? clock(shieldLeft) : 'None'],
-    ])}<p class="note">Zombies rise from your graveyard every few seconds. Every kill pays coins, even while you're away (up to ${CONFIG.offline.bankCap}). Other players can raid you: keep your walls and posts up.</p>`;
+    ])}<h3>Raid protection</h3><p class="sub">${prot}. Immunity stops raids, not zombies, and ends if you attack someone.</p><div class="actions">${immunity}</div><h3>Crate boosts</h3>${boosts ? `<ul class="boosts">${boosts}</ul>` : '<p class="sub">None yet. Win a crate by answering its question first.</p>'}<p class="note">Zombies rise from your graveyard every few seconds. Every kill pays coins, even while you're away (up to ${CONFIG.offline.bankCap}).</p>`;
   }
   if (sel.kind === 'hq') {
     const next = base.hq + 1;

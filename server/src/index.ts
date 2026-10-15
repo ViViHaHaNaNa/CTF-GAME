@@ -1,10 +1,10 @@
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { networkInterfaces } from 'node:os';
 import { join } from 'node:path';
 import { Server } from 'socket.io';
-import { CONFIG } from '@siege/shared';
+import { CONFIG, type Question } from '@siege/shared';
 import { GameServer } from './game.ts';
 import { attachSockets } from './net.ts';
 import { SqliteStore } from './store.ts';
@@ -16,6 +16,9 @@ const PORT = Number(process.env.SIEGE_PORT ?? 3000);
 const HOST = process.env.SIEGE_HOST ?? '0.0.0.0';
 const DB_FILE = process.env.SIEGE_DB ?? join(import.meta.dirname, '../data/siege.db');
 const CLIENT_DIST = join(import.meta.dirname, '../../client/dist');
+
+const QUESTIONS_FILE = process.env.SIEGE_QUESTIONS ?? join(import.meta.dirname, '../data/questions.json');
+const questions = JSON.parse(readFileSync(QUESTIONS_FILE, 'utf8')) as Question[];
 
 const store = new SqliteStore(DB_FILE);
 const app = Fastify({ logger: false });
@@ -29,7 +32,7 @@ const game = new GameServer(store, {
   toPlayer: (id, ev, data) => io.to(`p:${id}`).emit(ev, data),
   toBase: (plot, ev, data) => io.to(`base:${plot}`).emit(ev, data),
   toAll: (ev, data) => io.emit(ev, data),
-});
+}, Date.now, questions);
 attachSockets(io, game);
 
 app.get('/api/health', async () => ({ ok: true, players: game.players.size }));
@@ -65,7 +68,7 @@ const lan = Object.values(networkInterfaces())
 const served = existsSync(join(CLIENT_DIST, 'index.html'));
 // In dev the site is served by Vite (port 5173), not by this process.
 const sitePort = served ? PORT : Number(process.env.SIEGE_DEV_PORT ?? 5173);
-console.log(`\n  Code Siege game server on port ${PORT} (${game.players.size} players loaded)${served ? '' : ' [dev: site served by Vite]'}`);
+console.log(`\n  Code Siege game server on port ${PORT} (${game.players.size} players, ${questions.length} crate questions)${served ? '' : ' [dev: site served by Vite]'}`);
 console.log(`  This laptop: http://localhost:${sitePort}/siege/`);
 for (const ip of lan) console.log(`  LAN:         http://${ip}:${sitePort}/siege/`);
 console.log('');

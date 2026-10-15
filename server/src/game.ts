@@ -6,18 +6,26 @@ import {
   ZombieWave,
   applyAction,
   breachLoss,
+  checkAnswer,
+  currentPct,
   getWorld,
+  grantCrate,
+  liveBoosts,
   isRaiderKind,
   lootable,
   newBase,
   parseAction,
   quote,
+  rollRarity,
   trophyStake,
   weakerFactor,
   type BaseSummary,
+  type CrateView,
   type FeedItem,
   type OfflineSummary,
   type PlayerView,
+  type Question,
+  type Rarity,
   type RaidResult,
   type RaidStatus,
   type Snapshot,
@@ -66,6 +74,27 @@ interface RaidState {
   attackerId: number;
   defenderId: number;
   spent: number;
+  /** The attacker's loot boost, used up by this raid. */
+  lootBoost: number;
+}
+
+interface CrateState {
+  id: number;
+  qid: string;
+  rarity: Rarity;
+  spawnedAt: number;
+  expiresAt: number;
+  claimedBy?: { id: number; name: string };
+  reward?: string;
+}
+
+/** Persisted crate schedule (store meta "crates"), so a restart neither repeats questions nor resets the timer. */
+interface CrateMeta {
+  seq: number;
+  /** Question ids already used this cycle (no repeats until the bank is used up). */
+  used: string[];
+  current: CrateState | null;
+  nextAt: number;
 }
 
 const emptyOffline = (): OfflineSummary => ({ waves: 0, breaches: 0, coinsEarned: 0, coinsLost: 0, capped: false, raids: 0, raidLosses: 0 });
@@ -93,15 +122,25 @@ export class GameServer {
   private dirty = new Set<number>();
   private summaries = new Map<number, BaseSummary>();
   private raidSeq = 0;
+  private crate: CrateMeta;
+  /** Wrong-answer rate limit per player, for the current crate. */
+  private attempts = new Map<number, { crate: number; wrong: number; until: number }>();
   readonly feed: FeedItem[] = [];
   /** Server ticks since start (CONFIG.tickRate per second). */
   tickNo = 0;
 
-  constructor(private readonly store: Store, private readonly out: Outbox, private readonly now: () => number = Date.now) {
+  constructor(
+    private readonly store: Store,
+    private readonly out: Outbox,
+    private readonly now: () => number = Date.now,
+    private readonly questions: Question[] = [],
+  ) {
     const t = now();
     for (const p of store.loadPlayers()) {
-      // Records from before the shared world get a plot (and the new fields) on load.
+      // Records from older versions get a plot (and the new fields) on load.
       p.shieldUntil ??= 0;
+      p.immuneUntil ??= 0;
+      p.boosts ??= {};
       if (p.plot === undefined || this.byPlot.has(p.plot)) {
         p.plot = this.freePlot();
         this.save(p);
@@ -111,6 +150,13 @@ export class GameServer {
       this.nextOffline.set(p.id, t + CONFIG.offline.waveEvery * 1000 * Math.random());
     }
     for (const p of this.players.values()) this.summaries.set(p.plot, this.summarize(p));
+    this.crate = store.getMeta<CrateMeta>('crates') ?? { seq: 0, used: [], current: null, nextAt: 0 };
+    if (this.crate.nextAt < t) {
+      // Down past the drop time (or first run): the next crate comes shortly after starting.
+      this.crate.nextAt = t + CONFIG.crates.firstDelay * 1000;
+      if (this.crate.current) this.crate.current.expiresAt = this.crate.nextAt;
+      this.saveCrates();
+    }
   }
 
   private index(p: PlayerRecord) {
@@ -134,7 +180,18 @@ export class GameServer {
   }
 
   view(p: PlayerRecord): PlayerView {
-    return { id: p.id, name: p.name, roll: p.roll, coins: p.coins, trophies: p.trophies, plot: p.plot, base: p.base, shieldUntil: p.shieldUntil };
+    return {
+      id: p.id,
+      name: p.name,
+      roll: p.roll,
+      coins: p.coins,
+      trophies: p.trophies,
+      plot: p.plot,
+      base: p.base,
+      shieldUntil: p.shieldUntil,
+      immuneUntil: p.immuneUntil,
+      boosts: liveBoosts(p.boosts, this.now()),
+    };
   }
 
   isOnline(id: number) {
@@ -181,6 +238,8 @@ export class GameServer {
       plot: this.freePlot(),
       base: newBase(),
       shieldUntil: 0,
+      immuneUntil: 0,
+      boosts: {},
       bank: 0,
       offline: emptyOffline(),
       waveNo: 0,
@@ -202,7 +261,7 @@ export class GameServer {
   // ---- presence & watching ----------------------------------------------------------------------
 
   /** A screen of player `id` connected. The first one credits the offline bank. */
-  connect(id: number): { player: PlayerView; offline: (OfflineSummary & { credited: number }) | null; feed: FeedItem[] } {
+  connect(id: number): { player: PlayerView; offline: (OfflineSummary & { credited: number }) | null; feed: FeedItem[]; crate: CrateView | null } {
     const p = this.players.get(id)!;
     const n = (this.sockets.get(id) ?? 0) + 1;
     this.sockets.set(id, n);
@@ -216,7 +275,7 @@ export class GameServer {
       this.save(p);
       this.markDirty(p.plot);
     }
-    return { player: this.view(p), offline, feed: this.feed.slice(-10) };
+    return { player: this.view(p), offline, feed: this.feed.slice(-10), crate: this.crateView() };
   }
 
   disconnect(id: number) {
@@ -302,6 +361,7 @@ export class GameServer {
     if (this.raidByAttacker.has(a.id)) return 'Finish your current raid first';
     if (this.raidByPlot.has(plot)) return 'Already under attack';
     if (d.shieldUntil > this.now()) return 'Shielded';
+    if (d.immuneUntil > this.now()) return 'Immune';
     return null;
   }
 
@@ -319,9 +379,21 @@ export class GameServer {
       l.calmUntil = Number.MAX_SAFE_INTEGER;
     }
     this.setWaveFlag(plot, 0);
+    // Attacking ends your own immunity, and uses up one charge of your attack and loot boosts.
+    const t = this.now();
+    const attackBoost = currentPct(a.boosts, 'attack', t);
+    const lootBoost = currentPct(a.boosts, 'loot', t);
+    const b = liveBoosts(a.boosts, t);
+    if (b.attack) b.attack = { ...b.attack, uses: b.attack.uses - 1 };
+    if (b.loot) b.loot = { ...b.loot, uses: b.loot.uses - 1 };
+    a.boosts = liveBoosts(b, t);
+    a.immuneUntil = 0;
+    this.save(a);
+    this.markDirty(a.plot);
+    this.out.toPlayer(a.id, 'player', this.view(a));
     const id = ++this.raidSeq;
-    const raid = new Raid(id, getWorld().plots[plot]!, d.base, a.base.hq, seedOf(id, this.tickNo));
-    const r: RaidState = { raid, attackerId: a.id, defenderId: d.id, spent: 0 };
+    const raid = new Raid(id, getWorld().plots[plot]!, d.base, a.base.hq, seedOf(id, this.tickNo), { attack: attackBoost, defence: this.defenceBoost(d) });
+    const r: RaidState = { raid, attackerId: a.id, defenderId: d.id, spent: 0, lootBoost };
     this.raids.set(id, r);
     this.raidByPlot.set(plot, id);
     this.raidByAttacker.set(a.id, id);
@@ -383,7 +455,10 @@ export class GameServer {
     this.tickNo++;
     for (const [plot, l] of this.live) this.tickLive(plot, l);
     for (const r of this.raids.values()) this.tickRaid(r);
-    if (this.tickNo % CONFIG.tickRate === 0) this.tickOffline(5);
+    if (this.tickNo % CONFIG.tickRate === 0) {
+      this.tickOffline(5);
+      if (this.questions.length && this.now() >= this.crate.nextAt) this.spawnCrate();
+    }
     if (this.tickNo % (CONFIG.tickRate / 2) === 0) this.flushSummaries();
   }
 
@@ -416,7 +491,7 @@ export class GameServer {
       if (this.tickNo < l.calmUntil) return;
       p.waveNo++;
       this.save(p);
-      l.wave = new ZombieWave(p.base, seedOf(p.id, p.waveNo), getWorld().plots[plot]!);
+      l.wave = new ZombieWave(p.base, seedOf(p.id, p.waveNo), getWorld().plots[plot]!, this.defenceBoost(p));
       l.phase = 'wave';
       this.setWaveFlag(plot, 2);
       this.out.toBase(plot, 'wave', this.baseLive(plot));
@@ -468,7 +543,8 @@ export class GameServer {
     let loot = 0;
     let trophies = 0;
     if (raid.won) {
-      loot = Math.round(lootable(d.coins, d.base.hq) * weakerFactor(a.trophies, d.trophies));
+      loot = Math.round(lootable(d.coins, d.base.hq) * weakerFactor(a.trophies, d.trophies) * (1 + r.lootBoost));
+      loot = Math.max(0, Math.min(loot, d.coins - CONFIG.pvp.loot.protectedFloor));
       d.coins -= loot;
       a.coins += loot;
       trophies = stake;
@@ -522,7 +598,7 @@ export class GameServer {
 
   runOfflineWave(p: PlayerRecord) {
     p.waveNo++;
-    const w = new ZombieWave(p.base, seedOf(p.id, p.waveNo), getWorld().plots[p.plot]!);
+    const w = new ZombieWave(p.base, seedOf(p.id, p.waveNo), getWorld().plots[p.plot]!, this.defenceBoost(p));
     w.runToEnd();
     const room = Math.max(0, CONFIG.offline.bankCap - p.bank);
     const banked = Math.min(room, w.coins);
@@ -541,6 +617,119 @@ export class GameServer {
     this.markDirty(p.plot);
   }
 
+  // ---- immunity & boosts ------------------------------------------------------------------------
+
+  private defenceBoost(p: PlayerRecord): number {
+    return currentPct(p.boosts, 'defence', this.now());
+  }
+
+  /** Buy PvP immunity (minutes must be one of the offered options). Extends any running immunity. */
+  buyImmunity(id: number, rawMinutes: unknown): PlayerView {
+    const p = this.players.get(id);
+    if (!p) throw new GameError('no_player', 'Not logged in');
+    const opt = CONFIG.immunity.options.find((o) => o.minutes === Number(rawMinutes));
+    if (!opt) throw new GameError('bad_option', 'Pick 5 or 10 minutes');
+    if (this.raidByAttacker.has(id)) throw new GameError('raiding', 'Finish your raid first');
+    if (this.raidByPlot.has(p.plot)) throw new GameError('under_attack', 'You are being raided right now');
+    const t = this.now();
+    const from = Math.max(t, p.immuneUntil);
+    if (from + opt.minutes * 60_000 - t > CONFIG.immunity.maxMinutes * 60_000) {
+      throw new GameError('too_long', `Immunity can't run past ${CONFIG.immunity.maxMinutes} minutes`);
+    }
+    if (p.coins < opt.cost) throw new GameError('no_coins', `Need ${opt.cost - p.coins} more coins`);
+    p.coins -= opt.cost;
+    p.immuneUntil = from + opt.minutes * 60_000;
+    this.save(p);
+    this.markDirty(p.plot);
+    return this.view(p);
+  }
+
+  // ---- crates -----------------------------------------------------------------------------------
+
+  private saveCrates() {
+    this.store.setMeta('crates', this.crate);
+  }
+
+  crateView(): CrateView | null {
+    const c = this.crate.current;
+    if (!c) return null;
+    const q = this.questions.find((x) => x.id === c.qid);
+    if (!q) return null;
+    return {
+      id: c.id,
+      rarity: c.rarity,
+      prompt: q.prompt,
+      code: q.code,
+      lang: q.lang,
+      kind: q.kind,
+      spawnedAt: c.spawnedAt,
+      expiresAt: c.expiresAt,
+      ...(c.claimedBy ? { claimedBy: c.claimedBy.name, reward: c.reward, answer: q.answers[0] } : {}),
+    };
+  }
+
+  /** Drop a new global crate (replacing an unclaimed one). Also for the admin page. */
+  spawnCrate(rarity?: Rarity): CrateView | null {
+    if (!this.questions.length) return null;
+    const t = this.now();
+    const c = this.crate;
+    if (c.current && !c.current.claimedBy) this.pushFeed(`Nobody cracked the ${c.current.rarity} crate in time`, 'crate');
+    let pool = this.questions.filter((q) => !c.used.includes(q.id));
+    if (!pool.length) {
+      c.used = [];
+      pool = [...this.questions];
+    }
+    const q = pool[Math.floor(Math.random() * pool.length)]!;
+    c.used.push(q.id);
+    c.seq++;
+    c.nextAt = t + CONFIG.crates.every * 1000;
+    c.current = { id: c.seq, qid: q.id, rarity: rarity ?? rollRarity(Math.random()), spawnedAt: t, expiresAt: c.nextAt };
+    this.attempts.clear();
+    this.saveCrates();
+    const view = this.crateView();
+    this.out.toAll('crate', view);
+    this.pushFeed(`A ${c.current.rarity} crate dropped! First correct answer wins it`, 'crate');
+    return view;
+  }
+
+  /**
+   * A player's answer to the current crate. The check-and-claim runs synchronously on the single
+   * game thread (no await in between), so exactly one player can ever win a crate.
+   */
+  answer(id: number, rawCrate: unknown, rawAnswer: unknown): { correct: boolean; retryIn?: number; reward?: string } {
+    const p = this.players.get(id);
+    if (!p) throw new GameError('no_player', 'Not logged in');
+    const c = this.crate.current;
+    const t = this.now();
+    if (!c || c.id !== Number(rawCrate) || t >= c.expiresAt) throw new GameError('gone', 'That crate is gone');
+    if (c.claimedBy) throw new GameError('claimed', `Too late: ${c.claimedBy.name} already claimed it`);
+    let a = this.attempts.get(id);
+    if (!a || a.crate !== c.id) {
+      a = { crate: c.id, wrong: 0, until: 0 };
+      this.attempts.set(id, a);
+    }
+    if (a.until > t) throw new GameError('wait', `Wait ${Math.ceil((a.until - t) / 1000)}s before trying again`);
+    const q = this.questions.find((x) => x.id === c.qid)!;
+    if (!checkAnswer(q, rawAnswer)) {
+      a.wrong++;
+      const wait = a.wrong % CONFIG.crates.lockAfter === 0 ? CONFIG.crates.lockFor : CONFIG.crates.wrongCooldown;
+      a.until = t + wait * 1000;
+      return { correct: false, retryIn: wait };
+    }
+    const g = grantCrate(p.boosts, c.rarity, t, Math.random());
+    p.boosts = g.boosts;
+    p.coins += g.coins;
+    c.claimedBy = { id: p.id, name: p.name };
+    c.reward = g.text;
+    this.save(p);
+    this.saveCrates();
+    this.markDirty(p.plot);
+    this.out.toAll('crate', this.crateView());
+    this.out.toPlayer(p.id, 'player', this.view(p));
+    this.pushFeed(`${p.name} cracked the ${c.rarity} crate: ${g.text}`, 'crate');
+    return { correct: true, reward: g.text };
+  }
+
   // ---- world summary & feed ---------------------------------------------------------------------
 
   summarize(p: PlayerRecord): BaseSummary {
@@ -554,6 +743,7 @@ export class GameServer {
       posts: p.base.posts.map((s) => (s ? [POST_TYPES.indexOf(s.type), s.level] : null)),
       trophies: p.trophies,
       shield: p.shieldUntil > this.now() ? p.shieldUntil : 0,
+      immune: p.immuneUntil > this.now() ? p.immuneUntil : 0,
       raid,
       ...(raid ? { raider: this.players.get(this.raids.get(raid)!.attackerId)!.name } : {}),
       wave: this.summaries.get(p.plot)?.wave ?? 0,

@@ -18,6 +18,7 @@ import {
   type PostType,
   type RaidStatus,
   type Snapshot,
+  type Rarity,
   type WorldPlot,
 } from '@siege/shared';
 import { LAYER_OFFSET, drawFrame, type Sheet, type Sprites } from './sprites.ts';
@@ -32,6 +33,10 @@ const SNAP_MS = (1000 * CONFIG.snapshotEvery) / CONFIG.tickRate;
 const world = getWorld();
 const WPX = world.w * T;
 const HPX = world.h * T;
+
+/** Crossroads in the middle of the map, where global crates land (world px). */
+export const CRATE_SPOT = { x: 90 * T, y: 90 * T + 8 };
+const CRATE_GLOW: Record<Rarity, string> = { rare: '143, 196, 107', epic: '110, 160, 230', legendary: '224, 87, 63' };
 
 export type BasePick = { kind: 'hq' } | { kind: 'walls' } | { kind: 'slot'; slot: number };
 
@@ -104,6 +109,8 @@ export class WorldView {
   deployPlot = -1;
   /** Server clock offset (server - local ms), for shield countdowns. */
   clockSkew = 0;
+  /** The unclaimed global crate, drawn at the crossroads in the middle of the map. */
+  crate: { rarity: Rarity } | null = null;
   private chunks = new Map<number, HTMLCanvasElement>();
   private baseCache = new Map<number, { key: string; canvas: HTMLCanvasElement }>();
   private ruinCache = new Map<number, HTMLCanvasElement>();
@@ -336,6 +343,7 @@ export class WorldView {
     }
     if (this.deployPlot >= 0) this.drawDeployZone(g, world.plots[this.deployPlot]!, now);
     if (this.selectedPlot >= 0 && this.selectedPick && this.selectedPlot === this.myPlot) this.drawPick(g, world.plots[this.myPlot]!, this.selectedPick, now);
+    if (this.crate) this.drawCrate(g, this.crate.rarity, now);
 
     // 4. Screen-space labels (crisp text at any zoom).
     g.setTransform(1, 0, 0, 1, 0, 0);
@@ -343,6 +351,44 @@ export class WorldView {
       const s = this.bases.get(p.id);
       if (s) this.drawTag(g, p, s, now);
     }
+    if (this.crate) this.drawCrateTag(this.crate.rarity);
+  }
+
+  /** Is a world point on (or near) the crate? Generous, so it's easy to tap on a phone. */
+  crateAt(wx: number, wy: number): boolean {
+    return !!this.crate && Math.hypot(wx - CRATE_SPOT.x, wy - (CRATE_SPOT.y - 8)) < Math.max(18, 28 / this.cam.k);
+  }
+
+  private drawCrate(g: CanvasRenderingContext2D, rarity: Rarity, now: number) {
+    const img = (rarity === 'legendary' ? this.sprites.crateRed : rarity === 'epic' ? this.sprites.crateBlue : this.sprites.crateGreen).img;
+    const color = CRATE_GLOW[rarity];
+    const { x, y } = CRATE_SPOT;
+    const pulse = 0.5 + 0.5 * Math.sin(now / 300);
+    // Beacon of light so it can be spotted from far away.
+    g.fillStyle = `rgba(${color}, ${0.12 + 0.1 * pulse})`;
+    g.fillRect(x - 3, y - 120, 6, 112);
+    g.fillStyle = `rgba(${color}, ${0.25 + 0.2 * pulse})`;
+    g.beginPath();
+    g.ellipse(x, y, 14 + 3 * pulse, 6 + pulse, 0, 0, Math.PI * 2);
+    g.fill();
+    const bob = Math.round(Math.sin(now / 250) * 1.5);
+    g.drawImage(img, Math.round(x - img.width), Math.round(y - img.height * 2 - 2 + bob), img.width * 2, img.height * 2);
+  }
+
+  private drawCrateTag(rarity: Rarity) {
+    const g = this.g;
+    const d = this.dpr;
+    const [sx, sy] = this.toScreen(CRATE_SPOT.x, CRATE_SPOT.y - 26);
+    const fs = Math.round(11 * d);
+    const text = `${rarity.toUpperCase()} CRATE`;
+    g.font = `800 ${fs}px system-ui, sans-serif`;
+    const w = g.measureText(text).width + 10 * d;
+    const h = fs + 6 * d;
+    g.fillStyle = `rgba(${CRATE_GLOW[rarity]}, 0.92)`;
+    g.fillRect(Math.round(sx - w / 2), Math.round(sy - h), w, h);
+    g.fillStyle = '#1b1712';
+    g.textBaseline = 'middle';
+    g.fillText(text, Math.round(sx - w / 2 + 5 * d), Math.round(sy - h / 2 + d));
   }
 
   // ---- chunks (ground, roads, graveyards, scenery) ------------------------------------------------
@@ -717,7 +763,7 @@ export class WorldView {
     const small = k < 2;
     const fs = Math.round((small ? 10 : 12) * d);
     const mine = p.id === this.myPlot;
-    const shielded = s.shield > Date.now() + this.clockSkew;
+    const shielded = Math.max(s.shield, s.immune) > Date.now() + this.clockSkew;
     const text = small ? s.name : `${s.name}  Lv${s.hq}  ♛${s.trophies}`;
     g.font = `700 ${fs}px system-ui, sans-serif`;
     const tw = g.measureText(text).width;

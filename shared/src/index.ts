@@ -6,3 +6,4 @@ export * from './engine.ts';
 export * from './pve.ts';
 export * from './pvp.ts';
 export * from './economy.ts';
+export * from './crates.ts';

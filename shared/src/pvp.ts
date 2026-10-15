@@ -7,10 +7,10 @@ import type { BaseState } from './types.ts';
 // PvP raids, Clash-of-Clans style, on the same combat engine as the zombie waves.
 // The defender's posts fight automatically; the attacker deploys raiders on the apron outside the walls.
 
-export function raiderStats(kind: RaiderKind, attackerHq: number): UnitStats {
+export function raiderStats(kind: RaiderKind, attackerHq: number, attackBoost = 0): UnitStats {
   const r = CONFIG.pvp.raiders[kind];
   const k = CONFIG.pvp.troopScale(attackerHq);
-  return { hp: Math.round(r.hp * k), speed: r.speed, damage: Math.round(r.damage * k), cooldown: r.cooldown, range: r.range, wallMult: r.wallMult, target: 'nearest' };
+  return { hp: Math.round(r.hp * k), speed: r.speed, damage: Math.round(r.damage * k * (1 + attackBoost)), cooldown: r.cooldown, range: r.range, wallMult: r.wallMult, target: 'nearest' };
 }
 
 export function raiderUnlocked(kind: RaiderKind, hq: number): boolean {
@@ -37,8 +37,10 @@ export class Raid {
     readonly defenderBase: BaseState,
     readonly attackerHq: number,
     seed: number,
+    /** Crate boosts: extra raider damage, and the defender's extra post damage/health. */
+    readonly boosts: { attack?: number; defence?: number } = {},
   ) {
-    this.combat = new Combat(seed, baseBuildings(defenderBase, plot));
+    this.combat = new Combat(seed, baseBuildings(defenderBase, plot, boosts.defence ?? 0));
   }
 
   get ticksLeft(): number {
@@ -56,7 +58,7 @@ export class Raid {
   }
 
   deploy(kind: RaiderKind, x: number, y: number): void {
-    this.combat.addUnit(UNIT_KINDS.indexOf(kind), raiderStats(kind, this.attackerHq), x, y);
+    this.combat.addUnit(UNIT_KINDS.indexOf(kind), raiderStats(kind, this.attackerHq, this.boosts.attack ?? 0), x, y);
     this.deployed++;
     this.lastDeployTick = this.combat.tick;
   }

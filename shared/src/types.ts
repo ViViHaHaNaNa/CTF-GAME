@@ -1,5 +1,36 @@
 import type { PostType } from './config.ts';
 
+export type Rarity = 'rare' | 'epic' | 'legendary';
+export type BoostType = 'attack' | 'defence' | 'loot';
+
+/** Active crate boosts. Only one of each type; a stronger one replaces a weaker one. */
+export interface Boosts {
+  /** Extra raider damage for the next `uses` raids. */
+  attack?: { pct: number; uses: number };
+  /** Extra post damage and health until `until` (server ms). */
+  defence?: { pct: number; until: number };
+  /** Extra loot from the next raid. */
+  loot?: { pct: number; uses: number };
+}
+
+/** The current global crate as every client sees it (never includes the answers while unclaimed). */
+export interface CrateView {
+  id: number;
+  rarity: Rarity;
+  prompt: string;
+  code: string;
+  lang: string;
+  kind: string;
+  spawnedAt: number;
+  /** Server ms when it expires (= when the next crate drops). */
+  expiresAt: number;
+  claimedBy?: string;
+  /** What the winner got. */
+  reward?: string;
+  /** Revealed once claimed. */
+  answer?: string;
+}
+
 // Persistent base state (what the server stores per player).
 
 export interface PostState {
@@ -25,6 +56,9 @@ export interface PlayerView {
   base: BaseState;
   /** Server time (ms) until which this base can't be raided. */
   shieldUntil: number;
+  /** Server time (ms) until which this player bought immunity from raids. */
+  immuneUntil: number;
+  boosts: Boosts;
 }
 
 /** Combat snapshot streamed to clients (compact on purpose). Positions are world pixels. */
@@ -57,6 +91,8 @@ export interface BaseSummary {
   /** Server ms until which the base can't be raided (0 = not shielded). */
   shield: number;
   /** Raid in progress against this base (0 = none). */
+  /** Server ms until which bought immunity lasts (0 = none). */
+  immune: number;
   raid: number;
   /** Name of the raider, when raid != 0. */
   raider?: string;
@@ -93,7 +129,7 @@ export interface RaidResult {
 export interface FeedItem {
   t: number;
   text: string;
-  kind: 'raid' | 'join' | 'rank' | 'info';
+  kind: 'raid' | 'join' | 'rank' | 'info' | 'crate';
 }
 
 export interface WaveSummary {

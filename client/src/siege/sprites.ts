@@ -46,6 +46,10 @@ const FILES = {
   barrelBlue: 'Objects/Barrel_blue_1.png',
   pallet: 'Objects/Pallet_1.png',
   cardboard: 'Objects/Cardboard_1.png',
+
+  crateGreen: 'Objects/Pickable/Ammo-crate_Green.png',
+  crateBlue: 'Objects/Pickable/Ammo-crate_Blue.png',
+  crateRed: 'Objects/Pickable/Ammo-crate_Red.png',
 } as const;
 
 /** Grave sprites live in their own folder so they can be replaced without touching the pack. */
