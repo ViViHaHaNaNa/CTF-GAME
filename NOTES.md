@@ -16,6 +16,12 @@ npm start        # production: builds the site, one process serves everything on
 
 Phones on the same wifi use the LAN address printed at startup.
 
+| Page | URL |
+|---|---|
+| Game | `/siege/` |
+| Live Arena (watch only, no login) | `/siege/arena/` |
+| Projector (auto-cycles battles, big leaderboard when idle) | `/siege/arena/?projector=1`, then press Fullscreen |
+
 | Setting | Where | Default |
 |---|---|---|
 | Game server address (client) | `VITE_SIEGE_SERVER_URL` in `client/.env` | same address as the page |
@@ -32,7 +38,8 @@ shared/   config.ts (ALL balance numbers), world.ts (the shared map), layout.ts 
           pve.ts (waves), pvp.ts (raids), crates.ts (answer checks, rarity, boosts), economy.ts, types.ts
 server/   index.ts (http + socket.io + game loop), game.ts (authoritative state), net.ts (protocol),
           store.ts (storage interface + SQLite), data/questions.json (crate question bank)
-client/   index.html (site home), siege/index.html (game page), src/siege/world.ts (map renderer), main.ts (UI)
+client/   index.html (site home), siege/index.html (game page), siege/arena/index.html (Live Arena)
+          src/siege/world.ts (map renderer), stream.ts (live battle streams), main.ts (game UI), arena.ts (arena UI)
 client/public/game-assets/postapocalypse/   the art pack, unmodified, with its LICENSE.txt
 client/public/game-assets/graveyard/        grave_1..4.png (our own; replace freely, see shared/scripts/draw-graves.py)
 ```
@@ -54,6 +61,8 @@ client/public/game-assets/graveyard/        grave_1..4.png (our own; replace fre
 - **Immunity**: buy 5 min (150 coins) or 10 min (250) of protection from raids; buying again extends it, up to 15 min left. It doesn't stop zombies. Attacking anyone ends it. Immune bases show the shield icon and can't be targeted (the card says why).
 - **Crates**: one global crate every 10 minutes (first one 1 minute after the server starts), landing at the crossroads in the middle of the map with a question from the bank. No question repeats until the bank is used up; an unclaimed crate expires when the next one drops. The schedule, the used-question list and the current crate are saved in the database (`meta` table), so a restart doesn't reset them. Answers are checked only on the server and never sent to clients until the crate is claimed. Checking ignores case, outer quotes, a trailing `;`, commas and extra spaces (and for fill-in-the-blank, all spacing). Wrong answers: 3 s wait, and every 5th wrong answer locks you out for 30 s. **Exactly one winner**: the check and the claim run in one synchronous step on the single game thread, so two answers arriving together are handled one after the other and the second is told who won.
 - **Crate rewards**: rarity green 60% / blue 30% / red 10% (`CONFIG.crates.weights`), and the rarity sets the strength. A random boost the player doesn't already have at a stronger level: attack (+25/40/60% raider damage, next 3 raids), defence (+25/40/60% post damage and health for 30 min, in waves and raids), loot (+50/75/100% on the next raid, still never taking a defender below 100 coins). One boost of each type; an equal or stronger one replaces it. If every type is already stronger, the winner gets coins instead.
+- **Spectating**: the Live Arena connects as a spectator (socket auth `{spectator: true}`, no login, no token). It gets the world summary, feed and crate, can watch at most 2 bases, and every other request is refused. It joins the same per-base battle stream (`base:<plot>` room) the attacker and defender use, so it sees exactly what they see. It auto-picks a live battle and moves to the next one when it ends (after a 6 s result card). Projector mode also rotates between live battles every 20 s, uses big type, and shows a large leaderboard over a slowly drifting map when nothing is happening. Players can also spectate inside the game (a base's card or the Live list).
+- **Feed** also announces rank changes: climbing into the top 3, or to #1, after a raid.
 - **Dev server gotcha**: `tsx watch` can miss edits to `shared/`; if the server behaves like old code, restart `npm run dev`.
 - **Survivor posts** are layered sprites (body without hands + weapon-with-hands + helmet from Lv 4). Layer offsets live in `client/src/siege/sprites.ts` if anything looks misaligned.
 - **Main Tower** has no sprite in the pack: it's a shipping container that changes colour and gains antennas/AC/barrels with level.
@@ -68,5 +77,6 @@ PostApocalypse_AssetPack_v1.1.2 by TheLazyStone: free for **non-commercial** use
 ## Phase log
 
 - **Phase 1** (core loop): done. Login, fixed base, posts/walls/Main Tower upgrades, live + offline zombie waves, coins, persistence, reconnect.
-- **Phase 2** (open world + PvP): shared map, graveyards, raids in place, spectating, minimap, leaderboard, live-battle list, event feed. Not yet: leaderboard big-screen mode, matchmaking "next target" list.
+- **Phase 2** (open world + PvP): shared map, graveyards, raids in place, spectating, minimap, leaderboard, live-battle list, event feed. Not yet: matchmaking "next target" list (the leaderboard big screen came in phase 4).
+- **Phase 4** (spectating): Live Arena page, spectator connections, scoreboard and result cards, projector mode with auto-cycling and the big-screen leaderboard, rank-change feed items.
 - **Phase 3** (immunity + crates): immunity purchase, the global crate race with rarities, attack/defence/loot boosts applied in combat and loot, 30-question bank.

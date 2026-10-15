@@ -23,7 +23,17 @@ export function saveToken(token: string | null) {
   }
 }
 
-type Ack<T> = { ok: true } & T | { ok: false; error: string };
+/** A read-only connection for the Live Arena / projector: no login, can only watch. */
+export function spectatorSocket(): Socket {
+  return io(SERVER_URL ?? '/', {
+    auth: { spectator: true },
+    transports: ['websocket', 'polling'],
+    reconnectionDelay: 500,
+    reconnectionDelayMax: 3000,
+  });
+}
+
+type Ack<T> ={ ok: true } & T | { ok: false; error: string };
 
 export class Net {
   readonly socket: Socket;

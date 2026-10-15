@@ -21,6 +21,7 @@ export default defineConfig({
       input: {
         home: resolve(__dirname, 'index.html'),
         siege: resolve(__dirname, 'siege/index.html'),
+        arena: resolve(__dirname, 'siege/arena/index.html'),
       },
     },
   },

@@ -16,10 +16,14 @@ import { GameError, type GameServer } from './game.ts';
 //
 // "Watching" = area of interest: a screen only gets live combat for the bases it's looking at
 // (at most MAX_WATCH, plus its own base, which it always watches).
+//
+// Spectators (the Live Arena, the projector) connect with auth {spectator: true} and no login. They
+// get the world summary, feed and crate, and may watch up to MAX_SPECTATE bases. They can't act.
 
 type Ack = (res: { ok: true; [k: string]: unknown } | { ok: false; error: string }) => void;
 
 const MAX_WATCH = 6;
+const MAX_SPECTATE = 2;
 const room = (plot: number) => `base:${plot}`;
 
 function limiter(burst: number, perSec: number) {
@@ -82,11 +86,17 @@ export function attachSockets(io: Server, game: GameServer) {
     };
 
     // Reconnects (and returning visitors) present their saved token.
-    const resumed = game.resume((socket.handshake.auth as { token?: unknown } | undefined)?.token);
+    const auth = (socket.handshake.auth ?? {}) as { token?: unknown; spectator?: unknown };
+    const spectator = auth.spectator === true;
+    const resumed = spectator ? null : game.resume(auth.token);
     if (resumed) attach(resumed.id);
-    else socket.emit('needLogin');
+    else if (spectator) {
+      socket.emit('world', { bases: game.worldSummary(), now: Date.now(), full: true, raids: game.liveRaids() });
+      socket.emit('arena', { feed: game.feed.slice(-10), crate: game.crateView() });
+    } else socket.emit('needLogin');
 
     socket.on('login', (data: unknown, ack: unknown) => {
+      if (spectator) return reply(ack, { ok: false, error: 'Spectators can only watch' });
       if (!allowAct()) return reply(ack, { ok: false, error: 'Slow down a little' });
       try {
         const d = (data ?? {}) as { name?: unknown; roll?: unknown };
@@ -111,13 +121,14 @@ export function attachSockets(io: Server, game: GameServer) {
 
     /** The plots this screen is currently looking at (closest first). */
     socket.on('watch', (data: unknown) => {
-      if (playerId === null) return;
+      if (playerId === null && !spectator) return;
+      const max = spectator ? MAX_SPECTATE : MAX_WATCH;
       const raw = Array.isArray((data as { plots?: unknown })?.plots) ? ((data as { plots: unknown[] }).plots) : [];
       const want = new Set<number>();
       for (const v of raw) {
         const n = Number(v);
         if (Number.isInteger(n) && n >= 0 && n < 64) want.add(n);
-        if (want.size >= MAX_WATCH) break;
+        if (want.size >= max) break;
       }
       if (ownPlot !== null) want.add(ownPlot);
       for (const plot of [...watching]) if (!want.has(plot)) stopWatching(plot);

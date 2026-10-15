@@ -39,8 +39,9 @@ app.get('/api/health', async () => ({ ok: true, players: game.players.size }));
 
 if (existsSync(join(CLIENT_DIST, 'index.html'))) {
   await app.register(fastifyStatic, { root: CLIENT_DIST });
-  // /siege/... routes all load the game page.
+  // /siege/arena... loads the Live Arena; every other /siege/... route loads the game page.
   app.setNotFoundHandler((req, reply) => {
+    if (req.url.startsWith('/siege/arena')) return reply.sendFile('siege/arena/index.html');
     if (req.url.startsWith('/siege')) return reply.sendFile('siege/index.html');
     return reply.code(404).send('Not found');
   });

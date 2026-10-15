@@ -176,6 +176,21 @@ describe('raids', () => {
     expect(sent.filter((s) => s.ev === 'snap' && s.to === `base:${d.plot}`).length).toBeGreaterThan(10);
   });
 
+  it('climbing to the top of the leaderboard makes the feed', () => {
+    const { game, a, d, sent } = twoPlayers();
+    expect(game.rankOf(a.id)).toBe(1); // tie on 0 trophies: the earlier player ranks first
+    game.players.get(d.id)!.trophies = 20;
+    expect(game.rankOf(a.id)).toBe(2);
+    game.attack(a.id, d.plot);
+    const plot = getWorld().plots[d.plot]!;
+    for (let i = 0; i < 12; i++) game.deploy(a.id, 'r_bat', plot.x + 0.5, plot.y + 0.5 + (i % 4) * 0.5);
+    let guard = 0;
+    while (!sent.some((s) => s.ev === 'raidEnd') && guard++ < 10_000) game.tick();
+    expect((sent.find((s) => s.ev === 'raidEnd')!.data as { won: boolean }).won).toBe(true);
+    expect(game.rankOf(a.id)).toBe(1);
+    expect(sent.some((s) => s.ev === 'feed' && (s.data as { text: string }).text === 'Attacker is now #1!')).toBe(true);
+  });
+
   it('a raid with nothing deployed ends as a loss', () => {
     const { game, a, d, sent } = twoPlayers();
     game.attack(a.id, d.plot);

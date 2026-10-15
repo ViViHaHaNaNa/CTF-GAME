@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#1b1712" />
+    <title>Live Arena · Code Siege</title>
+    <link rel="stylesheet" href="/src/site.css" />
+    <link rel="stylesheet" href="/src/siege/siege.css" />
+    <link rel="stylesheet" href="/src/siege/arena.css" />
+  </head>
+  <body class="siege arena">
+    <header class="arena-head">
+      <div class="arena-title"><h1>Live Arena</h1><span>Code Siege</span></div>
+      <div class="arena-actions">
+        <button class="tool" id="projector-btn">Projector mode</button>
+        <button class="tool" id="fullscreen-btn">Fullscreen</button>
+        <a class="tool" href="/siege/">Play</a>
+      </div>
+    </header>
+    <main class="arena-main">
+      <section class="arena-stage">
+        <div class="board-wrap" id="board-wrap">
+          <canvas id="board"></canvas>
+          <div class="scoreboard" id="scoreboard" hidden>
+            <div class="sb-names"><span class="sb-att" id="sb-att"></span><span class="sb-vs">⚔</span><span class="sb-def" id="sb-def"></span></div>
+            <div class="sb-bar"><div class="sb-fill" id="sb-fill"></div><div class="sb-mark" title="50% wins"></div></div>
+            <div class="sb-stats"><span><b id="sb-dmg">0%</b> destroyed</span><span><b id="sb-time">3:00</b> left</span><span><b id="sb-troops">0</b> raiders sent</span></div>
+          </div>
+          <div class="arena-result" id="result" hidden></div>
+          <div class="arena-idle" id="idle" hidden>
+            <h2>No battles right now</h2>
+            <p>Raids show up here live the moment someone attacks.</p>
+            <ol class="big-ranks" id="big-ranks"></ol>
+          </div>
+          <div class="cycle" id="cycle" hidden></div>
+        </div>
+      </section>
+      <aside class="arena-side">
+        <section>
+          <h2>Live battles</h2>
+          <ul class="list" id="battles"></ul>
+        </section>
+        <section>
+          <h2>Crate</h2>
+          <div id="crate-box" class="crate-box"></div>
+        </section>
+        <section>
+          <h2>Leaderboard</h2>
+          <ol class="list ranks" id="ranks"></ol>
+        </section>
+        <section>
+          <h2>Feed</h2>
+          <ul class="feed-list" id="feed-list"></ul>
+        </section>
+      </aside>
+    </main>
+    <div class="connecting" id="connecting">Connecting...</div>
+    <footer class="credit">Art: <a href="https://thelazystone.itch.io/post-apocalyptic-pixel-art-asset-pack" target="_blank" rel="noopener">Post-Apocalypse asset pack by TheLazyStone</a> · IETE-SF MPSTME</footer>
+    <script type="module" src="/src/siege/arena.ts"></script>
+  </body>
+</html>

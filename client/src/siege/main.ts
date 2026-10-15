@@ -21,22 +21,14 @@ import {
   type RaidResult,
   type RaidStatus,
   type RaiderKind,
-  type Snapshot,
 } from '@siege/shared';
 import { Net, saveToken } from './net.ts';
 import { loadSprites } from './sprites.ts';
-import { CRATE_SPOT, WorldView, type LiveState } from './world.ts';
+import { bindLiveStream } from './stream.ts';
+import { CRATE_SPOT, WorldView } from './world.ts';
 
 // Game page controller: login, HUD, the shared map (pan / zoom / tap), base cards, raids, lists.
 // Everything shown comes from the server; buttons only send intents.
-
-interface BaseLive {
-  p: number;
-  phase: LiveState['phase'];
-  nextIn?: number;
-  snapshot?: Snapshot;
-  raid?: RaidStatus;
-}
 
 type PanelMode = 'none' | 'mine' | 'other' | 'ranks' | 'live' | 'crate';
 
@@ -167,16 +159,8 @@ function bindNet() {
     $('live-count').hidden = n === 0;
     if (panel === 'ranks' || panel === 'live' || panel === 'other') renderPanel();
   });
-  s.on('live', onLive);
-  s.on('wave', onLive);
-  s.on('snap', (m: Snapshot & { p: number }) => view.applySnapshot(m.p, m, performance.now()));
+  bindLiveStream(s, view);
   s.on('raid', (r: RaidStatus) => {
-    const l = view.liveFor(r.plot);
-    if (l.phase !== 'raid') {
-      view.resetCombat(r.plot);
-      l.phase = 'raid';
-    }
-    l.raid = r;
     if (myRaid && r.id === myRaid.id) {
       myRaid = r;
       renderAttackBar();
@@ -184,13 +168,6 @@ function bindNet() {
   });
   s.on('underAttack', (r: RaidStatus) => toast(`${r.attacker} is raiding your base!`, 'bad', 5000));
   s.on('raidEnd', (r: RaidResult) => {
-    const l = view.live.get(r.plot);
-    if (l?.phase === 'raid') {
-      l.phase = 'calm';
-      l.raid = null;
-      l.riseAt = performance.now() + CONFIG.waves.calm * 1000;
-      clearLater(r.plot);
-    }
     if (r.id === lastRaidEnd) return;
     lastRaidEnd = r.id;
     if (myRaid && r.id === myRaid.id) {
@@ -220,27 +197,6 @@ function bindNet() {
   });
   s.on('feed', (f: FeedItem) => addFeed(f));
   s.on('crate', (c: CrateView | null) => setCrate(c, false));
-}
-
-function onLive(b: BaseLive) {
-  const now = performance.now();
-  const l = view.liveFor(b.p);
-  l.phase = b.phase;
-  l.raid = b.raid ?? null;
-  if (b.nextIn !== undefined) l.riseAt = now + b.nextIn * 1000;
-  if (b.snapshot) {
-    view.resetCombat(b.p);
-    view.applySnapshot(b.p, b.snapshot, now);
-  }
-  if (b.phase === 'calm') clearLater(b.p);
-}
-
-/** Let the last death animations play, then clear the field. */
-function clearLater(plot: number) {
-  setTimeout(() => {
-    const l = view.live.get(plot);
-    if (l && (l.phase === 'calm' || l.phase === 'warning')) view.resetCombat(plot);
-  }, 900);
 }
 
 /** Area of interest: tell the server which bases this screen can see. */
@@ -817,7 +773,7 @@ function livePanel(): string {
       return `<li><button data-jump="${b.p}"><span class="nm">${esc(b.raider ?? '?')} ⚔ ${esc(b.name)}</span><span class="val">${extra}</span></button></li>`;
     })
     .join('');
-  return `${head('Live battles')}<p class="sub">Tap a battle to watch it.</p><ul class="list">${rows || '<li class="empty">No raids right now.</li>'}</ul>`;
+  return `${head('Live battles')}<p class="sub">Tap a battle to watch it.</p><ul class="list">${rows || '<li class="empty">No raids right now.</li>'}</ul><p class="note"><a href="/siege/arena/" target="_blank" rel="noopener">Open the Live Arena</a> to watch battles on any screen.</p>`;
 }
 
 function minePanel(): string {

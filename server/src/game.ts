@@ -540,6 +540,7 @@ export class GameServer {
     const a = this.players.get(r.attackerId)!;
     const d = this.players.get(r.defenderId)!;
     const stake = trophyStake(a.trophies, d.trophies);
+    const rankBefore = this.rankOf(a.id);
     let loot = 0;
     let trophies = 0;
     if (raid.won) {
@@ -574,6 +575,9 @@ export class GameServer {
     this.out.toPlayer(d.id, 'player', this.view(d));
     this.out.toPlayer(a.id, 'player', this.view(a));
     this.pushFeed(raid.won ? `${a.name} raided ${d.name} for ${loot} coins (+${trophies} trophies)` : `${d.name} fought off ${a.name}`, 'raid');
+    // Climbing into the top 3 (or to #1) is news.
+    const rankAfter = this.rankOf(a.id);
+    if (rankAfter < rankBefore && rankAfter <= 3 && a.trophies > 0) this.pushFeed(rankAfter === 1 ? `${a.name} is now #1!` : `${a.name} climbed to #${rankAfter}`, 'rank');
     // Zombies come back a little after the raiders leave.
     const l = this.live.get(plot);
     if (l) l.calmUntil = this.tickNo + CONFIG.waves.calm * CONFIG.tickRate;
@@ -615,6 +619,15 @@ export class GameServer {
     };
     this.save(p);
     this.markDirty(p.plot);
+  }
+
+  /** Leaderboard position (1 = most trophies; ties keep the earlier player ahead). */
+  rankOf(id: number): number {
+    const me = this.players.get(id);
+    if (!me) return Infinity;
+    let rank = 1;
+    for (const p of this.players.values()) if (p.trophies > me.trophies || (p.trophies === me.trophies && p.id < me.id)) rank++;
+    return rank;
   }
 
   // ---- immunity & boosts ------------------------------------------------------------------------
