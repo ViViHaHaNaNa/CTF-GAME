@@ -41,7 +41,9 @@ import {
   quote,
   slotsUnlocked,
   trophyStake,
-  weakerFactor,
+  matchFactor,
+  starBonus,
+  vaultCapacity,
 } from '../src/index.ts';
 
 const world = getWorld();
@@ -497,13 +499,23 @@ describe('raids', () => {
 
   it('loot and trophies are capped and shrink against much weaker players', () => {
     expect(lootable(50, 1)).toBe(0); // protected floor
-    expect(lootable(1000, 1)).toBe(200);
+    expect(lootable(1000, 1)).toBe(Math.round(1000 * CONFIG.pvp.loot.pct));
     expect(lootable(1_000_000, 2)).toBe(CONFIG.pvp.loot.capBase + 2 * CONFIG.pvp.loot.capPerHq);
-    expect(weakerFactor(100, 100)).toBe(1);
-    expect(weakerFactor(1000, 100)).toBe(CONFIG.pvp.weaker.min);
-    expect(trophyStake(100, 100)).toBe(CONFIG.pvp.trophies.base);
-    expect(trophyStake(1000, 0)).toBeLessThan(trophyStake(100, 100));
-    expect(trophyStake(0, 1000)).toBe(CONFIG.pvp.trophies.max);
+    const M = CONFIG.pvp.match;
+    // Even fight: 1. Much weaker (trophies and level): little. Stronger: more.
+    expect(matchFactor(100, 100, 3, 3)).toBe(1);
+    expect(matchFactor(1000, 100, 3, 3)).toBe(M.min);
+    expect(matchFactor(100, 100 + M.span, 3, 3)).toBe(M.max);
+    expect(matchFactor(100, 100, 5, 1)).toBeCloseTo(Math.max(M.levelMin, 1 - 4 * M.perLevel));
+    expect(matchFactor(100, 100, 1, 3)).toBeCloseTo(1 + 2 * M.perLevel);
+    expect(matchFactor(1000, 0, 6, 1)).toBeLessThan(0.15);
+    expect(trophyStake(100, 100, 2, 2)).toBe(CONFIG.pvp.trophies.base);
+    expect(trophyStake(1000, 0, 5, 1)).toBe(CONFIG.pvp.trophies.min);
+    expect(trophyStake(0, 1000, 1, 4)).toBe(CONFIG.pvp.trophies.max);
+    expect(starBonus(3, 2)).toBe(3 * CONFIG.pvp.loot.starBonus[1]!);
+    expect(starBonus(2, 2, 0.25)).toBe(Math.round(2 * CONFIG.pvp.loot.starBonus[1]! * 0.25));
+    // The vault always has room for the next Main Tower upgrade.
+    for (let hq = 1; hq < CONFIG.hq.maxLevel; hq++) expect(vaultCapacity(hq)).toBeGreaterThanOrEqual(CONFIG.hq.upgradeCost[hq - 1]!);
   });
 });
 

@@ -119,6 +119,10 @@
   --ammo: #ffd23f;                   /* tap-to-attack ammo bar, combo, airstrike button */
   --ammo-spent: rgba(255, 255, 255, 0.16);
   --combo: #ffd23f;
+  --mode-pve: #5fe08a;               /* Grind / Raid toggle */
+  --mode-pve-ink: #0b1a10;
+  --mode-pvp: #ff5a3c;
+  --mode-pvp-ink: #ffffff;
   --star: #ffd23f;                   /* raid stars */
   --star-shadow: #5a3a00;
   --combo-shadow: #7a1a0a;
@@ -280,6 +284,13 @@
   --map-shake-first: 5;              /* screen shake, device px: first surge / breach / pincer */
   --map-shake-breach: 7;
   --map-shake-pincer: 2;
+  /* Modes: chips under the map tags */
+  --map-mode-pve: #5fe08a;           /* GRINDING */
+  --map-mode-pvp: #ff5a3c;           /* RAIDING */
+  --map-vault-full: #ffd23f;         /* VAULT FULL */
+  --map-chip-ink: #101624;
+  --map-chip-outline: rgba(10, 14, 26, 0.85);
+  --map-chip-size: 7;
   /* Commander (tap-to-attack) */
   --map-cmd-tracer: #fff6c8;
   --map-cmd-tracer-glow: rgba(255, 190, 60, 0.55);

@@ -8,6 +8,10 @@ export type PostType = (typeof POST_TYPES)[number];
 export const ZOMBIE_KINDS = ['z_small', 'z_big', 'z_axe'] as const;
 export type ZombieKind = (typeof ZOMBIE_KINDS)[number];
 
+/** Player modes: 'pve' grinds zombie surges (no raiding), 'pvp' pauses the swarms and may raid. */
+export const MODES = ['pve', 'pvp'] as const;
+export type Mode = (typeof MODES)[number];
+
 /** The Commander's weapons, in unlock order (BaseState.cmd is an index into this). */
 export const COMMANDER_WEAPONS = ['pistol', 'gun', 'shotgun'] as const;
 export type CommanderWeapon = (typeof COMMANDER_WEAPONS)[number];
@@ -60,9 +64,24 @@ export const CONFIG = {
     postUnlock: { pistol: 1, gun: 2, shotgun: 3 } as Record<PostType, number>,
   },
 
-  /** The vault: raiders who crack it take a bigger share of the loot. It grows tougher with the Main Tower. */
+  /**
+   * The vault holds your coins. Zombie kill coins stop once it's full (raid loot and crate coins can go
+   * over). Raiders who crack it take a bigger share of the loot. It grows with the Main Tower.
+   */
   vault: {
     hp: (hq: number) => 250 + 90 * (hq - 1),
+    /** Coins it holds, by Main Tower level (index = level - 1): always room for the next Main Tower upgrade. */
+    capacity: [500, 1000, 1800, 3200, 5200, 8000, 12000, 16000],
+    /** "Vault full" shows on the map from this share of capacity. */
+    fullAt: 0.9,
+  },
+
+  /** Grind (PvE) or Raid (PvP). Every base can be raided whatever its mode; the mode decides what its owner can do. */
+  modes: {
+    /** New players start grinding. */
+    start: 'pve' as Mode,
+    /** Seconds between switches. Switching is also locked during a surge and while attacking or being attacked. */
+    cooldown: 60,
   },
 
   posts: {
@@ -236,10 +255,10 @@ export const CONFIG = {
     troopScale: (hq: number) => 1 + 0.15 * (hq - 1),
     /** Base raider stats: speed x pace.raiderSpeed, cooldown x pace.raiderCooldown. */
     raiders: {
-      r_bat: { unlockHq: 1, cost: 20, hp: 55, speed: 1.6, damage: 10, cooldown: 0.7, range: 0.5, wallMult: 1 },
-      r_pistol: { unlockHq: 2, cost: 25, hp: 40, speed: 1.2, damage: 7, cooldown: 0.8, range: 3, wallMult: 0.6 },
-      r_helmet: { unlockHq: 3, cost: 50, hp: 160, speed: 0.8, damage: 10, cooldown: 1.0, range: 0.55, wallMult: 1.5 },
-      r_shotgun: { unlockHq: 4, cost: 45, hp: 65, speed: 1.0, damage: 20, cooldown: 1.4, range: 1.8, wallMult: 1 },
+      r_bat: { unlockHq: 1, cost: 12, hp: 55, speed: 1.6, damage: 10, cooldown: 0.7, range: 0.5, wallMult: 1 },
+      r_pistol: { unlockHq: 2, cost: 15, hp: 40, speed: 1.2, damage: 7, cooldown: 0.8, range: 3, wallMult: 0.6 },
+      r_helmet: { unlockHq: 3, cost: 30, hp: 160, speed: 0.8, damage: 10, cooldown: 1.0, range: 0.55, wallMult: 1.5 },
+      r_shotgun: { unlockHq: 4, cost: 27, hp: 65, speed: 1.0, damage: 20, cooldown: 1.4, range: 1.8, wallMult: 1 },
     } as Record<RaiderKind, { unlockHq: number; cost: number; hp: number; speed: number; damage: number; cooldown: number; range: number; wallMult: number }>,
     loot: {
       /**
@@ -248,24 +267,32 @@ export const CONFIG = {
        */
       fromVault: 0.5,
       /** The stake: this share of the defender's coins... */
-      pct: 0.2,
+      pct: 0.3,
       /** ...capped at base + perHq * defender HQ level... */
       capBase: 300,
       capPerHq: 150,
       /** ...and never taking the defender below this. */
       protectedFloor: 100,
+      /**
+       * On top of what's stolen, every star pays this bonus (by the defender's Main Tower level, x the match
+       * factor), so raiding beats grinding per minute without stripping defenders bare. New coins, not theirs.
+       */
+      starBonus: [75, 90, 130, 200, 340, 450, 580, 740],
     },
     trophies: {
+      /** For an even fight; x the match factor, kept within min..max. */
       base: 30,
-      /** Extra/less trophies per point of trophy difference (defender - attacker). */
-      perDiff: 0.05,
       min: 5,
       max: 50,
       /** A win pays stars/3 of the stake (at least `min`); a 0-star raid costs the attacker this share of the stake. */
       lossFactor: 0.5,
     },
-    /** Raiding a much weaker player (fewer trophies) pays less loot: factor shrinks to `min` at `span` trophies below. */
-    weaker: { span: 400, min: 0.25 },
+    /**
+     * Match factor on loot and trophies: from the trophy gap (defender - attacker, `span` trophies = full
+     * effect; weaker targets shrink it to `min`, stronger ones raise it up to `max`) times the Main Tower
+     * gap (`perLevel` per level, within `levelMin`..`levelMax`). Hitting much weaker bases pays little.
+     */
+    match: { span: 400, min: 0.25, max: 1.5, perLevel: 0.2, levelMin: 0.3, levelMax: 1.6 },
     /** After being raided, a base is protected from raids for this long. */
     autoShield: 120,
   },

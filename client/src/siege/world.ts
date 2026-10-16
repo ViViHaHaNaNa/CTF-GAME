@@ -1605,7 +1605,7 @@ export class WorldView {
     const mine = p.id === this.myPlot;
     const shielded = Math.max(s.shield, s.immune) > Date.now() + this.clockSkew;
     const text = `${mine ? '★ ' : ''}${small ? s.name : `${s.name}  Lv${s.hq}  ♛${s.trophies}`}`;
-    const key = `${text}|${s.id}|${mine}|${shielded}|${s.raid ? 1 : 0}|${small}|${d}`;
+    const key = `${text}|${s.id}|${mine}|${shielded}|${s.raid ? 1 : 0}|${small}|${d}|${s.mode}|${s.vaultFull}`;
     const hit = this.tagCache.get(p.id);
     if (hit && hit.key === key) return hit.canvas;
     const t = THEME.tag;
@@ -1659,7 +1659,42 @@ export class WorldView {
       g.fillStyle = t.raid;
       g.fillText('⚔', ix, h / 2 + d);
     }
-    this.tagCache.set(p.id, { key, canvas: c });
+    const out = this.withModeChips(c, s, d);
+    this.tagCache.set(p.id, { key, canvas: out });
+    return out;
+  }
+
+  /** The tag with a row of chips under it: the owner's mode, and "vault full" for a grinder with a full vault. */
+  private withModeChips(tag: HTMLCanvasElement, s: BaseSummary, d: number): HTMLCanvasElement {
+    const M = THEME.modes;
+    const chips: [string, string][] = [s.mode === 'pvp' ? ['RAIDING', M.pvp] : ['GRINDING', M.pve]];
+    if (s.vaultFull) chips.push(['VAULT FULL', M.vaultFull]);
+    const fs = Math.round(M.chipSize * d);
+    const g0 = document.createElement('canvas').getContext('2d')!;
+    g0.font = `${fs}px ${FONT_DISPLAY}`;
+    const padX = Math.round(3 * d);
+    const gap = Math.round(3 * d);
+    const widths = chips.map(([text]) => Math.ceil(g0.measureText(text).width) + padX * 2);
+    const rowW = widths.reduce((a, w) => a + w, 0) + gap * (chips.length - 1);
+    const chipH = fs + Math.round(4 * d);
+    const c = document.createElement('canvas');
+    c.width = Math.max(tag.width, rowW);
+    c.height = tag.height + Math.round(2 * d) + chipH;
+    const g = c.getContext('2d')!;
+    g.drawImage(tag, Math.round((c.width - tag.width) / 2), 0);
+    let x = Math.round((c.width - rowW) / 2);
+    const y = tag.height + Math.round(2 * d);
+    g.font = `${fs}px ${FONT_DISPLAY}`;
+    g.textBaseline = 'middle';
+    chips.forEach(([text, color], i) => {
+      g.fillStyle = M.chipOutline;
+      g.fillRect(x - 1, y - 1, widths[i]! + 2, chipH + 2);
+      g.fillStyle = color;
+      g.fillRect(x, y, widths[i]!, chipH);
+      g.fillStyle = M.chipInk;
+      g.fillText(text, x + padX, y + chipH / 2 + d * 0.5);
+      x += widths[i]! + gap;
+    });
     return c;
   }
 

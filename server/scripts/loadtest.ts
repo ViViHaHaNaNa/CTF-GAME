@@ -61,7 +61,7 @@ const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const pick = <T>(xs: T[]): T | undefined => xs[Math.floor(Math.random() * xs.length)];
 
 /** Expected rejections (rules of the game), not failures. */
-const NORMAL = /No zombies to bomb|Airstrike ready in|more coins|locked|Max|Main Tower|Empty slot|already has a post|Shielded|Immune|under attack|current raid|own base|not raiding|raid is over|Troop limit|Wait|Too late|gone|Slow down|level/i;
+const NORMAL = /switch again in|Hold the surge|Finish your raid|being raided|Raid mode|No zombies to bomb|Airstrike ready in|more coins|locked|Max|Main Tower|Empty slot|already has a post|Shielded|Immune|under attack|current raid|own base|not raiding|raid is over|Troop limit|Wait|Too late|gone|Slow down|level/i;
 
 function ack<T>(s: Socket, ev: string, data: unknown, kind: string): Promise<({ ok: true } & T) | { ok: false; error: string } | null> {
   const t0 = performance.now();
@@ -117,6 +117,7 @@ class Bot {
   hq = 1;
   raiding: number | null = null;
   stopped = false;
+  mode: 'pve' | 'pvp' = 'pve';
   /** Zombies on our own base from the latest snapshot (world tiles), to aim at. */
   targets: [number, number][] = [];
 
@@ -139,7 +140,8 @@ class Bot {
         const r = await ack<{ token: string }>(s, 'login', { name: `Bot ${this.n}`, roll: this.roll }, 'login');
         if (r?.ok) this.token = r.token;
       });
-      s.on('welcome', (w: { player: { id: number; plot: number; coins: number; base: { hq: number } } }) => {
+      s.on('welcome', (w: { player: { id: number; plot: number; coins: number; base: { hq: number }; mode: 'pve' | 'pvp' } }) => {
+        this.mode = w.player.mode;
         if (this.token && performance.now() - t0 > 0 && this.id >= 0) lat.reconnect!.push(performance.now() - t0);
         this.id = w.player.id;
         this.plot = w.player.plot;
@@ -212,8 +214,15 @@ class Bot {
     await ack(this.socket, 'act', action, 'act');
   }
 
+  /** Switch Grind / Raid (the server may say not yet: cooldown, a surge, a raid). */
+  async switchMode(mode: 'pve' | 'pvp') {
+    const r = await ack<{ player: { mode: 'pve' | 'pvp' } }>(this.socket, 'mode', { mode }, 'act');
+    if (r?.ok) this.mode = r.player.mode;
+  }
+
   async raid() {
     if (this.raiding !== null) return;
+    if (this.mode !== 'pvp') return this.switchMode('pvp');
     const targets = [...bases.values()].filter((b) => b.id !== this.id && !b.raid && b.shield < Date.now() && b.immune < Date.now());
     const t = pick(targets);
     if (!t) return;
@@ -245,7 +254,7 @@ class Bot {
     let nextStrike = Date.now() + rand(2000, 8000);
     while (!this.stopped && Date.now() < until) {
       await sleep(interval);
-      if (!this.socket?.connected || this.plot < 0 || this.raiding !== null) continue;
+      if (!this.socket?.connected || this.plot < 0 || this.raiding !== null || this.mode !== 'pve') continue;
       const p = world.plots[this.plot]!;
       const t = pick(this.targets) ?? [p.x + 7 + rand(-4, 4), p.y + 7 + rand(-4, 4)];
       this.socket.emit('tap', { x: t[0], y: t[1] });
@@ -264,7 +273,8 @@ class Bot {
     void this.tapLoop(until);
     while (!this.stopped && Date.now() < until) {
       const r = Math.random();
-      if (r < 0.55) await this.upgrade();
+      if (r < 0.1 && this.mode === 'pvp' && this.raiding === null) await this.switchMode('pve');
+      else if (r < 0.55) await this.upgrade();
       else if (r < 0.75) await this.raid();
       else if (r < 0.82) await this.reconnect(url);
       else this.watchAround();

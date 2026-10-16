@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { CONFIG, PLOT, checkAnswer, decodeSnapshot, getWorld, postId, postUpgradeCost, type CrateView, type Question } from '@siege/shared';
+import { CONFIG, PLOT, checkAnswer, decodeSnapshot, getWorld, lootable, postId, postUpgradeCost, starBonus, vaultCapacity, type CrateView, type Question } from '@siege/shared';
 import { GameServer, type Outbox } from '../src/game.ts';
 import { SqliteStore } from '../src/store.ts';
 
@@ -139,12 +139,14 @@ describe('zombie siege', () => {
     }
     const rec = game.players.get(p.id)!;
     expect(rec.offline.waves).toBeGreaterThan(60);
-    expect(rec.bank).toBe(CONFIG.offline.bankCap);
+    // The bank stops at its cap or when the vault would be full, whichever comes first.
+    const credited = rec.bank;
+    expect(credited).toBe(Math.min(CONFIG.offline.bankCap, vaultCapacity(1) - coins + rec.offline.coinsLost));
     const lost = rec.offline.coinsLost;
     expect(lost).toBeLessThanOrEqual(rec.offline.breaches * CONFIG.siege.breach.maxLoss);
     const w = game.connect(p.id);
-    expect(w.offline?.credited).toBe(CONFIG.offline.bankCap);
-    expect(w.player.coins).toBe(coins - lost + CONFIG.offline.bankCap);
+    expect(w.offline?.credited).toBe(credited);
+    expect(w.player.coins).toBe(coins - lost + credited);
   });
 
   it('when nobody watches any more, the base goes back to headless sieges', () => {
@@ -226,6 +228,7 @@ describe('raids', () => {
     s.game.connect(a.id);
     s.game.players.get(a.id)!.coins = 2000;
     s.game.players.get(d.id)!.coins = 1000;
+    s.game.setMode(a.id, 'pvp');
     return { ...s, a, d };
   }
 
@@ -251,9 +254,10 @@ describe('raids', () => {
     while (!sent.some((s) => s.ev === 'raidEnd') && guard++ < 10_000) game.tick();
     const res = sent.find((s) => s.ev === 'raidEnd')!.data as { won: boolean; stars: number; reason: string; vault: boolean; loot: number; trophies: number };
     expect(res).toMatchObject({ won: true, stars: 3, reason: 'cleared', vault: true });
-    // Everything down, vault included: the whole stake.
-    expect(res.loot).toBe(Math.min(1000 * CONFIG.pvp.loot.pct, CONFIG.pvp.loot.capBase + CONFIG.pvp.loot.capPerHq));
-    expect(game.players.get(d.id)!.coins).toBe(1000 - res.loot);
+    // Everything down, vault included: the whole stake from the defender, plus 3 stars of bonus (even match).
+    const stolen = lootable(1000, 1);
+    expect(res.loot).toBe(stolen + starBonus(3, 1));
+    expect(game.players.get(d.id)!.coins).toBe(1000 - stolen);
     expect(game.players.get(a.id)!.trophies).toBe(res.trophies);
     expect(game.raidBlock(a.id, d.plot)).toMatch(/Shielded/);
     expect(sent.some((s) => s.ev === 'feed')).toBe(true);
@@ -295,7 +299,9 @@ describe('raids', () => {
     expect(game.players.get(d.id)!.coins).toBe(1000);
     // No shield for the defender: nothing happened to them.
     advance(1);
-    expect(game.raidBlock(game.login('Third', 'T9004').id, d.plot)).toBeNull();
+    const third = game.login('Third', 'T9004');
+    game.setMode(third.id, 'pvp');
+    expect(game.raidBlock(third.id, d.plot)).toBeNull();
   });
 
   it('End attack scores whatever is destroyed so far', () => {
@@ -349,6 +355,7 @@ describe('immunity', () => {
     game.buyImmunity(d.id, 10); // 15 minutes in total: allowed
     expect(() => game.buyImmunity(d.id, 5)).toThrow(/15 minutes/);
     // The immune player attacks someone: their immunity ends.
+    game.setMode(d.id, 'pvp');
     game.attack(d.id, a.plot);
     expect(game.players.get(d.id)!.immuneUntil).toBe(0);
   });
@@ -430,6 +437,7 @@ describe('boosts', () => {
     game.players.get(a.id)!.coins = 2000;
     game.players.get(d.id)!.coins = 1000;
     game.players.get(a.id)!.boosts = { attack: { pct: 0.6, uses: 3 }, loot: { pct: 1, uses: 1 } };
+    game.setMode(a.id, 'pvp');
     game.attack(a.id, d.plot);
     expect(game.players.get(a.id)!.boosts).toEqual({ attack: { pct: 0.6, uses: 2 } });
     const plot = getWorld().plots[d.plot]!;
@@ -438,8 +446,71 @@ describe('boosts', () => {
     while (!sent.some((s) => s.ev === 'raidEnd') && guard++ < 10_000) game.tick();
     const res = sent.find((s) => s.ev === 'raidEnd')!.data as { won: boolean; loot: number };
     expect(res.won).toBe(true);
-    const normal = Math.min(1000 * CONFIG.pvp.loot.pct, CONFIG.pvp.loot.capBase + CONFIG.pvp.loot.capPerHq);
-    expect(res.loot).toBe(normal * 2);
+    // A +100% loot boost doubles both what's stolen and the star bonus.
+    expect(res.loot).toBe(2 * lootable(1000, 1) + 2 * starBonus(3, 1));
+  });
+});
+
+describe('modes', () => {
+  it('Grind runs the swarms and blocks raiding; Raid pauses them and allows it; the switch has a cooldown', () => {
+    const { game, sent, advance } = setup();
+    const p = game.login('Mode', 'M8001');
+    const q = game.login('Other', 'M8002');
+    game.connect(p.id);
+    game.watch(p.plot, 1);
+    expect(game.players.get(p.id)!.mode).toBe('pve');
+    expect(game.raidBlock(p.id, q.plot)).toMatch(/Raid mode/);
+    for (let i = 0; i < CONFIG.siege.firstSurge * CONFIG.tickRate + 5; i++) game.tick();
+    // Locked during a surge.
+    expect(() => game.setMode(p.id, 'pvp')).toThrow(/surge/);
+    let guard = 0;
+    while (game.modeBlock(p.id) && guard++ < 60 * CONFIG.tickRate) game.tick();
+    expect(game.setMode(p.id, 'pvp').mode).toBe('pvp');
+    expect(game.baseLive(p.plot).phase).toBe('calm');
+    expect(game.worldSummary().find((b) => b.id === p.id)!.mode).toBe('pvp');
+    expect(game.raidBlock(p.id, q.plot)).toBeNull();
+    // No zombies while raiding: no snapshots with units, no coins.
+    const coins = game.players.get(p.id)!.coins;
+    for (let i = 0; i < 10 * CONFIG.tickRate; i++) game.tick();
+    expect(game.players.get(p.id)!.coins).toBe(coins);
+    // Cooldown before switching back.
+    expect(() => game.setMode(p.id, 'pve')).toThrow(/switch again in/);
+    advance(CONFIG.modes.cooldown * 1000);
+    expect(game.setMode(p.id, 'pve').mode).toBe('pve');
+    for (let i = 0; i < (CONFIG.siege.firstSurge + 1) * CONFIG.tickRate; i++) game.tick();
+    expect(game.baseLive(p.plot).phase).toBe('wave');
+    expect(sent.some((s) => s.ev === 'feed' && /out raiding/.test((s.data as { text: string }).text))).toBe(true);
+  });
+
+  it('any base can be raided whatever its mode; raiding locks the switch for both sides; the mode survives a restart of the session', () => {
+    const { game, a, d } = (() => {
+      const s = setup();
+      const a = s.game.login('Raider', 'M8003');
+      const d = s.game.login('Grinder', 'M8004');
+      s.game.connect(a.id);
+      s.game.players.get(a.id)!.coins = 2000;
+      return { ...s, a, d };
+    })();
+    game.setMode(a.id, 'pvp');
+    expect(game.players.get(d.id)!.mode).toBe('pve');
+    game.attack(a.id, d.plot);
+    expect(game.modeBlock(a.id)).toMatch(/raid/);
+    expect(game.modeBlock(d.id)).toMatch(/being raided/);
+    game.disconnect(a.id);
+    expect(game.players.get(a.id)!.mode).toBe('pvp');
+  });
+
+  it("zombie coins stop when the vault is full (other coins don't)", () => {
+    const { game } = setup();
+    const p = game.login('Full', 'M8005');
+    game.connect(p.id);
+    game.watch(p.plot, 1);
+    const cap = vaultCapacity(1);
+    game.players.get(p.id)!.coins = cap - 3;
+    for (let i = 0; i < 40 * CONFIG.tickRate; i++) game.tick();
+    game.flushCoins();
+    expect(game.players.get(p.id)!.coins).toBe(cap);
+    expect(game.worldSummary().find((b) => b.id === p.id)!.vaultFull).toBe(true);
   });
 });
 

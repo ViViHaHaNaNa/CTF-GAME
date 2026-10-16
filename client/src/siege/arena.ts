@@ -244,7 +244,7 @@ function renderSide() {
       : '<li class="empty">No raids right now.</li>',
   );
   const ranked = [...view.bases.values()].sort((a, b) => b.trophies - a.trophies || a.id - b.id);
-  const row = (b: BaseSummary, i: number) => `<li><span class="rank">#${i + 1}</span><span class="nm">${esc(b.name)} <small>Lv${b.hq}</small></span><span class="val">♛ ${b.trophies}</span></li>`;
+  const row = (b: BaseSummary, i: number) => `<li><span class="rank">#${i + 1}</span><span class="nm">${esc(b.name)} <small>Lv${b.hq}</small><span class="mode-chip ${b.mode}">${b.mode === 'pvp' ? 'Raiding' : 'Grinding'}</span></span><span class="val">♛ ${b.trophies}</span></li>`;
   put('ranks', ranked.slice(0, 10).map(row).join('') || '<li class="empty">No players yet.</li>');
   put('big-ranks', ranked.slice(0, projector || boardOnly ? 10 : 5).map(row).join(''));
   put('feed-list', [...feed].reverse().slice(0, 8).map((f) => `<li class="${f.kind}">${esc(f.text)}</li>`).join('') || '<li class="empty">Nothing yet.</li>');

@@ -12,6 +12,7 @@ import { GameError, type GameServer } from './game.ts';
 //  retreat                                  coins {coins, delta} / player PlayerView / feed FeedItem
 //  tap {x, y}  (no ack: hits arrive as tap) tap {p, ...TapResult} (everyone watching) / airstrike {p, x, y, delay}
 //  airstrike {x, y} (ack) / reload          siege {p, ...SiegeEvent} / pressure {sides, hq, ammo, ...} (owner)
+//  mode {mode: 'pve' | 'pvp'} (ack)
 //  immunity {minutes} (ack)                 crate CrateView            (a new crate, or it was claimed)
 //  answer {crate, answer} (ack)             status {paused, frozen}    (organiser switches)
 //  logout                                   needLogin
@@ -192,6 +193,16 @@ export function attachSockets(io: Server, game: GameServer): Sessions {
       try {
         const d = (data ?? {}) as { x?: unknown; y?: unknown };
         reply(ack, { ...game.airstrike(playerId, d.x, d.y) });
+      } catch (e) {
+        fail(ack, e);
+      }
+    });
+
+    socket.on('mode', (data: unknown, ack: unknown) => {
+      if (playerId === null) return reply(ack, { ok: false, error: 'Not logged in' });
+      if (!allowAct()) return reply(ack, { ok: false, error: 'Slow down a little' });
+      try {
+        reply(ack, { ok: true, player: game.setMode(playerId, (data as { mode?: unknown })?.mode) });
       } catch (e) {
         fail(ack, e);
       }

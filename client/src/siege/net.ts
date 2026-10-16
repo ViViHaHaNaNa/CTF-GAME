@@ -95,6 +95,11 @@ export class Net {
     return this.call<{ ready: number }>('airstrike', { x, y });
   }
 
+  /** Grind (pve) or Raid (pvp). */
+  setMode(mode: 'pve' | 'pvp') {
+    return this.call<{ player: PlayerView }>('mode', { mode });
+  }
+
   buyImmunity(minutes: number) {
     return this.call<{ player: PlayerView }>('immunity', { minutes });
   }

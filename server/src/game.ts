@@ -16,6 +16,11 @@ import {
   isRaiderKind,
   RAIDER_KINDS,
   lootable,
+  matchFactor,
+  starBonus,
+  vaultCapacity,
+  MODES,
+  type Mode,
   newBase,
   newDirector,
   parseAction,
@@ -25,7 +30,6 @@ import {
   raiderUnlocked,
   rollRarity,
   trophyStake,
-  weakerFactor,
   type BaseSummary,
   type CrateView,
   type FeedItem,
@@ -174,6 +178,8 @@ export class GameServer {
       p.immuneUntil ??= 0;
       p.boosts ??= {};
       p.siege ??= newDirector();
+      p.mode ??= CONFIG.modes.start;
+      p.modeAt ??= 0;
       if (p.plot === undefined || this.byPlot.has(p.plot)) {
         p.plot = this.freePlot();
         this.save(p);
@@ -224,6 +230,8 @@ export class GameServer {
       shieldUntil: p.shieldUntil,
       immuneUntil: p.immuneUntil,
       boosts: liveBoosts(p.boosts, this.now()),
+      mode: p.mode ?? CONFIG.modes.start,
+      modeAt: p.modeAt ?? 0,
     };
   }
 
@@ -277,6 +285,8 @@ export class GameServer {
       offline: emptyOffline(),
       waveNo: 0,
       siege: newDirector(),
+      mode: CONFIG.modes.start,
+      modeAt: 0,
       createdAt: t,
       lastSeen: t,
     });
@@ -332,6 +342,7 @@ export class GameServer {
     if (!owner) return;
     if (n > 0 && !this.live.has(plot)) {
       this.nextOffline.delete(owner.id);
+      this.live.set(plot, { siege: null, boost: 0 });
       this.startSiege(plot);
     } else if (n === 0 && this.live.has(plot)) {
       this.stopLive(plot);
@@ -345,6 +356,14 @@ export class GameServer {
   private startSiege(plot: number, opts: { ramp?: boolean; firstDelay?: number } = {}) {
     const p = this.ownerOf(plot);
     if (!p || this.raidByPlot.has(plot)) return;
+    if ((p.mode ?? CONFIG.modes.start) !== 'pve') {
+      // Raid mode: the swarms hold off this base (it can still be raided).
+      const l = this.live.get(plot);
+      if (l) l.siege = null;
+      this.setWaveFlag(plot, 0);
+      this.out.toBase(plot, 'wave', this.baseLive(plot));
+      return;
+    }
     p.waveNo++;
     const boost = this.defenceBoost(p);
     const siege = new Siege(p.base, getWorld().plots[plot]!, seedOf(p.id, p.waveNo), p.siege!, { defenceBoost: boost, ramp: opts.ramp ?? this.isOnline(p.id), firstDelay: opts.firstDelay });
@@ -415,6 +434,8 @@ export class GameServer {
     if (this.raidByPlot.has(plot)) return 'Already under attack';
     if (d.shieldUntil > this.now()) return 'Shielded';
     if (d.immuneUntil > this.now()) return 'Immune';
+    // The target is fair game whatever its mode; the attacker must be in Raid mode.
+    if ((a.mode ?? CONFIG.modes.start) !== 'pvp') return 'Switch to Raid mode to attack';
     return null;
   }
 
@@ -541,6 +562,40 @@ export class GameServer {
     this.raids.get(rid)!.raid.end();
   }
 
+  // ---- modes ----------------------------------------------------------------------------------
+
+  /** Why this player can't switch modes right now (null = they can). */
+  modeBlock(id: number): string | null {
+    const p = this.players.get(id);
+    if (!p) return 'Not logged in';
+    if (this.raidByAttacker.has(id)) return 'Finish your raid first';
+    if (this.raidByPlot.has(p.plot)) return "You're being raided";
+    const left = (p.modeAt ?? 0) + CONFIG.modes.cooldown * 1000 - this.now();
+    if (left > 0) return `You can switch again in ${Math.ceil(left / 1000)}s`;
+    if (this.live.get(p.plot)?.siege?.phase === 'surge') return 'Hold the surge first: switch in the breather';
+    return null;
+  }
+
+  /** Grind (pve: swarms on, no raiding) or Raid (pvp: swarms paused, may raid). */
+  setMode(id: number, raw: unknown): PlayerView {
+    this.assertRunning();
+    const mode = String(raw) as Mode;
+    if (!(MODES as readonly string[]).includes(mode)) throw new GameError('bad_mode', 'Unknown mode');
+    const p = this.players.get(id);
+    if (!p) throw new GameError('no_player', 'Not logged in');
+    if ((p.mode ?? CONFIG.modes.start) === mode) return this.view(p);
+    const block = this.modeBlock(id);
+    if (block) throw new GameError('mode_locked', block);
+    p.mode = mode;
+    p.modeAt = this.now();
+    this.save(p);
+    this.markDirty(p.plot);
+    // Grind: the swarms come back within seconds. Raid: they stop (startSiege knows the mode).
+    if (this.live.has(p.plot)) this.startSiege(p.plot, { ramp: false });
+    this.pushFeed(mode === 'pvp' ? `${p.name} is out raiding` : `${p.name} is back to grinding`, 'info');
+    return this.view(p);
+  }
+
   /** Raiders the attacker can still send: the troop limit, and enough coins for the cheapest one unlocked. */
   private armyLeft(r: RaidState): number {
     const a = this.players.get(r.attackerId)!;
@@ -586,8 +641,17 @@ export class GameServer {
     if (this.loopNo % (CONFIG.tickRate / 2) === 0) this.flushSummaries();
   }
 
-  /** Coins from kills go straight to an online owner (sent in small batches), or into the capped offline bank. */
+  /** Room left in a player's vault for zombie coins. */
+  private vaultRoom(p: PlayerRecord): number {
+    return Math.max(0, vaultCapacity(p.base.hq) - p.coins - p.bank);
+  }
+
+  /**
+   * Zombie kill coins fill the vault (up to its capacity): straight to an online owner (sent in small
+   * batches), or into the capped offline bank.
+   */
   private credit(p: PlayerRecord, coins: number) {
+    coins = Math.min(coins, this.vaultRoom(p));
     if (coins <= 0) return;
     if (this.isOnline(p.id)) {
       p.coins += coins;
@@ -686,11 +750,14 @@ export class GameServer {
       return;
     }
     // Rewards come from whatever was destroyed when it ended, however it ended.
-    const stake = trophyStake(a.trophies, d.trophies);
+    // Weaker targets pay less, stronger ones more (trophy gap and Main Tower gap).
+    const match = matchFactor(a.trophies, d.trophies, a.base.hq, d.base.hq);
+    const stake = trophyStake(a.trophies, d.trophies, a.base.hq, d.base.hq);
     const rankBefore = this.rankOf(a.id);
-    let loot = raidLoot(lootable(d.coins, d.base.hq) * weakerFactor(a.trophies, d.trophies) * (1 + r.lootBoost), destruction, vault);
-    loot = Math.max(0, Math.min(loot, d.coins - CONFIG.pvp.loot.protectedFloor));
-    d.coins -= loot;
+    let stolen = raidLoot(lootable(d.coins, d.base.hq) * Math.min(1, match) * (1 + r.lootBoost), destruction, vault);
+    stolen = Math.max(0, Math.min(stolen, d.coins - CONFIG.pvp.loot.protectedFloor));
+    d.coins -= stolen;
+    const loot = stolen + Math.round(starBonus(raid.stars, d.base.hq, match) * (1 + r.lootBoost));
     a.coins += loot;
     let trophies = raidTrophies(stake, raid.stars);
     if (trophies > 0) {
@@ -705,7 +772,7 @@ export class GameServer {
     d.shieldUntil = this.now() + CONFIG.pvp.autoShield * 1000;
     if (!this.isOnline(d.id)) {
       d.offline.raids = (d.offline.raids ?? 0) + 1;
-      d.offline.raidLosses = (d.offline.raidLosses ?? 0) + loot;
+      d.offline.raidLosses = (d.offline.raidLosses ?? 0) + stolen;
     }
     this.save(a);
     this.save(d);
@@ -715,7 +782,7 @@ export class GameServer {
     this.out.toPlayer(d.id, 'player', this.view(d));
     this.out.toPlayer(a.id, 'player', this.view(a));
     const stars = '★'.repeat(raid.stars);
-    this.pushFeed(raid.won ? `${a.name} raided ${d.name} ${stars} for ${loot} coins (+${trophies} trophies)` : `${d.name} fought off ${a.name}${loot ? ` (lost ${loot} coins)` : ''}`, 'raid');
+    this.pushFeed(raid.won ? `${a.name} raided ${d.name} ${stars} for ${loot} coins (+${trophies} trophies)` : `${d.name} fought off ${a.name}${stolen ? ` (lost ${stolen} coins)` : ''}`, 'raid');
     // Climbing into the top 3 (or to #1) is news.
     const rankAfter = this.rankOf(a.id);
     if (!this.admin.frozen && rankAfter < rankBefore && rankAfter <= 3 && a.trophies > 0) this.pushFeed(rankAfter === 1 ? `${a.name} is now #1!` : `${a.name} climbed to #${rankAfter}`, 'rank');
@@ -730,7 +797,7 @@ export class GameServer {
       if (budget <= 0) break;
       if (due > t) continue;
       const p = this.players.get(id);
-      if (!p || this.live.has(p.plot) || this.raidByPlot.has(p.plot)) {
+      if (!p || this.live.has(p.plot) || this.raidByPlot.has(p.plot) || (p.mode ?? CONFIG.modes.start) !== 'pve') {
         this.nextOffline.set(id, t + CONFIG.offline.every * 1000);
         continue;
       }
@@ -751,7 +818,7 @@ export class GameServer {
     s.counting = false;
     s.runFor(CONFIG.offline.every);
     if (online > CONFIG.offline.pressureCap) d.pressure = online;
-    const room = Math.max(0, CONFIG.offline.bankCap - p.bank);
+    const room = Math.min(Math.max(0, CONFIG.offline.bankCap - p.bank), this.vaultRoom(p));
     const banked = Math.min(room, s.coins);
     p.bank += banked;
     let lost = 0;
@@ -1039,6 +1106,8 @@ export class GameServer {
       walls: p.base.walls,
       posts: p.base.posts.map((s) => (s ? [POST_TYPES.indexOf(s.type), s.level] : null)),
       cmd: p.base.cmd ?? 0,
+      mode: p.mode ?? CONFIG.modes.start,
+      vaultFull: (p.mode ?? CONFIG.modes.start) === 'pve' && p.coins >= vaultCapacity(p.base.hq) * CONFIG.vault.fullAt,
       trophies: this.admin.frozen ? (this.admin.frozen[p.id] ?? 0) : p.trophies,
       shield: p.shieldUntil > this.now() ? p.shieldUntil : 0,
       immune: p.immuneUntil > this.now() ? p.immuneUntil : 0,

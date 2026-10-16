@@ -18,7 +18,14 @@
         <button class="icon-btn" id="sound-btn" aria-label="Sound on">&#128266;</button>
         <button class="icon-btn" id="menu-btn" aria-label="Menu">&#9776;</button>
       </header>
-      <button class="wave-banner" id="wave-banner" hidden></button>
+      <div class="banner-row" id="banner-row" hidden>
+        <button class="wave-banner" id="wave-banner"></button>
+        <div class="mode-toggle" id="mode-toggle" role="group" aria-label="Mode">
+          <button data-mode="pve" aria-pressed="true">&#9935; Grind</button>
+          <button data-mode="pvp" aria-pressed="false">&#9876; Raid</button>
+          <span class="mode-cd" id="mode-cd"></span>
+        </div>
+      </div>
       <main class="stage">
         <div class="board-wrap" id="board-wrap">
           <canvas id="board"></canvas>

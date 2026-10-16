@@ -117,6 +117,7 @@ async function boot() {
     if (panel === 'other' || panel === 'live' || panel === 'mine') renderPanel();
     tickCountdowns();
     renderChips();
+    renderModeToggle();
   }, 500);
   requestAnimationFrame(frame);
 }
@@ -187,14 +188,14 @@ function bindNet() {
     siege = null;
     flash = null;
     for (const plot of [...view.live.keys()]) view.dropLive(plot);
-    for (const id of ['hud', 'panel', 'wave-banner', 'map-tools', 'attack-bar']) $(id).hidden = true;
+    for (const id of ['hud', 'panel', 'banner-row', 'map-tools', 'attack-bar']) $(id).hidden = true;
     showTitle();
   });
   s.on('welcome', (w: { token: string; player: PlayerView; offline: (OfflineSummary & { credited: number }) | null; feed: FeedItem[]; crate: CrateView | null }) => {
     saveToken(w.token);
     title.hide();
     $('hud').hidden = false;
-    $('wave-banner').hidden = false;
+    $('banner-row').hidden = false;
     $('map-tools').hidden = false;
     watchKey = '';
     setPlayer(w.player);
@@ -484,6 +485,10 @@ function bindInput() {
 
   $('menu-btn').addEventListener('click', () => ($('menu').hidden = !$('menu').hidden));
   $('ammo').addEventListener('click', () => reloadGun());
+  $('mode-toggle').addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-mode]');
+    if (btn) void switchMode(btn.dataset.mode as 'pve' | 'pvp');
+  });
   $('strike-btn').addEventListener('click', () => toggleStrikeAim());
   window.addEventListener('keydown', (e) => {
     if (!player || (e.target as HTMLElement).closest('input, textarea') || !$('cmd-bar').offsetParent) return;
@@ -883,11 +888,30 @@ function setPlayer(p: PlayerView) {
   view.onHqHurt = hurt;
   renderHud();
   renderChips();
+  renderModeToggle();
   if (panel === 'mine' || panel === 'other') renderPanel();
   renderAttackBar();
 }
 
 /** Small status chips under the name: immunity/shield and active boosts. */
+/** Grind or Raid: the server checks the cooldown and the locks (a surge, a raid either way). */
+async function switchMode(mode: 'pve' | 'pvp') {
+  if (!player || player.mode === mode) return;
+  const r = await net.setMode(mode);
+  if (!r.ok) return toast(r.error, 'bad', 2500);
+  setPlayer(r.player);
+  toast(mode === 'pvp' ? 'Raid mode: the swarms hold off. Pick a rival base and attack!' : 'Grind mode: the swarms are coming. Fill your vault!', 'good', 3500);
+}
+
+/** The toggle's state and the cooldown under it. */
+function renderModeToggle() {
+  if (!player) return;
+  for (const b of document.querySelectorAll<HTMLButtonElement>('#mode-toggle button')) b.setAttribute('aria-pressed', String(b.dataset.mode === player.mode));
+  const left = Math.ceil((player.modeAt + CONFIG.modes.cooldown * 1000 - serverNow()) / 1000);
+  const text = left > 0 ? `switch in ${left}s` : '';
+  if ($('mode-cd').textContent !== text) $('mode-cd').textContent = text;
+}
+
 function renderChips() {
   if (!player) return;
   const now = serverNow();
@@ -985,6 +1009,9 @@ function renderBanner(now: number) {
     text = '⏸ Game paused by the organisers';
   } else if (l?.phase === 'raid') {
     text = `⚔ ${l.raid?.attacker ?? 'Someone'} is raiding your base! (${l.raid?.destruction ?? 0}% destroyed)`;
+    cls = 'attack';
+  } else if (player.mode === 'pvp') {
+    text = myRaid ? `⚔ Raiding ${myRaid.defender}` : '⚔ Raid mode: the swarms hold off. Tap a rival base and attack!';
     cls = 'attack';
   } else if (flash && now < flash.until) {
     text = flash.text;
@@ -1111,6 +1138,7 @@ function otherPanel(): string {
   else if (s.wave === 1) status = '<span class="status">Zombies rising</span>';
   let why = '';
   if (myRaid) why = myRaid.plot === s.p ? "You're raiding this base" : 'Finish your current raid first';
+  else if (player!.mode !== 'pvp') why = 'Switch to Raid mode to attack';
   else if (s.raid) why = 'Already under attack';
   else if (immune) why = 'Bought immunity from raids';
   else if (shielded) why = 'Shielded for a while after a raid';
@@ -1126,12 +1154,16 @@ function otherPanel(): string {
   ])}<div class="actions"><button class="btn" data-attack="${s.p}" ${why ? 'disabled' : ''}>Attack<small>${why ? esc(why) : 'Raiders cost coins to send'}</small></button><button class="btn secondary" data-spectate="${s.p}">Spectate<small>Watch this base</small></button></div>`;
 }
 
+function modeChip(mode: string): string {
+  return mode === 'pvp' ? '<span class="mode-chip pvp">Raiding</span>' : '<span class="mode-chip pve">Grinding</span>';
+}
+
 function ranksPanel(): string {
   const list = [...view.bases.values()].sort((a, b) => b.trophies - a.trophies || b.hq - a.hq).slice(0, 50);
   const rows = list
-    .map((b, i) => `<li><button data-jump="${b.p}" class="${player && b.id === player.id ? 'me' : ''}"><span class="rank">#${i + 1}</span><span class="nm">${esc(b.name)} <small>Lv${b.hq}</small></span><span class="val">♛ ${b.trophies}</span></button></li>`)
+    .map((b, i) => `<li><button data-jump="${b.p}" class="${player && b.id === player.id ? 'me' : ''}"><span class="rank">#${i + 1}</span><span class="nm">${esc(b.name)} <small>Lv${b.hq}</small>${modeChip(b.mode)}</span><span class="val">♛ ${b.trophies}</span></button></li>`)
     .join('');
-  return `${head('Leaderboard')}<p class="sub">${org.frozen ? '<span class="status shield">Frozen by the organisers</span> ' : ''}Tap a name to fly to their base.</p><ul class="list">${rows || '<li class="empty">No one yet.</li>'}</ul>`;
+  return `${head('Leaderboard')}<p class="sub">${org.frozen ? '<span class="status shield">Frozen by the organisers</span> ' : ''}Trophies come only from raids. Tap a name to fly to their base.</p><ul class="list">${rows || '<li class="empty">No one yet.</li>'}</ul>`;
 }
 
 function livePanel(): string {

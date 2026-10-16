@@ -1,4 +1,4 @@
-import type { PostType } from './config.ts';
+import type { Mode, PostType } from './config.ts';
 
 export type Rarity = 'rare' | 'epic' | 'legendary';
 export type BoostType = 'attack' | 'defence' | 'loot';
@@ -61,6 +61,10 @@ export interface PlayerView {
   /** Server time (ms) until which this player bought immunity from raids. */
   immuneUntil: number;
   boosts: Boosts;
+  /** Grind (pve) or Raid (pvp). */
+  mode: Mode;
+  /** Server ms of the last mode switch (the cooldown runs from here). */
+  modeAt: number;
 }
 
 /** Combat snapshot streamed to clients (compact on purpose). Positions are world pixels. */
@@ -101,8 +105,12 @@ export interface BaseSummary {
   /** Name of the raider, when raid != 0. */
   raider?: string;
   wave: 0 | 1 | 2;
-  /** Coins a winning raid could take right now (before the weaker-target reduction). */
+  /** Coins a full raid could take right now (before the match factor). */
   loot: number;
+  /** The owner's mode: grinding zombies or out raiding. */
+  mode: Mode;
+  /** Grinding with a (nearly) full vault: the juiciest target. */
+  vaultFull: boolean;
 }
 
 export interface RaidStatus {

@@ -33,6 +33,12 @@ export function raidLoot(stake: number, destruction: number, vaultDown: boolean)
   return Math.round(stake * ((1 - f) * destruction + f * (vaultDown ? 1 : 0)));
 }
 
+/** Coins a raid's stars pay on top of the loot (new coins): per star, by the defender's level, x the match factor. */
+export function starBonus(stars: number, defenderHq: number, match = 1): number {
+  const t = CONFIG.pvp.loot.starBonus;
+  return Math.round(stars * t[Math.min(t.length, Math.max(1, defenderHq)) - 1]! * match);
+}
+
 /** Trophies for the attacker: a win pays stars/3 of the stake (at least the minimum), a 0-star raid costs a share of it. */
 export function raidTrophies(stake: number, stars: number): number {
   const t = CONFIG.pvp.trophies;
@@ -131,17 +137,20 @@ export function lootable(coins: number, defenderHq: number): number {
   return Math.max(0, Math.min(coins - l.protectedFloor, Math.round(coins * l.pct), l.capBase + l.capPerHq * defenderHq));
 }
 
-/** 1 for fair fights; shrinks when the defender has far fewer trophies than the attacker. */
-export function weakerFactor(attackerTrophies: number, defenderTrophies: number): number {
-  const w = CONFIG.pvp.weaker;
-  const gap = attackerTrophies - defenderTrophies;
-  if (gap <= 0) return 1;
-  return Math.max(w.min, 1 - gap / w.span);
+/**
+ * How much a raid pays, from the trophy gap and the Main Tower gap: 1 for an even fight, down to a
+ * fraction against much weaker bases, more against stronger ones. Multiplies loot and trophies.
+ */
+export function matchFactor(attackerTrophies: number, defenderTrophies: number, attackerHq: number, defenderHq: number): number {
+  const m = CONFIG.pvp.match;
+  const gap = (defenderTrophies - attackerTrophies) / m.span;
+  const byTrophies = gap >= 0 ? Math.min(m.max, 1 + gap * (m.max - 1)) : Math.max(m.min, 1 + gap * (1 - m.min));
+  const byLevel = Math.max(m.levelMin, Math.min(m.levelMax, 1 + m.perLevel * (defenderHq - attackerHq)));
+  return byTrophies * byLevel;
 }
 
-/** Trophies the attacker would win (and the defender lose) on a successful raid. */
-export function trophyStake(attackerTrophies: number, defenderTrophies: number): number {
+/** Trophies a 3-star raid wins (and the defender loses): the base stake scaled by the match factor, within min..max. */
+export function trophyStake(attackerTrophies: number, defenderTrophies: number, attackerHq = 1, defenderHq = 1): number {
   const t = CONFIG.pvp.trophies;
-  const raw = t.base + (defenderTrophies - attackerTrophies) * t.perDiff;
-  return Math.round(Math.max(t.min, Math.min(t.max, raw)) * weakerFactor(attackerTrophies, defenderTrophies) || t.min);
+  return Math.round(Math.max(t.min, Math.min(t.max, t.base * matchFactor(attackerTrophies, defenderTrophies, attackerHq, defenderHq))));
 }

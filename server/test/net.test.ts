@@ -76,6 +76,8 @@ describe('reconnects', () => {
     await next(first, 'needLogin');
     const res = await new Promise<{ ok: boolean; token: string }>((r) => first.emit('login', { name: 'Raider', roll: 'R1001' }, r));
     expect(res.ok).toBe(true);
+    const moded = await new Promise<{ ok: boolean; player: { mode: string } }>((r) => first.emit('mode', { mode: 'pvp' }, r));
+    expect(moded.player.mode).toBe('pvp');
     const attacked = await new Promise<{ ok: boolean }>((r) => first.emit('attack', { plot: d.plot }, r));
     expect(attacked.ok).toBe(true);
     first.close();

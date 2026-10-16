@@ -66,6 +66,12 @@ export function quote(base: BaseState, a: BaseAction): Quote {
   }
 }
 
+/** Coins a vault holds at a Main Tower level. */
+export function vaultCapacity(hq: number): number {
+  const c = CONFIG.vault.capacity;
+  return c[Math.min(c.length, Math.max(1, hq)) - 1]!;
+}
+
 /** The base after an action (call only after `quote(...).ok`). */
 export function applyAction(base: BaseState, a: BaseAction): BaseState {
   const next: BaseState = { hq: base.hq, walls: base.walls, posts: base.posts.map((p) => (p ? { ...p } : null)), cmd: base.cmd ?? 0 };

@@ -80,3 +80,8 @@ body.projector .cycle { font-size: var(--proj-feed); }
 
 /* Retro display face for titles and the scoreboard. */
 .arena-title h1, .arena-side h2, .sb-names, .arena-result b, .arena-idle h2, .cycle { font-family: var(--font-display); letter-spacing: var(--display-tracking); }
+
+/* Each player's mode on the leaderboard. */
+.mode-chip { display: inline-block; margin-left: 6px; padding: 1px 5px; border-radius: 3px; font-family: var(--font-display); font-size: var(--text-2xs); letter-spacing: var(--display-tracking); vertical-align: middle; }
+.mode-chip.pve { background: var(--mode-pve); color: var(--mode-pve-ink); }
+.mode-chip.pvp { background: var(--mode-pvp); color: var(--mode-pvp-ink); }
