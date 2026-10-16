@@ -498,6 +498,11 @@ describe('modes', () => {
     expect(game.modeBlock(d.id)).toMatch(/being raided/);
     game.disconnect(a.id);
     expect(game.players.get(a.id)!.mode).toBe('pvp');
+    // Once the raid is over, the attacker can switch back at once (no cooldown).
+    game.retreat(a.id);
+    game.tick();
+    expect(game.modeBlock(a.id)).toBeNull();
+    expect(game.setMode(a.id, 'pve').mode).toBe('pve');
   });
 
   it("zombie coins stop when the vault is full (other coins don't)", () => {

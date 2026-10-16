@@ -734,6 +734,8 @@ export class GameServer {
     this.raidByAttacker.delete(a.id);
     this.markDirty(plot);
     this.markDirty(a.plot);
+    // Raid done: the attacker may switch straight back to grinding (no cooldown).
+    a.modeAt = 0;
     const destruction = raid.destruction();
     const vault = raid.vaultDown();
     const base = { id: raid.id, plot, attacker: a.name, defender: d.name, stars: raid.stars, reason: raid.endReason!, destruction: Math.round(100 * destruction), vault, spent: r.spent };
