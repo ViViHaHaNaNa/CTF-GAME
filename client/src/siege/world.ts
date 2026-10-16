@@ -130,6 +130,10 @@ export class WorldView {
   private asphalt: HTMLCanvasElement[] = [];
   /** Grass tufts that sway: drawn each frame (when on screen) instead of baked. */
   private swayers: { img: HTMLImageElement; x: number; y: number; seed: number }[] = [];
+  /** Pre-rendered effect sprites, so animating them each frame allocates nothing. */
+  private flagCache = new Map<number, HTMLCanvasElement[]>();
+  private blob = { shadow: null as HTMLCanvasElement | null, fog: null as HTMLCanvasElement | null };
+  private emberStyle = { glow: '', core: '' };
   /** Where puddles form when it rains (world px). */
   private puddles: { x: number; y: number; r: number; seed: number }[] = [];
   bases = new Map<number, BaseSummary>();
@@ -1071,20 +1075,28 @@ export class WorldView {
 
   // ---- ambient life ---------------------------------------------------------------------------------
 
+  /** A soft radial blob (64x64), made once per colour and reused for shadows and fog. */
+  private radialBlob(rgba: string, fade: string): HTMLCanvasElement {
+    const c = document.createElement('canvas');
+    c.width = 64;
+    c.height = 64;
+    const g = c.getContext('2d')!;
+    const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, rgba);
+    grad.addColorStop(0.55, rgba);
+    grad.addColorStop(1, fade);
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 64);
+    return c;
+  }
+
   /** A soft, blurred ellipse shadow, nudged away from the sun (top left). */
   private softShadow(g: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number) {
-    g.save();
-    g.translate(x + THEME.shadowOffset.x, y + THEME.shadowOffset.y);
-    g.scale(rx, ry);
-    const grad = g.createRadialGradient(0, 0, 0, 0, 0, 1);
-    grad.addColorStop(0, THEME.shadow);
-    grad.addColorStop(0.55, THEME.shadow);
-    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    g.fillStyle = grad;
-    g.beginPath();
-    g.arc(0, 0, 1, 0, Math.PI * 2);
-    g.fill();
-    g.restore();
+    const img = (this.blob.shadow ??= this.radialBlob(THEME.shadow, 'rgba(0, 0, 0, 0)'));
+    const smooth = g.imageSmoothingEnabled;
+    g.imageSmoothingEnabled = true;
+    g.drawImage(img, x + THEME.shadowOffset.x - rx, y + THEME.shadowOffset.y - ry, rx * 2, ry * 2);
+    g.imageSmoothingEnabled = smooth;
   }
 
   /** Grass tufts on screen lean back and forth (the pack's 2-frame grass sheets), each on its own beat. */
@@ -1099,45 +1111,51 @@ export class WorldView {
 
   /** Each base's banner, in its own colour, waving above the compound's corner. */
   private drawFlag(g: CanvasRenderingContext2D, p: WorldPlot, id: number, now: number) {
-    const x = (p.x + RING.x0) * T + 7;
-    const y = (p.y + RING.y0) * T - 16;
-    g.fillStyle = THEME.flagPole;
-    g.fillRect(x, y, 1, 22);
-    g.fillRect(x - 1, y + 21, 3, 1);
-    const beat = Math.floor(now / 240 + hash(id, 3) * 4) % 2;
-    const main = baseColor(id);
-    const dark = baseColor(id, THEME.banner.light - 16);
-    for (let i = 0; i < 9; i++) {
-      const dy = (Math.floor(i / 3) + beat) % 2;
-      g.fillStyle = main;
-      g.fillRect(x + 1 + i, y + 1 + dy, 1, 5);
-      g.fillStyle = dark;
-      g.fillRect(x + 1 + i, y + 5 + dy, 1, 1);
+    let frames = this.flagCache.get(id);
+    if (!frames) {
+      const main = baseColor(id);
+      const dark = baseColor(id, THEME.banner.light - 16);
+      frames = [0, 1].map((beat) => {
+        const c = document.createElement('canvas');
+        c.width = 11;
+        c.height = 23;
+        const f = c.getContext('2d')!;
+        f.fillStyle = THEME.flagPole;
+        f.fillRect(1, 0, 1, 22);
+        f.fillRect(0, 21, 3, 1);
+        for (let i = 0; i < 9; i++) {
+          const dy = (Math.floor(i / 3) + beat) % 2;
+          f.fillStyle = main;
+          f.fillRect(2 + i, 1 + dy, 1, 5);
+          f.fillStyle = dark;
+          f.fillRect(2 + i, 5 + dy, 1, 1);
+        }
+        return c;
+      });
+      this.flagCache.set(id, frames);
     }
+    const beat = Math.floor(now / 240 + hash(id, 3) * 4) % 2;
+    g.drawImage(frames[beat]!, (p.x + RING.x0) * T + 6, (p.y + RING.y0) * T - 16);
   }
 
   /** Drifting green fog and rising embers at a graveyard; brighter while its zombies are rising. */
   private drawGraveyardFx(g: CanvasRenderingContext2D, id: number, cx: number, cy: number, state: number, now: number) {
     const boost = state === 2 ? 1.8 : state === 1 ? 1.4 : 1;
     const [fr, fg, fb] = THEME.fog;
+    const fog = (this.blob.fog ??= this.radialBlob(`rgb(${fr}, ${fg}, ${fb})`, `rgba(${fr}, ${fg}, ${fb}, 0)`));
+    const smooth = g.imageSmoothingEnabled;
+    g.imageSmoothingEnabled = true;
+    g.globalAlpha = Math.min(1, 0.1 * boost);
     for (let i = 0; i < 3; i++) {
       const t = (now / 1000) * 0.12 + i * 2.1 + id;
-      const fx = cx + Math.sin(t) * 22;
-      const fy = cy + 8 + Math.cos(t * 0.8) * 8;
-      g.save();
-      g.translate(fx, fy);
-      g.scale(36, 13);
-      const grad = g.createRadialGradient(0, 0, 0, 0, 0, 1);
-      grad.addColorStop(0, `rgba(${fr}, ${fg}, ${fb}, ${0.1 * boost})`);
-      grad.addColorStop(1, `rgba(${fr}, ${fg}, ${fb}, 0)`);
-      g.fillStyle = grad;
-      g.beginPath();
-      g.arc(0, 0, 1, 0, Math.PI * 2);
-      g.fill();
-      g.restore();
+      g.drawImage(fog, cx + Math.sin(t) * 22 - 36, cy + 8 + Math.cos(t * 0.8) * 8 - 13, 72, 26);
     }
-    const [er, eg, eb] = THEME.ember;
-    const [hr, hg, hb] = THEME.emberHot;
+    g.globalAlpha = 1;
+    g.imageSmoothingEnabled = smooth;
+    if (!this.emberStyle.glow) {
+      this.emberStyle.glow = `rgb(${THEME.ember.join(', ')})`;
+      this.emberStyle.core = `rgb(${THEME.emberHot.join(', ')})`;
+    }
     const count = Math.round(12 * boost);
     for (let i = 0; i < count; i++) {
       const seed = hash(id, i, 9);
@@ -1146,11 +1164,14 @@ export class WorldView {
       const ex = cx + (hash(id, i, 10) - 0.5) * 72 + Math.sin(ph * 6 + i) * 4;
       const ey = cy + 18 - ph * 46;
       const a = Math.sin(ph * Math.PI);
-      g.fillStyle = `rgba(${er}, ${eg}, ${eb}, ${0.35 * a})`;
+      g.globalAlpha = 0.35 * a;
+      g.fillStyle = this.emberStyle.glow;
       g.fillRect(Math.round(ex) - 1, Math.round(ey) - 1, 3, 3);
-      g.fillStyle = `rgba(${hr}, ${hg}, ${hb}, ${0.9 * a})`;
+      g.globalAlpha = 0.9 * a;
+      g.fillStyle = this.emberStyle.core;
       g.fillRect(Math.round(ex), Math.round(ey), 1, 1);
     }
+    g.globalAlpha = 1;
   }
 
   /** Rain on the ground (world space): puddles with the pack's splash animations, and drop splashes. */
