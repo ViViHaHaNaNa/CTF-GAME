@@ -96,8 +96,21 @@ function baseOf(s: BaseSummary): BaseState {
 
 export class WorldView {
   readonly g: CanvasRenderingContext2D;
-  /** Camera: world px at the screen centre, k = device pixels per art pixel (integer). */
+  /**
+   * Camera: world px at the screen centre; k = device pixels per art pixel as drawn this frame.
+   * `zoom` is the integer level k eases toward, so the art is pixel-crisp whenever the camera rests.
+   */
   cam = { x: WPX / 2, y: HPX / 2, k: 2 };
+  zoom = 2;
+  /** Device point held still while the zoom eases (cursor or pinch centre). */
+  private anchor: [number, number] | null = null;
+  /** True while fingers/trackpad drive the zoom directly (no easing until released). */
+  private holding = false;
+  /** Momentum after a drag, in world px per ms. */
+  private vx = 0;
+  private vy = 0;
+  private lastUpdate = 0;
+  private tagCache = new Map<number, { key: string; canvas: HTMLCanvasElement }>();
   bases = new Map<number, BaseSummary>();
   live = new Map<number, LiveState>();
   /** The viewer's own plot and base (fresher than the summary). */
@@ -111,7 +124,7 @@ export class WorldView {
   clockSkew = 0;
   /** The unclaimed global crate, drawn at the crossroads in the middle of the map. */
   crate: { rarity: Rarity } | null = null;
-  private chunks = new Map<number, HTMLCanvasElement>();
+  private chunks = new Map<number, HTMLCanvasElement | ImageBitmap>();
   private baseCache = new Map<number, { key: string; canvas: HTMLCanvasElement }>();
   private ruinCache = new Map<number, HTMLCanvasElement>();
   private composites = new Map<string, HTMLCanvasElement>();
@@ -153,20 +166,46 @@ export class WorldView {
 
   clamp() {
     const c = this.cam;
-    c.k = Math.max(this.kMin, Math.min(this.kMax, Math.round(c.k)));
+    c.k = Math.max(this.kMin, Math.min(this.kMax, c.k));
+    this.zoom = Math.max(this.kMin, Math.min(this.kMax, Math.round(this.zoom)));
     const hw = this.canvas.width / 2 / c.k;
     const hh = this.canvas.height / 2 / c.k;
     c.x = hw * 2 >= WPX ? WPX / 2 : Math.max(hw, Math.min(WPX - hw, c.x));
     c.y = hh * 2 >= HPX ? HPX / 2 : Math.max(hh, Math.min(HPX - hh, c.y));
   }
 
-  /** Zoom one step in (+1) or out (-1), keeping the world point under (sx, sy) still. */
+  /** Draw at zoom k while keeping the world point under device point (ax, ay) still. */
+  private setK(k: number, ax: number, ay: number) {
+    const c = this.cam;
+    const w2 = this.canvas.width / 2;
+    const h2 = this.canvas.height / 2;
+    const wx = (ax - w2) / c.k + c.x;
+    const wy = (ay - h2) / c.k + c.y;
+    c.k = Math.max(this.kMin, Math.min(this.kMax, k));
+    c.x = wx - (ax - w2) / c.k;
+    c.y = wy - (ay - h2) / c.k;
+    this.clamp();
+  }
+
+  /** Zoom one level in (+1) or out (-1), easing toward the point under (sx, sy) in CSS px. */
   zoomAt(step: number, sx: number, sy: number) {
-    const before = this.toWorld(sx, sy);
-    this.cam.k = Math.max(this.kMin, Math.min(this.kMax, this.cam.k + step));
-    const after = this.toWorld(sx, sy);
-    this.cam.x += before[0] - after[0];
-    this.cam.y += before[1] - after[1];
+    this.holding = false;
+    this.zoom = Math.max(this.kMin, Math.min(this.kMax, this.zoom + step));
+    this.anchor = [sx * this.dpr, sy * this.dpr];
+  }
+
+  /** Follow a pinch / trackpad zoom exactly (any in-between level) until settleZoom(). */
+  zoomFree(k: number, sx: number, sy: number) {
+    this.holding = true;
+    this.anchor = [sx * this.dpr, sy * this.dpr];
+    this.setK(k, this.anchor[0], this.anchor[1]);
+  }
+
+  /** Fingers lifted: ease to the nearest crisp level. */
+  settleZoom() {
+    if (!this.holding) return;
+    this.holding = false;
+    this.zoom = Math.round(this.cam.k);
     this.clamp();
   }
 
@@ -176,13 +215,62 @@ export class WorldView {
     this.clamp();
   }
 
+  /** Let go of a drag moving at (vx, vy) CSS px per ms: the map glides on and slows down. */
+  fling(vxCss: number, vyCss: number) {
+    this.vx = (-vxCss * this.dpr) / this.cam.k;
+    this.vy = (-vyCss * this.dpr) / this.cam.k;
+  }
+
+  stopFling() {
+    this.vx = 0;
+    this.vy = 0;
+  }
+
+  /** Jump the camera (no easing), optionally to an integer zoom. */
+  jumpTo(wx: number, wy: number, k?: number) {
+    this.stopFling();
+    this.cam.x = wx;
+    this.cam.y = wy;
+    if (k) {
+      this.cam.k = k;
+      this.zoom = k;
+      this.holding = false;
+      this.anchor = null;
+    }
+    this.clamp();
+  }
+
   centerOnPlot(plot: number, k?: number) {
     const p = world.plots[plot];
-    if (!p) return;
-    this.cam.x = (p.x + PLOT / 2) * T;
-    this.cam.y = (p.y + PLOT / 2) * T;
-    if (k) this.cam.k = k;
-    this.clamp();
+    if (p) this.jumpTo((p.x + PLOT / 2) * T, (p.y + PLOT / 2) * T, k);
+  }
+
+  /** Advance zoom easing and momentum; call once per animation frame before draw(). */
+  update(now: number) {
+    const dt = Math.min(50, this.lastUpdate ? now - this.lastUpdate : 16);
+    this.lastUpdate = now;
+    const c = this.cam;
+    if (!this.holding && c.k !== this.zoom) {
+      const [ax, ay] = this.anchor ?? [this.canvas.width / 2, this.canvas.height / 2];
+      // Exponential ease: ~90% of the way in 140 ms whatever the frame rate.
+      const next = Math.abs(this.zoom - c.k) < 0.01 ? this.zoom : c.k + (this.zoom - c.k) * (1 - Math.exp(-dt / 60));
+      this.setK(next, ax, ay);
+      if (c.k === this.zoom) this.anchor = null;
+    }
+    if (this.vx || this.vy) {
+      c.x += this.vx * dt;
+      c.y += this.vy * dt;
+      const f = Math.exp(-dt / 325);
+      this.vx *= f;
+      this.vy *= f;
+      if (Math.hypot(this.vx, this.vy) * c.k < 0.02) this.stopFling();
+      this.clamp();
+    }
+  }
+
+  /** Bake every ground/scenery chunk now (a one-off ~60 ms), so panning never stalls to bake one. */
+  prebake() {
+    for (let cy = 0; cy < Math.ceil(world.h / CHUNK); cy++) for (let cx = 0; cx < Math.ceil(world.w / CHUNK); cx++) this.chunk(cx, cy);
   }
 
   /** CSS px (relative to the canvas) -> world px. */
@@ -206,7 +294,7 @@ export class WorldView {
 
   /** Plots worth streaming: in view and close enough to see combat, nearest first. */
   plotsOfInterest(max: number): number[] {
-    if (this.cam.k < 2) return [];
+    if (this.zoom < 2) return [];
     const [x0, y0, x1, y1] = this.viewRect();
     return world.plots
       .filter((p) => this.bases.has(p.id) && (p.x + PLOT) * T > x0 && p.x * T < x1 && (p.y + PLOT) * T > y0 && p.y * T < y1)
@@ -309,16 +397,18 @@ export class WorldView {
     g.fillRect(0, 0, this.canvas.width, this.canvas.height);
     const ox = Math.round(this.canvas.width / 2 - c.x * c.k);
     const oy = Math.round(this.canvas.height / 2 - c.y * c.k);
-    g.setTransform(c.k, 0, 0, c.k, ox, oy);
     g.imageSmoothingEnabled = false;
     const [x0, y0, x1, y1] = this.viewRect();
 
-    // 1. Ground + scenery chunks.
+    // 1. Ground + scenery chunks, placed on whole device pixels so no seams show mid-zoom.
     const cs = CHUNK * T;
     for (let cy = Math.max(0, Math.floor(y0 / cs)); cy <= Math.min(Math.ceil(world.h / CHUNK) - 1, Math.floor(y1 / cs)); cy++)
       for (let cx = Math.max(0, Math.floor(x0 / cs)); cx <= Math.min(Math.ceil(world.w / CHUNK) - 1, Math.floor(x1 / cs)); cx++) {
-        g.drawImage(this.chunk(cx, cy), cx * cs, cy * cs);
+        const dx = Math.round(ox + cx * cs * c.k);
+        const dy = Math.round(oy + cy * cs * c.k);
+        g.drawImage(this.chunk(cx, cy), dx, dy, Math.round(ox + (cx + 1) * cs * c.k) - dx, Math.round(oy + (cy + 1) * cs * c.k) - dy);
       }
+    g.setTransform(c.k, 0, 0, c.k, ox, oy);
 
     // 2. Bases and ruins in view.
     const visible = world.plots.filter((p) => (p.x + PLOT) * T > x0 - 16 && p.x * T < x1 && (p.y + PLOT) * T + 16 > y0 && p.y * T - 24 < y1);
@@ -393,7 +483,7 @@ export class WorldView {
 
   // ---- chunks (ground, roads, graveyards, scenery) ------------------------------------------------
 
-  private chunk(cx: number, cy: number): HTMLCanvasElement {
+  private chunk(cx: number, cy: number): HTMLCanvasElement | ImageBitmap {
     const key = cy * 1000 + cx;
     const hit = this.chunks.get(key);
     if (hit) return hit;
@@ -440,6 +530,8 @@ export class WorldView {
       g.drawImage(img, px, py);
     }
     this.chunks.set(key, c);
+    // Swap in an immutable bitmap: the GPU keeps it ready instead of re-uploading the canvas.
+    if (typeof createImageBitmap === 'function') void createImageBitmap(c).then((b) => this.chunks.set(key, b), () => {});
     return c;
   }
 
@@ -757,47 +849,62 @@ export class WorldView {
 
   /** Name tag above a base: name, level, trophies, shield, under attack. Drawn in device pixels. */
   private drawTag(g: CanvasRenderingContext2D, p: WorldPlot, s: BaseSummary, now: number) {
-    const k = this.cam.k;
+    const img = this.tagImage(p, s);
     const [sx, sy] = this.toScreen((p.x + PLOT / 2) * T, (p.y + RING.y0) * T - 18);
+    const x = Math.round(sx - img.width / 2);
+    const y = Math.round(sy - img.height);
+    if (s.raid) g.globalAlpha = 0.8 + 0.2 * Math.sin(now / 120);
+    g.drawImage(img, x, y);
+    g.globalAlpha = 1;
+  }
+
+  /** The tag as a small cached image: text is only rendered again when what it says changes. */
+  private tagImage(p: WorldPlot, s: BaseSummary): HTMLCanvasElement {
     const d = this.dpr;
-    const small = k < 2;
-    const fs = Math.round((small ? 10 : 12) * d);
+    const small = this.zoom < 2;
     const mine = p.id === this.myPlot;
     const shielded = Math.max(s.shield, s.immune) > Date.now() + this.clockSkew;
     const text = small ? s.name : `${s.name}  Lv${s.hq}  ♛${s.trophies}`;
-    g.font = `700 ${fs}px system-ui, sans-serif`;
-    const tw = g.measureText(text).width;
-    const padX = 5 * d;
+    const key = `${text}|${mine}|${shielded}|${s.raid ? 1 : 0}|${small}|${d}`;
+    const hit = this.tagCache.get(p.id);
+    if (hit && hit.key === key) return hit.canvas;
+    const fs = Math.round((small ? 10 : 12) * d);
+    const font = `700 ${fs}px system-ui, sans-serif`;
+    const c = document.createElement('canvas');
+    const g = c.getContext('2d')!;
+    g.font = font;
+    const tw = Math.ceil(g.measureText(text).width);
+    const padX = Math.round(5 * d);
     const extra = (shielded ? fs + 3 * d : 0) + (s.raid ? fs + 3 * d : 0);
-    const w = tw + padX * 2 + extra;
-    const h = fs + 6 * d;
-    const x = Math.round(sx - w / 2);
-    const y = Math.round(sy - h);
+    c.width = Math.ceil(tw + padX * 2 + extra);
+    c.height = Math.ceil(fs + 6 * d);
+    const h = c.height;
     g.fillStyle = mine ? 'rgba(227, 179, 65, 0.92)' : s.raid ? 'rgba(120, 30, 20, 0.9)' : 'rgba(27, 23, 18, 0.82)';
-    g.fillRect(x, y, w, h);
+    g.fillRect(0, 0, c.width, h);
+    g.font = font;
     g.fillStyle = mine ? '#1b1712' : '#f1e6cf';
     g.textBaseline = 'middle';
-    g.fillText(text, x + padX, y + h / 2 + d);
-    let ix = x + padX + tw + 3 * d;
+    g.fillText(text, padX, h / 2 + d);
+    let ix = padX + tw + 3 * d;
     if (shielded) {
-      // shield icon
       const r = fs / 2;
       g.fillStyle = '#7fb2e5';
       g.beginPath();
-      g.moveTo(ix, y + h / 2 - r);
-      g.lineTo(ix + r * 2, y + h / 2 - r);
-      g.lineTo(ix + r * 2, y + h / 2);
-      g.quadraticCurveTo(ix + r * 2, y + h / 2 + r, ix + r, y + h / 2 + r * 1.2);
-      g.quadraticCurveTo(ix, y + h / 2 + r, ix, y + h / 2);
+      g.moveTo(ix, h / 2 - r);
+      g.lineTo(ix + r * 2, h / 2 - r);
+      g.lineTo(ix + r * 2, h / 2);
+      g.quadraticCurveTo(ix + r * 2, h / 2 + r, ix + r, h / 2 + r * 1.2);
+      g.quadraticCurveTo(ix, h / 2 + r, ix, h / 2);
       g.closePath();
       g.fill();
       ix += fs + 3 * d;
     }
     if (s.raid) {
-      const pulse = 0.6 + 0.4 * Math.sin(now / 120);
-      g.fillStyle = `rgba(255, 120, 90, ${pulse})`;
-      g.fillText('⚔', ix, y + h / 2 + d);
+      g.fillStyle = '#ff785a';
+      g.fillText('⚔', ix, h / 2 + d);
     }
+    this.tagCache.set(p.id, { key, canvas: c });
+    return c;
   }
 
   private hpBar(g: CanvasRenderingContext2D, x: number, y: number, w: number, pct: number, color = '#8fc46b') {

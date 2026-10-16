@@ -66,6 +66,7 @@ async function boot() {
   try {
     const sprites = await loadSprites((d, t) => ($('connecting').textContent = `Loading art ${Math.round((100 * d) / t)}%`));
     view = new WorldView($<HTMLCanvasElement>('board'), sprites);
+    view.prebake();
   } catch (e) {
     $('connecting').textContent = `Could not load the art: ${(e as Error).message}`;
     return;
@@ -90,6 +91,7 @@ async function boot() {
 }
 
 function frame(now: number) {
+  view.update(now);
   view.draw(now);
   drawMinimap(now);
   renderBanner(now);
@@ -211,7 +213,7 @@ function updateWatch() {
   if (!player || !net.socket.connected) return;
   const want: number[] = [];
   if (myRaid) want.push(myRaid.plot);
-  if (focusPlot >= 0 && view.cam.k >= 2 && view.plotsOfInterest(64).includes(focusPlot)) want.push(focusPlot);
+  if (focusPlot >= 0 && view.zoom >= 2 && view.plotsOfInterest(64).includes(focusPlot)) want.push(focusPlot);
   for (const p of view.plotsOfInterest(WATCH_MAX + 2)) if (!want.includes(p) && p !== player.plot) want.push(p);
   const list = want.filter((p) => p !== player!.plot).slice(0, WATCH_MAX);
   const key = list.join(',');
@@ -234,28 +236,40 @@ function bindInput() {
     if (!r.ok) $('login-error').textContent = r.error;
   });
 
+  // Map input: drag pans (with momentum on release), two fingers pinch-zoom around their centre,
+  // the wheel zooms toward the cursor. Movement is applied straight to the camera; the animation
+  // frame draws it, so nothing here waits on rendering.
   const canvas = view.canvas;
   const pointers = new Map<number, { x: number; y: number }>();
-  let moved = 0;
+  /** Where the current one-finger gesture started, and whether it has become a drag. */
+  let start = { x: 0, y: 0 };
+  let dragging = false;
   let pinched = false;
-  let pinchDist = 0;
-  const local = (e: PointerEvent) => {
+  let pinch = { d0: 1, k0: 1 };
+  /** Recent drag positions, for the release velocity. */
+  let trail: { x: number; y: number; t: number }[] = [];
+  const DRAG_START = 8;
+  const local = (e: PointerEvent | WheelEvent) => {
     const r = canvas.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
   const spread = () => {
     const [a, b] = [...pointers.values()];
-    return { d: Math.hypot(a!.x - b!.x, a!.y - b!.y), x: (a!.x + b!.x) / 2, y: (a!.y + b!.y) / 2 };
+    return { d: Math.max(1, Math.hypot(a!.x - b!.x, a!.y - b!.y)), x: (a!.x + b!.x) / 2, y: (a!.y + b!.y) / 2 };
   };
   canvas.addEventListener('pointerdown', (e) => {
     canvas.setPointerCapture(e.pointerId);
-    pointers.set(e.pointerId, local(e));
+    view.stopFling();
+    const pos = local(e);
+    pointers.set(e.pointerId, pos);
     if (pointers.size === 1) {
-      moved = 0;
+      start = pos;
+      dragging = false;
       pinched = false;
+      trail = [{ ...pos, t: e.timeStamp }];
     } else if (pointers.size === 2) {
       pinched = true;
-      pinchDist = spread().d;
+      pinch = { d0: spread().d, k0: view.cam.k };
     }
   });
   canvas.addEventListener('pointermove', (e) => {
@@ -263,44 +277,74 @@ function bindInput() {
     if (!prev) return;
     const cur = local(e);
     if (pointers.size === 1) {
-      moved += Math.hypot(cur.x - prev.x, cur.y - prev.y);
-      if (moved > 8) {
-        view.panBy(cur.x - prev.x, cur.y - prev.y);
+      if (!dragging && Math.hypot(cur.x - start.x, cur.y - start.y) > DRAG_START) {
+        // Became a drag: catch up the distance moved so far, so the map stays under the finger.
+        dragging = true;
         canvas.classList.add('dragging');
+        view.panBy(cur.x - start.x, cur.y - start.y);
+      } else if (dragging) {
+        view.panBy(cur.x - prev.x, cur.y - prev.y);
       }
+      trail.push({ ...cur, t: e.timeStamp });
+      while (trail.length > 2 && e.timeStamp - trail[0]!.t > 100) trail.shift();
       pointers.set(e.pointerId, cur);
     } else if (pointers.size === 2) {
       const before = spread();
       pointers.set(e.pointerId, cur);
       const after = spread();
       view.panBy(after.x - before.x, after.y - before.y);
-      const ratio = after.d / pinchDist;
-      if (ratio > 1.3 || ratio < 0.77) {
-        view.zoomAt(ratio > 1 ? 1 : -1, after.x, after.y);
-        pinchDist = after.d;
-      }
+      view.zoomFree(pinch.k0 * (after.d / pinch.d0), after.x, after.y);
     }
   });
   const up = (e: PointerEvent) => {
     if (!pointers.has(e.pointerId)) return;
     const pos = local(e);
-    const wasTap = pointers.size === 1 && !pinched && moved <= 8;
+    const wasTap = pointers.size === 1 && !pinched && !dragging;
+    const wasDrag = pointers.size === 1 && dragging;
     pointers.delete(e.pointerId);
-    if (pointers.size === 0) canvas.classList.remove('dragging');
+    if (pointers.size === 1) {
+      // One finger of a pinch lifted: settle the zoom, the other finger keeps panning.
+      view.settleZoom();
+      const [rest] = [...pointers.values()];
+      start = rest!;
+      dragging = true;
+      trail = [];
+    }
+    if (pointers.size === 0) {
+      canvas.classList.remove('dragging');
+      view.settleZoom();
+    }
+    if (wasDrag && e.type === 'pointerup' && trail.length >= 2) {
+      const a = trail[0]!;
+      const b = trail[trail.length - 1]!;
+      const dt = Math.max(1, b.t - a.t);
+      // Only fling if the finger was still moving when it lifted.
+      if (e.timeStamp - b.t < 50) view.fling((b.x - a.x) / dt, (b.y - a.y) / dt);
+    }
     if (wasTap && e.type === 'pointerup') void tap(pos.x, pos.y);
   };
   canvas.addEventListener('pointerup', up);
   canvas.addEventListener('pointercancel', up);
-  let wheelAt = 0;
+  let wheelAcc = 0;
+  let wheelSettle = 0;
   canvas.addEventListener(
     'wheel',
     (e) => {
       e.preventDefault();
-      const now = performance.now();
-      if (now - wheelAt < 120 || Math.abs(e.deltaY) < 2) return;
-      wheelAt = now;
-      const r = canvas.getBoundingClientRect();
-      view.zoomAt(e.deltaY < 0 ? 1 : -1, e.clientX - r.left, e.clientY - r.top);
+      const { x, y } = local(e);
+      if (e.ctrlKey) {
+        // Trackpad pinch (browsers report it as ctrl+wheel): follow it smoothly, settle when it stops.
+        view.zoomFree(view.cam.k * Math.exp(-e.deltaY * 0.01), x, y);
+        clearTimeout(wheelSettle);
+        wheelSettle = window.setTimeout(() => view.settleZoom(), 150);
+        return;
+      }
+      // Mouse wheel / two-finger scroll: one zoom level per notch (or ~60 px of scrolling).
+      wheelAcc += e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
+      if (Math.abs(wheelAcc) >= 60) {
+        view.zoomAt(wheelAcc < 0 ? 1 : -1, x, y);
+        wheelAcc = 0;
+      }
     },
     { passive: false },
   );
@@ -310,7 +354,7 @@ function bindInput() {
   $('zoom-out').addEventListener('click', () => view.zoomAt(-1, ...centre()));
   $('home-btn').addEventListener('click', () => {
     if (!player) return;
-    view.centerOnPlot(player.plot, Math.max(view.cam.k, view.baseZoom()));
+    view.centerOnPlot(player.plot, Math.max(view.zoom, view.baseZoom()));
     openPanel('mine', player.plot);
   });
   $('ranks-btn').addEventListener('click', () => openPanel(panel === 'ranks' ? 'none' : 'ranks'));
@@ -323,7 +367,7 @@ function bindInput() {
     void submitAnswer();
   });
   $('wave-banner').addEventListener('click', () => {
-    if (player) view.centerOnPlot(player.plot, Math.max(view.cam.k, view.baseZoom()));
+    if (player) view.centerOnPlot(player.plot, Math.max(view.zoom, view.baseZoom()));
   });
 
   $('menu-btn').addEventListener('click', () => ($('menu').hidden = !$('menu').hidden));
@@ -373,7 +417,7 @@ async function tap(cssX: number, cssY: number) {
     return;
   }
   if (p.id === player.plot) {
-    if (view.cam.k < view.baseZoom()) view.centerOnPlot(p.id, view.baseZoom());
+    if (view.zoom < view.baseZoom()) view.centerOnPlot(p.id, view.baseZoom());
     view.selectedPick = view.pickInBase(p, wx, wy);
     openPanel('mine', p.id);
   } else openPanel('other', p.id);
@@ -385,10 +429,7 @@ async function panelClick(e: MouseEvent) {
   const jump = el.closest<HTMLElement>('[data-jump]');
   if (jump) return jumpTo(Number(jump.dataset.jump));
   if (el.closest('[data-crate-jump]')) {
-    view.cam.x = CRATE_SPOT.x;
-    view.cam.y = CRATE_SPOT.y;
-    view.cam.k = Math.max(view.cam.k, 2);
-    view.clamp();
+    view.jumpTo(CRATE_SPOT.x, CRATE_SPOT.y, Math.max(view.zoom, 2));
     return;
   }
   const btn = el.closest<HTMLButtonElement>('button[data-act], button[data-attack], button[data-spectate], button[data-immunity]');
@@ -408,7 +449,7 @@ async function panelClick(e: MouseEvent) {
   if (btn.dataset.spectate) {
     const plot = Number(btn.dataset.spectate);
     focusPlot = plot;
-    view.centerOnPlot(plot, Math.max(view.cam.k, view.baseZoom()));
+    view.centerOnPlot(plot, Math.max(view.zoom, view.baseZoom()));
     return;
   }
   if (btn.dataset.attack) {
@@ -435,7 +476,7 @@ async function panelClick(e: MouseEvent) {
 
 /** Fly to a base from a list and open its card. */
 function jumpTo(plot: number) {
-  view.centerOnPlot(plot, Math.max(view.cam.k, view.baseZoom()));
+  view.centerOnPlot(plot, Math.max(view.zoom, view.baseZoom()));
   focusPlot = plot;
   if (player && plot === player.plot) openPanel('mine', plot);
   else openPanel('other', plot);
@@ -449,7 +490,7 @@ function startRaidMode(r: RaidStatus, fresh: boolean) {
   $('board-wrap').classList.add('raiding');
   view.canvas.classList.add('deploying');
   if (fresh) {
-    view.centerOnPlot(r.plot, Math.max(view.cam.k, view.baseZoom()));
+    view.centerOnPlot(r.plot, Math.max(view.zoom, view.baseZoom()));
     openPanel('none');
     toast('Raid on! Tap the red zone to send raiders.', '', 3000);
   }
@@ -474,9 +515,7 @@ function bindMinimap() {
   let down = false;
   const go = (e: PointerEvent) => {
     const r = mini.getBoundingClientRect();
-    view.cam.x = ((e.clientX - r.left) / r.width) * world.w * 16;
-    view.cam.y = ((e.clientY - r.top) / r.height) * world.h * 16;
-    view.clamp();
+    view.jumpTo(((e.clientX - r.left) / r.width) * world.w * 16, ((e.clientY - r.top) / r.height) * world.h * 16);
   };
   mini.addEventListener('pointerdown', (e) => {
     down = true;

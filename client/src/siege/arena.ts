@@ -32,6 +32,7 @@ const serverNow = () => Date.now() + skew;
 async function boot() {
   try {
     view = new WorldView($<HTMLCanvasElement>('board'), await loadSprites((d, t) => ($('connecting').textContent = `Loading art ${Math.round((100 * d) / t)}%`)));
+    view.prebake();
   } catch (e) {
     $('connecting').textContent = `Could not load the art: ${(e as Error).message}`;
     return;
@@ -160,11 +161,9 @@ function frame(now: number) {
   if (current < 0) {
     // Nothing to watch: drift slowly over the wasteland.
     const W = 180 * 16;
-    view.cam.k = Math.max(1, view.baseZoom() - 1);
-    view.cam.x = W / 2 + Math.sin(now / 45_000) * W * 0.3;
-    view.cam.y = W / 2 + Math.cos(now / 61_000) * W * 0.3;
-    view.clamp();
+    view.jumpTo(W / 2 + Math.sin(now / 45_000) * W * 0.3, W / 2 + Math.cos(now / 61_000) * W * 0.3, Math.max(1, view.baseZoom() - 1));
   }
+  view.update(now);
   view.draw(now);
   requestAnimationFrame(frame);
 }
