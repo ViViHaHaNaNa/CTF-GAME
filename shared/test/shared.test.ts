@@ -110,18 +110,104 @@ describe('zombie siege', () => {
     }
   });
 
-  it('bursts in from all four sides and the graveyard within seconds, no countdown', () => {
-    const s = new Siege(newBase(), plot, 7, newDirector());
-    const events = play(s, CONFIG.siege.firstSurge + 0.5);
+  it("a new player's first surge is a walkthrough: 8 Smalls from one side, and it can't be lost", () => {
+    // No posts at all: still held, the Main Tower can't drop below its floor.
+    const base = { ...newBase(), posts: SLOTS.map(() => null) };
+    const s = new Siege(base, plot, 7, newDirector());
+    expect(s.tutorial).toBe(true);
+    expect(s.incoming).toHaveLength(1);
+    const events = play(s, CONFIG.siege.firstSurge + CONFIG.siege.maxSurge + 2);
     const first = events.find((e) => e.type === 'surge');
-    expect(first).toMatchObject({ type: 'surge', n: 1, size: CONFIG.siege.ramp[0]!.size, pincer: false });
-    if (first?.type === 'surge') for (const n of first.sides) expect(n).toBeGreaterThan(0);
-    expect(s.combat.liveUnits).toBeGreaterThanOrEqual(5);
+    expect(first).toMatchObject({ type: 'surge', n: 1, size: CONFIG.siege.tutorial.size, tutorial: true, boss: false });
+    if (first?.type === 'surge') expect(first.sides.filter((n) => n > 0)).toHaveLength(1);
+    expect(events.find((e) => e.type !== 'surge')).toMatchObject({ type: 'held', n: 1 });
+    expect(s.combat.hq!.hp).toBeGreaterThanOrEqual(Math.round(s.combat.hq!.maxHp * CONFIG.siege.tutorial.hqFloor));
+    expect(s.tutorial).toBe(false);
+    // Only once: a player who has had surges gets no walkthrough.
+    expect(new Siege(base, plot, 7, { ...newDirector(), surges: 3 }).tutorial).toBe(false);
+  });
+
+  it('sides, zombie types and the boss unlock with level; surges grow', () => {
+    const S = CONFIG.siege;
+    const look = (hq: number) => {
+      const base = { ...newBase(), hq, walls: hq, posts: SLOTS.map((_, i) => (i < 2 ? { type: 'gun' as const, level: hq } : null)) };
+      const s = new Siege(base, plot, 11, { ...newDirector(), surges: 9 }, { firstDelay: 0 });
+      const kinds = new Set<string>();
+      let sides = 0;
+      let size = 0;
+      let boss = false;
+      for (let k = 0; k < 6; k++) {
+        const events = play(s, S.gap[hq - 1]! + S.maxSurge + 1);
+        for (const e of events) if (e.type === 'surge') (sides = Math.max(sides, e.sides.filter((n) => n > 0).length)), (size = Math.max(size, e.size)), (boss ||= e.boss);
+        for (const u of s.combat.units) kinds.add(UNIT_KINDS[u.kind]!);
+      }
+      return { sides: Math.min(4, sides - (hq >= S.graveyardFrom ? 1 : 0)), size, boss, incoming: s.incoming.length };
+    };
+    const l1 = look(1), l2 = look(2), l3 = look(3), l4 = look(4), l8 = look(8);
+    expect([l1.sides, l2.sides, l3.sides, l4.sides]).toEqual([1, 2, 3, 4]);
+    expect(l4.incoming).toBe(5); // all four sides + the graveyard
+    expect(l2.size).toBeGreaterThan(l1.size);
+    expect(l8.size).toBeGreaterThan(l4.size);
+    expect(l8.boss).toBe(true);
+    expect(S.bossChance.slice(0, 5).every((c) => c === 0)).toBe(true);
+    expect(S.mix.z_big.slice(0, 2).every((c) => c === 0) && S.mix.z_big[2]! > 0).toBe(true);
+    expect(S.mix.z_axe.slice(0, 3).every((c) => c === 0) && S.mix.z_axe[3]! > 0).toBe(true);
+  });
+
+  it('surges come on a regular countdown that grows with level, with nothing in between', () => {
+    for (const hq of [1, 3, 6]) {
+      const base = { ...newBase(), hq, walls: hq, posts: SLOTS.map((_, i) => (i < 4 ? { type: 'gun' as const, level: hq } : null)) };
+      const s = new Siege(base, plot, 5, { ...newDirector(), surges: 9 }, { firstDelay: 0 });
+      let ended = -1;
+      const gaps: number[] = [];
+      let strays = 0;
+      // No new zombie appears during a countdown (stragglers from a surge that ran long may finish walking in).
+      let known = new Set<number>();
+      for (let t = 0; t < (2 * CONFIG.siege.gap[hq - 1]! + 3 * CONFIG.siege.maxSurge) * rate; t++) {
+        s.step();
+        for (const e of s.events) {
+          if (e.type === 'held' || e.type === 'breach') (ended = s.combat.tick), (known = new Set(s.combat.units.map((u) => u.id)));
+          if (e.type === 'surge' && ended >= 0) gaps.push((s.combat.tick - ended) / rate);
+        }
+        s.events.length = 0;
+        if (s.phase === 'breather') for (const u of s.combat.units) if (!known.has(u.id)) strays++;
+      }
+      expect(gaps.length).toBeGreaterThan(0);
+      for (const g of gaps) expect(g).toBeCloseTo(CONFIG.siege.gap[hq - 1]!, 0);
+      expect(strays).toBe(0);
+    }
+  });
+
+  it('calling a surge early pays for the time skipped, once enough of the countdown has passed', () => {
+    const E = CONFIG.siege.callEarly;
+    const gap = CONFIG.siege.gap[0]!;
+    const s = new Siege(newBase(), plot, 2, { ...newDirector(), surges: 9 }, { firstDelay: 0 });
+    while (s.phase !== 'breather') s.step();
+    expect(s.callEarly()).toBe(0); // too soon
+    while (s.nextIn() > gap * (1 - E.minWait)) s.step();
+    const left = s.nextIn();
+    const bonus = s.callEarly();
+    expect(bonus).toBe(Math.round(left * E.perSecond[0]!));
+    s.step();
+    expect(s.phase).toBe('surge');
+    expect(s.callEarly()).toBe(0);
+  });
+
+  it('aim assist while guided: taps reach further below Main Tower 3', () => {
+    const C = CONFIG.commander;
+    const r = (C.hitRadius + C.hitRadiusGuided) / 2;
+    for (const [hq, hit] of [[1, true], [3, false]] as const) {
+      const s = new Siege({ ...newBase(), hq }, plot, 1, { ...newDirector(), surges: 9 }, { firstDelay: 999 });
+      const u = s.combat.addUnit(0, { ...zombieStats('z_small', hq), speed: 0 }, plot.x + 7, plot.y + 1);
+      const t = s.tap(u.x + r, u.y);
+      expect(t.ok && t.hits.length > 0).toBe(hit);
+    }
   });
 
   it('spawns hug their own plot: never inside another compound', () => {
     for (const p of [world.plots[0]!, world.plots[27]!, world.plots[63]!]) {
-      const s = new Siege(newBase(), p, 3, { ...newDirector(), played: 600 }, { ramp: false, firstDelay: 0 });
+      const base = { ...newBase(), hq: 4, walls: 4, posts: SLOTS.map((_, i) => (i < 3 ? { type: 'gun' as const, level: 3 } : null)) };
+      const s = new Siege(base, p, 3, { ...newDirector(), played: 600 }, { ramp: false, firstDelay: 0 });
       const seen = new Set<number>();
       for (let t = 0; t < 40 * rate; t++) {
         s.step();
@@ -133,44 +219,6 @@ describe('zombie siege', () => {
       }
       expect(seen.size).toBeGreaterThan(20);
     }
-  });
-
-  it('the first surge is always held, and the first minute ramps up', () => {
-    for (let seed = 1; seed <= 16; seed++) {
-      const events = play(new Siege(newBase(), world.plots[seed * 3]!, seed, newDirector()), 60);
-      expect(events.find((e) => e.type !== 'surge')).toMatchObject({ type: 'held', n: 1 });
-      const sizes = events.flatMap((e) => (e.type === 'surge' ? [e.size] : []));
-      expect(sizes.length).toBeGreaterThanOrEqual(3);
-      for (let i = 1; i < sizes.length; i++) expect(sizes[i]!).toBeGreaterThan(sizes[i - 1]!);
-    }
-  });
-
-  it('keeps a rhythm: short breathers with a trickle, then pincers', () => {
-    const base = applyAction(newBase(), { kind: 'build', slot: 1, type: 'pistol' });
-    const s = new Siege(base, plot, 11, newDirector());
-    let trickle = 0;
-    const events: SiegeEvent[] = [];
-    let ended = -1;
-    const gaps: number[] = [];
-    for (let t = 0; t < 180 * rate; t++) {
-      s.step();
-      for (const e of s.events) {
-        if (e.type !== 'surge') ended = t;
-        else if (ended >= 0) gaps.push((t - ended) / rate);
-      }
-      events.push(...s.events);
-      s.events.length = 0;
-      trickle = Math.max(trickle, s.combat.units.filter((u) => u.tag === 0 && u.state !== 'dead').length);
-    }
-    expect(trickle).toBeGreaterThan(0);
-    // After the ramp, every breather is 3-5 s (or the longer one after a breach).
-    for (const g of gaps.slice(CONFIG.siege.ramp.length)) {
-      expect(g).toBeGreaterThanOrEqual(CONFIG.siege.breather[0] - 0.1);
-      expect(g).toBeLessThanOrEqual(Math.max(CONFIG.siege.breather[1], CONFIG.siege.breach.breather) + 0.1);
-    }
-    const pincers = events.filter((e) => e.type === 'surge' && e.pincer);
-    expect(pincers.length).toBeGreaterThan(2);
-    for (const e of pincers) if (e.type === 'surge') expect(e.n).toBeGreaterThanOrEqual(CONFIG.siege.pincerFrom);
   });
 
   it('a base with no posts gets breached: the field clears, the director eases off, the siege goes on', () => {
@@ -187,7 +235,9 @@ describe('zombie siege', () => {
     expect(d.pressure).toBeLessThan(CONFIG.siege.difficulty.start);
     expect(s.combat.liveUnits).toBe(0);
     expect(s.combat.hqDestroyed).toBe(false);
-    play(s, CONFIG.siege.breach.breather + 1);
+    // ...and the countdown to the next surge starts.
+    expect(s.phase).toBe('breather');
+    play(s, CONFIG.siege.gap[2]! + 2);
     expect(s.combat.liveUnits).toBeGreaterThan(0);
   });
 
@@ -215,10 +265,10 @@ describe('zombie siege', () => {
     expect(baseBuildings(base, plot).find((b) => b.id === postId(1))!.gun!.range).toBe(CONFIG.posts.types.shotgun.range);
   });
 
-  it('smalls die to one or two shots from a starter pistol and are worth exactly 1 coin', () => {
+  it('smalls die to one or two shots from a starter pistol; kill coins stay flat with level', () => {
     expect(Math.ceil(CONFIG.zombies.z_small.hp / CONFIG.posts.types.pistol.damage)).toBeLessThanOrEqual(2);
-    expect(killCoins('z_small', 1)).toBe(1);
-    expect(killCoins('z_small', 8)).toBe(1);
+    expect(killCoins('z_small', 1)).toBe(CONFIG.zombies.z_small.coins);
+    expect(killCoins('z_small', 8)).toBe(CONFIG.zombies.z_small.coins);
   });
 
   it('posts pick exactly the target a full scan would (spatial hash)', () => {

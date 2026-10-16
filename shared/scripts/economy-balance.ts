@@ -25,15 +25,13 @@ const VAULT_FILL = 0.6;
 
 function grind(base: BaseState): { perMin: number; perSurge: number } {
   let coins = 0, surges = 0, secs = 0;
-  for (let i = 1; i <= 12; i++) {
-    const s = new Siege(base, PLOTS[i % PLOTS.length]!, i * 104729, { ...newDirector(), played: 20 * 60 });
+  for (let i = 1; i <= 6; i++) {
+    const s = new Siege(base, PLOTS[i % PLOTS.length]!, i * 104729, { ...newDirector(), played: 20 * 60, surges: 50 }, { ramp: false, firstDelay: 0 });
     s.counting = false;
-    s.runFor(120);
-    const c0 = s.coins;
-    s.events.length = 0;
-    s.runFor(240);
-    coins += s.coins - c0;
-    secs += 240;
+    // Six surges, each with the level's countdown before it (no calling early).
+    for (let k = 0; k < 6; k++) s.runSurge();
+    coins += s.coins;
+    secs += s.combat.tick / s.combat.rate;
     surges += s.events.filter((e) => e.type === 'held' || e.type === 'breach').length;
   }
   return { perMin: (coins / secs) * 60, perSurge: coins / surges };

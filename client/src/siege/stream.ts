@@ -9,7 +9,7 @@ import type { LiveState, WorldView } from './world.ts';
 export interface BaseLive {
   p: number;
   phase: LiveState['phase'];
-  siege?: { n: number; phase: string; nextIn: number };
+  siege?: { n: number; phase: string; nextIn: number; incoming: number[]; tutorial: boolean; guided: boolean };
   snapshot?: ArrayBuffer;
   raid?: RaidStatus;
 }
@@ -21,6 +21,9 @@ export interface SiegeMessage {
   size?: number;
   sides?: number[];
   pincer?: boolean;
+  tutorial?: boolean;
+  boss?: boolean;
+  bonus?: number;
   kills?: number;
   coins?: number;
   lost?: number;

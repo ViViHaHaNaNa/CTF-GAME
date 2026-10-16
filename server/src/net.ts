@@ -184,6 +184,15 @@ export function attachSockets(io: Server, game: GameServer): Sessions {
       const d = (data ?? {}) as { x?: unknown; y?: unknown };
       game.tap(playerId, d.x, d.y);
     });
+    socket.on('callEarly', (_data: unknown, ack: unknown) => {
+      if (playerId === null) return reply(ack, { ok: false, error: 'Not logged in' });
+      if (!allowAct()) return reply(ack, { ok: false, error: 'Slow down a little' });
+      try {
+        reply(ack, { ok: true, ...game.callEarly(playerId) });
+      } catch (e) {
+        fail(ack, e);
+      }
+    });
     socket.on('reload', () => {
       if (playerId !== null) game.reload(playerId);
     });

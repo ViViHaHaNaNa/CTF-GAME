@@ -67,7 +67,12 @@ let panelHtml = '';
 /** Organiser switches: game paused, leaderboard frozen. */
 let org = { paused: false, frozen: false };
 /** Your own base's siege, from the server's 'pressure' updates (twice a second). */
-let siege: { n: number; phase: string; nextIn: number; sides: number[]; hq: number; at: number } | null = null;
+let siege: { n: number; phase: string; nextIn: number; sides: number[]; hq: number; at: number; incoming: number[]; tutorial: boolean; guided: boolean; early: number; earlyOpensIn: number } | null = null;
+/** The walkthrough: which prompt is up (0 none), and since when. */
+let coachStep = 0;
+let coachAt = 0;
+let coachKills = 0;
+let coachPosts = 0;
 /** A message that takes over the banner for a moment (surge held, breach, the first surge). */
 let flash: { text: string; cls: string; until: number } | null = null;
 /** Next time a growl may play (ms). */
@@ -158,6 +163,7 @@ function frame(now: number) {
   renderBanner(now);
   growls(now);
   renderCmdBar(now);
+  tickCoach(now);
   requestAnimationFrame(frame);
 }
 
@@ -266,9 +272,19 @@ function bindNet() {
     const now = performance.now();
     const S = THEME.siege.shake;
     if (m.type === 'surge') {
-      if (m.n === 1) {
-        flash = { text: "⚠ They're coming from everywhere!", cls: 'alarm', until: now + 3200 };
+      view.incoming = [];
+      const from = (m.sides ?? []).map((n, i) => [n, i] as const).filter(([n]) => n > 0).map(([, i]) => SIDE_LABEL[i] ?? 'graveyard');
+      if (m.tutorial) {
+        flash = { text: `☠ Zombies from the ${from[0]}!`, cls: 'alarm', until: now + 2500 };
+        coach(1);
+        sfx.siren(false);
+      } else if (m.boss) {
+        flash = { text: '☠ A BOSS is coming! Focus it down!', cls: 'alarm', until: now + 3200 };
         view.shake(S.first * view.dpr, 700);
+        sfx.siren(true);
+      } else if (m.n === 1) {
+        flash = { text: `⚠ Zombies from the ${from.join(', ')}!`, cls: 'alarm', until: now + 3000 };
+        view.shake(S.pincer * view.dpr, 400);
         sfx.siren(true);
       } else if (m.pincer) {
         const from = (m.sides ?? []).map((n, i) => [n, i] as const).filter(([n, i]) => i < 4 && n >= Math.max(3, (m.size ?? 0) * 0.2)).map(([, i]) => SIDE_LABEL[i]);
@@ -277,8 +293,9 @@ function bindNet() {
         sfx.siren(false);
       }
     } else if (m.type === 'held') {
-      if (!flash || flash.until < now + 500) flash = { text: `Surge ${m.n} held! ${m.kills} down, +${m.coins} coins`, cls: 'held', until: now + 1600 };
+      if (!flash || flash.until < now + 500) flash = { text: `Surge ${m.n} held! ${m.kills} down, +${m.coins} coins${m.bonus ? ` (${m.bonus} bonus)` : ''}`, cls: 'held', until: now + 2200 };
       sfx.held();
+      if (coachStep && coachStep < 3) coach(3);
     } else if (m.type === 'strike') {
       view.shake(S.strike * view.dpr, 350);
       sfx.boom();
@@ -292,7 +309,7 @@ function bindNet() {
       sfx.boom();
     }
   });
-  s.on('pressure', (m: { p: number; sides: number[]; hq: number; n: number; phase: string; nextIn: number; ammo: { mag: number; reload: number; weapon: number; airIn: number; combo: number } }) => {
+  s.on('pressure', (m: { p: number; sides: number[]; hq: number; n: number; phase: string; nextIn: number; incoming: number[]; tutorial: boolean; guided: boolean; early: number; earlyOpensIn: number; ammo: { mag: number; reload: number; weapon: number; airIn: number; combo: number } }) => {
     if (!player || m.p !== player.plot) return;
     const now = performance.now();
     // Resync the gun unless a shot is in flight (the prediction is fresher for a moment).
@@ -303,8 +320,10 @@ function bindNet() {
       if (!m.ammo.combo) gun.combo = 0;
     }
     gun.airReadyAt = now + m.ammo.airIn * 1000;
-    siege = { n: m.n, phase: m.phase, nextIn: m.nextIn, sides: m.sides, hq: m.hq, at: now };
+    siege = { n: m.n, phase: m.phase, nextIn: m.nextIn, sides: m.sides, hq: m.hq, at: now, incoming: m.incoming, tutorial: m.tutorial, guided: m.guided, early: m.early, earlyOpensIn: m.earlyOpensIn };
     view.pressure = { sides: m.sides, at: now };
+    // The coming surge's sides: shown for the whole countdown while guided, else in its last seconds.
+    view.incoming = m.phase !== 'surge' && (m.guided || m.nextIn <= CONFIG.siege.warn) ? m.incoming : [];
   });
   s.on('tap', (m: TapMessage) => {
     if (!player || m.p !== player.plot) return;
@@ -319,6 +338,7 @@ function bindNet() {
     gun.mult = m.mult;
     if (m.kills) sfx.kill(m.mult);
     renderCombo(m.mult > before);
+    if (coachStep === 1 && (coachKills += m.kills) >= 3) coach(2);
   });
   s.on('feed', (f: FeedItem) => addFeed(f));
   s.on('status', (st: { paused: boolean; frozen: boolean }) => {
@@ -485,6 +505,7 @@ function bindInput() {
 
   $('menu-btn').addEventListener('click', () => ($('menu').hidden = !$('menu').hidden));
   $('ammo').addEventListener('click', () => reloadGun());
+  $('early-btn').addEventListener('click', () => void callEarly());
   $('mode-toggle').addEventListener('click', (e) => {
     const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-mode]');
     if (btn) void switchMode(btn.dataset.mode as 'pve' | 'pvp');
@@ -721,6 +742,16 @@ function renderCmdBar(now: number) {
   btn.classList.toggle('aiming', aimingStrike);
   const cdText = cd > 0 ? String(cd) : '';
   if ($('strike-cd').textContent !== cdText) $('strike-cd').textContent = cdText;
+  // Call early: between surges; the button says when it opens and what it pays.
+  const early = $<HTMLButtonElement>('early-btn');
+  const between = !!siege && siege.phase !== 'surge' && now - siege.at < 3000 && !siege.tutorial;
+  if (early.hidden === between) early.hidden = !between;
+  if (between) {
+    const opens = Math.max(0, siege!.earlyOpensIn - Math.floor((now - siege!.at) / 1000));
+    const sub = opens > 0 ? `in ${opens}s` : siege!.early > 0 ? `+${siege!.early} coins` : 'coming anyway';
+    if ($('early-sub').textContent !== sub) $('early-sub').textContent = sub;
+    early.disabled = opens > 0 || siege!.early <= 0;
+  }
 }
 
 async function panelClick(e: MouseEvent) {
@@ -894,6 +925,43 @@ function setPlayer(p: PlayerView) {
 }
 
 /** Small status chips under the name: immunity/shield and active boosts. */
+// ---- the walkthrough --------------------------------------------------------------------------------------
+
+const COACH = [
+  '',
+  'Tap the zombies to shoot them!',
+  'Nice shooting! Keep tapping, your posts help too.',
+  'Held! Now buy a post: tap a glowing + slot in your base.',
+  "You're ready. Watch the arrows: they show where the next surge comes from.",
+];
+
+/** Show walkthrough prompt `step` (0 hides it). */
+function coach(step: number) {
+  coachStep = step;
+  coachAt = performance.now();
+  if (step === 1) coachKills = 0;
+  if (step === 3) coachPosts = player?.base.posts.filter(Boolean).length ?? 0;
+  const el = $('coach');
+  el.textContent = COACH[step] ?? '';
+  el.hidden = !step;
+}
+
+/** Move the walkthrough along: a post bought, or prompts that have been up long enough. */
+function tickCoach(now: number) {
+  if (!coachStep || !player) return;
+  const up = now - coachAt;
+  if (coachStep === 2 && up > 6000) coach(siege?.phase === 'surge' ? 2 : 3);
+  else if (coachStep === 3 && (player.base.posts.filter(Boolean).length > coachPosts || up > 30_000)) coach(4);
+  else if (coachStep === 4 && up > 7000) coach(0);
+}
+
+async function callEarly() {
+  const r = await net.callEarly();
+  if (!r.ok) return toast(r.error, '', 2000);
+  flash = { text: `⏩ Called early: +${r.bonus} coins!`, cls: 'held', until: performance.now() + 1800 };
+  sfx.confirm();
+}
+
 /** Grind or Raid: the server checks the cooldown and the locks (a surge, a raid either way). */
 async function switchMode(mode: 'pve' | 'pvp') {
   if (!player || player.mode === mode) return;
@@ -1019,13 +1087,17 @@ function renderBanner(now: number) {
   } else if (siege && now - siege.at < 3000) {
     let zombies = 0;
     if (l) for (const u of l.units.values()) if (u.state !== 2) zombies++;
-    if (siege.phase === 'start') {
-      text = '⚠ The ground is moving...';
+    const from = siege.incoming.map((i) => SIDE_LABEL[i] ?? 'graveyard');
+    const fromText = from.length >= 5 ? 'every side' : from.length > 1 ? `${from.slice(0, -1).join(', ')} and ${from.at(-1)}` : from[0];
+    if (siege.phase === 'surge') {
+      text = `☠ Surge ${siege.n} is on: ${zombies} zombie${zombies === 1 ? '' : 's'} on the field`;
       cls = 'attack';
-    } else if (siege.phase === 'surge') {
-      text = `☠ Surge ${siege.n}: ${zombies} zombie${zombies === 1 ? '' : 's'} at your walls!`;
-      cls = 'attack';
-    } else text = `Breather... next surge in ${siege.nextIn}s${zombies ? ` (${zombies} stragglers)` : ''}`;
+    } else {
+      // A regular countdown to the next surge, and where it comes from.
+      const left = Math.max(0, siege.nextIn - Math.floor((now - siege.at) / 1000));
+      text = `${siege.n === 0 && siege.tutorial ? 'First zombies' : `Surge ${siege.n + 1}`} in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} · from the ${fromText}`;
+      cls = left <= 5 ? 'attack' : '';
+    }
   }
   if (b.textContent !== text) b.textContent = text;
   if (b.dataset.cls !== cls) {

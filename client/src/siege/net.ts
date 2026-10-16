@@ -91,6 +91,11 @@ export class Net {
     this.socket.emit('reload');
   }
 
+  /** Start the next surge now, for bonus coins. */
+  callEarly() {
+    return this.call<{ bonus: number }>('callEarly', {});
+  }
+
   airstrike(x: number, y: number) {
     return this.call<{ ready: number }>('airstrike', { x, y });
   }

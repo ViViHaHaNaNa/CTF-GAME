@@ -67,8 +67,8 @@ export interface BaseLive {
   p: number;
   /** 'wave' = a zombie siege is running there; 'calm' = nothing live. */
   phase: 'calm' | 'wave' | 'raid';
-  /** Siege state: surge number, 'start' / 'surge' / 'breather', seconds until the next surge. */
-  siege?: { n: number; phase: string; nextIn: number };
+  /** Siege state: surge number, 'start' / 'surge' / 'breather', seconds until the next surge, its sides. */
+  siege?: { n: number; phase: string; nextIn: number; incoming: number[]; tutorial: boolean; guided: boolean };
   snapshot?: Uint8Array;
   raid?: RaidStatus;
 }
@@ -186,7 +186,7 @@ export class GameServer {
       }
       this.index(p);
       // Spread the first offline sieges out so a restart doesn't run every base at once.
-      this.nextOffline.set(p.id, t + CONFIG.offline.every * 1000 * Math.random());
+      this.nextOffline.set(p.id, t + CONFIG.offline.firstWithin * 1000 * Math.random());
     }
     for (const p of this.players.values()) this.summaries.set(p.plot, this.summarize(p));
     this.crate = store.getMeta<CrateMeta>('crates') ?? { seq: 0, used: [], current: null, nextAt: 0 };
@@ -291,7 +291,7 @@ export class GameServer {
       lastSeen: t,
     });
     this.index(p);
-    this.nextOffline.set(p.id, t + CONFIG.offline.every * 1000);
+    this.nextOffline.set(p.id, t + this.offlineGap(p));
     this.markDirty(p.plot);
     this.pushFeed(`${p.name} moved into the wasteland`, 'join');
     return p;
@@ -380,7 +380,7 @@ export class GameServer {
     const p = this.ownerOf(plot);
     if (!p) return;
     this.setWaveFlag(plot, 0);
-    this.nextOffline.set(p.id, this.now() + CONFIG.offline.every * 1000);
+    this.nextOffline.set(p.id, this.now() + this.offlineGap(p));
   }
 
   /** Current live state of a plot, for a screen that just started watching it. */
@@ -392,7 +392,7 @@ export class GameServer {
     }
     const s = this.live.get(plot)?.siege;
     if (!s) return { p: plot, phase: 'calm' };
-    return { p: plot, phase: 'wave', siege: { n: s.n, phase: s.phase, nextIn: s.nextIn() }, snapshot: encodeSnapshot(plot, s.combat.snapshot(true)) };
+    return { p: plot, phase: 'wave', siege: s.info(), snapshot: encodeSnapshot(plot, s.combat.snapshot(true)) };
   }
 
   // ---- actions ----------------------------------------------------------------------------------
@@ -550,6 +550,19 @@ export class GameServer {
     return { ok: true, ready: r.ready };
   }
 
+  /** Start the next surge on your base before the countdown ends, for bonus coins (they fill the vault). */
+  callEarly(id: number): { bonus: number } {
+    this.assertRunning();
+    const own = this.ownSiege(id);
+    if (!own) throw new GameError('no_siege', 'No surge to call: switch to Grind mode');
+    const bonus = own.siege.callEarly();
+    if (!bonus && own.siege.phase === 'surge') throw new GameError('in_surge', "A surge is already on");
+    if (!bonus) throw new GameError('too_late', "It's coming anyway");
+    this.credit(own.p, bonus);
+    this.flushCoins();
+    return { bonus };
+  }
+
   /** Reload the Commander's gun now. */
   reload(id: number) {
     this.ownSiege(id)?.siege.reload();
@@ -691,7 +704,7 @@ export class GameServer {
     if (s.combat.tick % CONFIG.snapshotEvery === 0) this.out.toBase(plot, 'snap', encodeSnapshot(plot, s.combat.snapshot()));
     // Where the pressure is, for the owner's edge arrow and red vignette (even when the base is off screen).
     if (s.combat.tick % (CONFIG.tickRate / 2) === 0 && this.isOnline(p.id)) {
-      this.out.toPlayer(p.id, 'pressure', { p: plot, sides: s.pressure(), hq: Math.round(100 * s.hqShare()), n: s.n, phase: s.phase, nextIn: Math.ceil(s.nextIn()), ammo: s.ammo() });
+      this.out.toPlayer(p.id, 'pressure', { p: plot, sides: s.pressure(), hq: Math.round(100 * s.hqShare()), ...s.info(), ammo: s.ammo() });
     }
   }
 
@@ -800,17 +813,24 @@ export class GameServer {
       if (due > t) continue;
       const p = this.players.get(id);
       if (!p || this.live.has(p.plot) || this.raidByPlot.has(p.plot) || (p.mode ?? CONFIG.modes.start) !== 'pve') {
-        this.nextOffline.set(id, t + CONFIG.offline.every * 1000);
+        if (p) this.nextOffline.set(id, t + this.offlineGap(p));
         continue;
       }
       budget--;
-      this.runOffline(p);
-      this.nextOffline.set(id, t + CONFIG.offline.every * 1000);
+      const secs = this.runOffline(p);
+      this.nextOffline.set(id, t + secs * 1000 + this.offlineGap(p));
     }
   }
 
   /** Nobody is looking: play the next stretch of this base's siege headlessly at the coarse tick rate. */
-  runOffline(p: PlayerRecord) {
+  /** The countdown between surges at this player's level (ms). */
+  private offlineGap(p: PlayerRecord): number {
+    const g = CONFIG.siege.gap;
+    return g[Math.min(g.length, p.base.hq) - 1]! * 1000;
+  }
+
+  /** One headless surge for an offline grinder; returns how many seconds it lasted. */
+  runOffline(p: PlayerRecord): number {
     p.waveNo++;
     // Nobody taps while you're away: the siege runs at no more than the offline pressure cap.
     const d = p.siege!;
@@ -818,7 +838,7 @@ export class GameServer {
     d.pressure = Math.min(online, CONFIG.offline.pressureCap);
     const s = new Siege(p.base, getWorld().plots[p.plot]!, seedOf(p.id, p.waveNo), d, { defenceBoost: this.defenceBoost(p), coarse: true, ramp: false, firstDelay: 0 });
     s.counting = false;
-    s.runFor(CONFIG.offline.every);
+    const secs = s.runSurge();
     if (online > CONFIG.offline.pressureCap) d.pressure = online;
     const room = Math.min(Math.max(0, CONFIG.offline.bankCap - p.bank), this.vaultRoom(p));
     const banked = Math.min(room, s.coins);
@@ -844,6 +864,7 @@ export class GameServer {
     };
     this.save(p);
     this.markDirty(p.plot);
+    return secs;
   }
 
   /** Leaderboard position (1 = most trophies; ties keep the earlier player ahead). */

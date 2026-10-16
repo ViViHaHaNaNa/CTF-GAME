@@ -1,13 +1,99 @@
-// Siege balance check: how a new player's first minutes go (with and without tapping), steady-state income
-// per base build, what tapping adds, and whether the coarse headless mode agrees with the live one.
+// Siege balance: per Main Tower level, how surges go (held share, length, zombies, coins) and what
+// grinding pays per minute when waiting out each countdown vs calling every surge early; plus a new
+// player's walkthrough and guided first minutes; plus coarse (offline) vs live.
 // Usage: npx tsx shared/scripts/siege-balance.ts
-import { CONFIG, Siege, applyAction, commanderSpot, getWorld, mulberry32, newBase, newDirector, postDps, quote, tapDpsCap, type BaseAction, type BaseState, type DirectorState } from '../src/index.ts';
+import { CONFIG, Siege, applyAction, commanderSpot, getWorld, mulberry32, newBase, newDirector, quote, type BaseAction, type BaseState, type DirectorState } from '../src/index.ts';
 
 const world = getWorld();
 const PLOTS = [0, 9, 18, 27, 36, 45, 54, 63].map((i) => world.plots[i]!);
 const pct = (a: number, b: number) => `${b ? Math.round((100 * a) / b) : 0}%`.padStart(4);
+const b = (hq: number, walls: number, posts: [string, number][], cmd = 0): BaseState => ({
+  hq, walls, cmd, posts: Array.from({ length: 8 }, (_, i) => (posts[i] ? { type: posts[i]![0] as never, level: posts[i]![1] } : null)),
+});
 
-/** Cheapest thing the player can afford right now (what an eager new player taps). */
+/** A sensible base at each level (what a player who keeps upgrading would have). */
+const BUILDS: BaseState[] = [
+  b(1, 1, [['pistol', 1], ['pistol', 1]]),
+  b(2, 2, [['pistol', 2], ['pistol', 2], ['gun', 1]], 1),
+  b(3, 3, [['pistol', 3], ['gun', 3], ['shotgun', 2], ['pistol', 2]], 2),
+  b(4, 4, [['gun', 4], ['gun', 3], ['shotgun', 3], ['pistol', 4], ['gun', 3]], 2),
+  b(5, 5, [['gun', 5], ['gun', 5], ['shotgun', 5], ['pistol', 5], ['shotgun', 4], ['gun', 4]], 2),
+  b(6, 6, [['gun', 6], ['gun', 6], ['shotgun', 6], ['pistol', 6], ['shotgun', 5], ['gun', 5], ['gun', 5]], 2),
+  b(7, 7, [['gun', 7], ['gun', 7], ['shotgun', 7], ['gun', 6], ['shotgun', 6], ['gun', 6], ['gun', 6], ['shotgun', 6]], 2),
+  b(8, 8, [['gun', 8], ['gun', 8], ['shotgun', 8], ['gun', 8], ['shotgun', 7], ['gun', 7], ['gun', 7], ['shotgun', 7]], 2),
+];
+
+/** Taps at the zombie nearest the Main Tower at `rate` per second, with aim error. */
+function tapper(s: Siege, rate: number, aim: number, rng: () => number) {
+  const every = Math.max(1, Math.round(s.combat.rate / rate));
+  return () => {
+    if (s.combat.tick % every || !s.combat.liveUnits) return 0;
+    const [hx, hy] = commanderSpot(s.plot);
+    let best: { x: number; y: number } | undefined;
+    let bd = Infinity;
+    for (const u of s.combat.units) {
+      if (u.state === 'dead' || u.state === 'rise') continue;
+      const d = Math.hypot(u.x - hx, u.y - hy);
+      if (d < bd) (bd = d), (best = u);
+    }
+    if (!best) return 0;
+    const r = s.tap(best.x + (rng() - 0.5) * 2 * aim, best.y + (rng() - 0.5) * 2 * aim);
+    return r.ok ? r.coins : 0;
+  };
+}
+
+/** Run a level's base for `surges` surges; `early`: call each surge as soon as the countdown allows. */
+function level(base: BaseState, early: boolean, taps: number, surges = 14, runs = 4) {
+  let held = 0, lost = 0, coins = 0, secs = 0, kills = 0, len = 0, peak = 0, zombies = 0, bosses = 0, sides = 0;
+  for (let i = 1; i <= runs; i++) {
+    const d: DirectorState = { ...newDirector(), played: 20 * 60, surges: 50, pressure: SETTLED };
+    const s = new Siege(base, PLOTS[i % PLOTS.length]!, i * 7919, d, { firstDelay: 1 });
+    s.counting = false;
+    const rng = mulberry32(i);
+    const tap = taps ? tapper(s, taps, 0.5, rng) : () => 0;
+    let start = 0;
+    let done = 0;
+    while (done < surges) {
+      coins += s.step() + tap();
+      if (early && s.phase === 'breather') coins += s.callEarly();
+      peak = Math.max(peak, s.combat.liveUnits);
+      for (const e of s.events) {
+        if (e.type === 'surge') (start = s.combat.tick), (zombies += e.size), (bosses += e.boss ? 1 : 0), (sides += e.sides.filter((n) => n > 0).length);
+        if (e.type === 'held' || e.type === 'breach') {
+          if (e.type === 'held') held++;
+          else lost++;
+          len += (s.combat.tick - start) / s.combat.rate;
+          done++;
+        }
+      }
+      s.events.length = 0;
+    }
+    kills += s.kills;
+    secs += s.combat.tick / s.combat.rate;
+  }
+  const n = held + lost;
+  return { held: held / n, len: len / n, perSurge: coins / n, perMin: (coins / secs) * 60, zombies: zombies / n, bosses: bosses / n, sides: sides / n, peak };
+}
+
+/** Pressure to start the per-level runs from (the director would have drifted there over a long session). */
+const SETTLED = Number(process.env.PRESSURE ?? 1);
+console.log(`-- per level: a typical base for that level, a player tapping 2/s, starting pressure ${SETTLED} --`);
+console.log('HQ  gap  sides  zombies  boss   surge   held  coins/surge  coins/min (waiting)  coins/min (calling early)  peak');
+BUILDS.forEach((base, i) => {
+  const wait = level(base, false, 2);
+  const early = level(base, true, 2);
+  console.log(
+    `${String(i + 1).padStart(2)}  ${String(CONFIG.siege.gap[i]).padStart(3)}s  ${wait.sides.toFixed(1).padStart(4)}  ${wait.zombies.toFixed(0).padStart(6)}  ${wait.bosses.toFixed(2).padStart(5)}  ${wait.len.toFixed(0).padStart(4)}s  ${pct(wait.held * 100, 100)}  ${wait.perSurge.toFixed(0).padStart(10)}  ${wait.perMin.toFixed(0).padStart(19)}  ${early.perMin.toFixed(0).padStart(25)}  ${String(wait.peak).padStart(4)}`,
+  );
+});
+if (process.env.QUICK) process.exit(0);
+console.log('\n-- same, no tapping (offline / idle) --');
+BUILDS.forEach((base, i) => {
+  const r = level(base, false, 0);
+  console.log(`HQ${i + 1}: held ${pct(r.held * 100, 100)}  surge ${r.len.toFixed(0)}s  ${r.perMin.toFixed(0)} coins/min`);
+});
+
+/** Cheapest thing the player can afford right now. */
 function cheapest(base: BaseState): BaseAction | null {
   const opts: BaseAction[] = [{ kind: 'hq' }, { kind: 'walls' }, { kind: 'commander' }];
   base.posts.forEach((p, slot) => opts.push(p ? { kind: 'post', slot } : { kind: 'build', slot, type: 'pistol' }));
@@ -20,177 +106,51 @@ function cheapest(base: BaseState): BaseAction | null {
   return best;
 }
 
-interface Run { held: number; surges: number; coins: number; firstBuy: number; peak: number; sizes: number[]; pressure: number; hq: number; taps: number; tapKills: number; tapDmg: number; kills: number; maxCombo: number; refused: number }
-
-/** How a simulated player taps: shots per second, aim error (tiles, s.d.), whether they call airstrikes. */
-interface Tapper { rate: number; aim: number; air: boolean }
-
-/**
- * Taps at the zombie nearest the Main Tower (what a player under pressure does), with some aim error;
- * calls an airstrike on the biggest clump whenever it's ready.
- */
-function tapAt(s: Siege, tp: Tapper, rng: () => number, attackBoost = 0) {
-  const [hx, hy] = commanderSpot(s.plot);
-  let best: { x: number; y: number } | undefined;
-  let bd = Infinity;
-  for (const u of s.combat.units) {
-    if (u.state === 'dead' || u.state === 'rise' || u.kind > 2) continue;
-    const d = Math.hypot(u.x - hx, u.y - hy);
-    if (d < bd) (bd = d), (best = u);
-  }
-  const g = () => (rng() + rng() + rng() - 1.5) * 1.15 * tp.aim;
-  const x = (best?.x ?? hx + (rng() - 0.5) * 10) + g();
-  const y = (best?.y ?? hy + (rng() - 0.5) * 10) + g();
-  return s.tap(x, y, attackBoost);
-}
-
-function clump(s: Siege): { x: number; y: number } | undefined {
-  let best: { x: number; y: number } | undefined;
-  let most = 4;
-  for (const u of s.combat.units) {
-    if (u.state === 'dead' || u.state === 'rise') continue;
-    const n = s.combat.unitsNear(u.x, u.y, CONFIG.commander.airstrike.radius).length;
-    if (n > most) (most = n), (best = u);
-  }
-  return best;
-}
-
-/** A fresh player for `secs`: reacts after `react` s, then buys the cheapest thing whenever they can (`buys` false = never). */
-function newPlayer(seed: number, secs: number, buys: boolean, react = 8, tp?: Tapper): Run {
-  let base = newBase();
-  let coins = CONFIG.start.coins;
-  const d = newDirector();
-  const s = new Siege(base, PLOTS[seed % PLOTS.length]!, seed * 7919, d);
-  let held = 0, surges = 0, firstBuy = -1, peak = 0, taps = 0, tapKills = 0, tapDmg = 0, maxCombo = 0, refused = 0;
-  const sizes: number[] = [];
-  const rate = s.combat.rate;
-  const rng = mulberry32(seed * 31);
-  const every = tp ? Math.max(1, Math.round(rate / tp.rate)) : 0;
-  for (let t = 0; t < secs * rate; t++) {
-    coins += s.step();
-    if (tp && t % every === 0 && s.combat.liveUnits > 0) {
-      const r = tapAt(s, tp, rng);
-      if (r.ok) {
-        taps++;
-        tapKills += r.kills;
-        coins += r.coins;
-        for (const h of r.hits) tapDmg += h[2];
-        maxCombo = Math.max(maxCombo, r.combo);
-      } else refused++;
-    }
-    if (tp?.air && t % rate === 0) {
-      const at = clump(s);
-      if (at) s.airstrike(at.x, at.y);
-    }
-    peak = Math.max(peak, s.combat.liveUnits);
-    for (const e of s.events) {
-      if (e.type === 'surge') sizes.push(e.size);
-      if (e.type === 'held') (held++, surges++);
-      if (e.type === 'breach') (surges++, (coins -= Math.max(0, Math.min(coins - CONFIG.siege.breach.protectedFloor, Math.round(coins * CONFIG.siege.breach.lossPct), CONFIG.siege.breach.maxLoss))));
-    }
-    s.events.length = 0;
-    if (buys && t >= react * rate && t % rate === 0) {
-      const a = cheapest(base);
-      if (a && quote(base, a).cost <= coins) {
-        coins -= quote(base, a).cost;
-        base = applyAction(base, a);
-        s.setBase(base);
-        if (firstBuy < 0) firstBuy = t / rate;
+console.log('\n-- a brand-new player (walkthrough first), 15 minutes, taps 2/s, buys the cheapest thing, calls early or not --');
+for (const early of [false, true]) {
+  let held = 0, surges = 0, tutorialHeld = 0, hq = 0, firstSides = 0, guidedSides = 0, guidedN = 0;
+  const runs = 16;
+  for (let i = 1; i <= runs; i++) {
+    let base = newBase();
+    let coins = CONFIG.start.coins;
+    const s = new Siege(base, PLOTS[i % PLOTS.length]!, i * 104729, newDirector());
+    const tap = tapper(s, 2, 0.6, mulberry32(i));
+    for (let t = 0; t < 15 * 60 * s.combat.rate; t++) {
+      coins += s.step() + tap();
+      if (early && s.phase === 'breather') coins += s.callEarly();
+      for (const e of s.events) {
+        if (e.type === 'surge' && e.tutorial) firstSides += e.sides.filter((n) => n > 0).length;
+        else if (e.type === 'surge' && base.hq < CONFIG.siege.guidedBelow) (guidedSides += e.sides.filter((n) => n > 0).length), guidedN++;
+        if (e.type === 'held') (held++, surges++, e.n === 1 && tutorialHeld++);
+        if (e.type === 'breach') surges++;
+      }
+      s.events.length = 0;
+      if (t % s.combat.rate === 0) {
+        const a = cheapest(base);
+        if (a && quote(base, a).cost <= coins) {
+          coins -= quote(base, a).cost;
+          base = applyAction(base, a);
+          s.setBase(base);
+        }
       }
     }
+    hq += base.hq;
   }
-  return { held, surges, coins, firstBuy, peak, sizes, pressure: d.pressure, hq: base.hq, taps, tapKills, tapDmg, kills: s.kills, maxCombo, refused };
+  console.log(`${early ? 'calls early' : 'waits     '}: walkthrough held ${tutorialHeld}/${runs} (from ${(firstSides / runs).toFixed(1)} side), held ${pct(held, surges)} of ${(surges / runs).toFixed(1)} surges, guided surges from ${(guidedSides / Math.max(1, guidedN)).toFixed(1)} sides, reaches HQ ${(hq / runs).toFixed(1)}`);
 }
 
-function report(label: string, runs: Run[], secs: number) {
-  const sum = (f: (r: Run) => number) => runs.reduce((a, r) => a + f(r), 0);
-  const n = runs.length;
-  console.log(
-    `${label.padEnd(40)} held ${pct(sum((r) => r.held), sum((r) => r.surges))}  surges ${(sum((r) => r.surges) / n).toFixed(1).padStart(5)}` +
-      `  first buy ${(sum((r) => r.firstBuy) / n).toFixed(0).padStart(3)}s  peak alive ${(sum((r) => r.peak) / n).toFixed(0).padStart(3)}  pressure ${(sum((r) => r.pressure) / n).toFixed(2)}  HQ ${(sum((r) => r.hq) / n).toFixed(1)}` +
-      (sum((r) => r.taps) ? `  tap kills ${pct(sum((r) => r.tapKills), sum((r) => r.kills))}  tap dps ${(sum((r) => r.tapDmg) / n / secs).toFixed(1)}  best combo ${(sum((r) => r.maxCombo) / n).toFixed(0)}` : ''),
-  );
-}
-
-const b = (hq: number, walls: number, posts: [string, number][]): BaseState => ({
-  hq, walls, posts: Array.from({ length: 8 }, (_, i) => (posts[i] ? { type: posts[i]![0] as never, level: posts[i]![1] } : null)),
-});
-
-/** A fixed base after a long session: held share, coins/min, surge size, with the director settled. */
-function steady(label: string, base: BaseState, coarse = false, n = 24, mins = 6) {
-  let held = 0, surges = 0, coins = 0, peak = 0, size = 0, sizes = 0, pressure = 0;
-  for (let i = 1; i <= n; i++) {
-    const d: DirectorState = { ...newDirector(), played: 20 * 60 };
-    const s = new Siege(base, PLOTS[i % PLOTS.length]!, i * 104729, d, { coarse, ramp: !coarse });
-    s.counting = false;
-    // Let the director settle, then measure.
-    s.runFor(120);
-    s.events.length = 0;
-    const c0 = s.coins;
-    for (let t = 0; t < mins * 60 * s.combat.rate; t++) {
-      s.step();
-      peak = Math.max(peak, s.combat.liveUnits);
+console.log('\n-- coarse headless (offline) vs live, no taps --');
+for (const i of [1, 3, 5]) {
+  const live = level(BUILDS[i]!, false, 0, 8, 6);
+  let held = 0, n = 0, coins = 0;
+  for (let k = 1; k <= 6; k++) {
+    const s = new Siege(BUILDS[i]!, PLOTS[k % PLOTS.length]!, k * 7919, { ...newDirector(), played: 1200, surges: 50 }, { coarse: true, ramp: false, firstDelay: 0 });
+    for (let j = 0; j < 8; j++) {
+      s.runSurge();
+      for (const e of s.events) (e.type === 'held' && held++), (e.type !== 'surge' && n++);
+      s.events.length = 0;
     }
-    coins += s.coins - c0;
-    for (const e of s.events) {
-      if (e.type === 'held') (held++, surges++);
-      if (e.type === 'breach') surges++;
-      if (e.type === 'surge') (size += e.size), sizes++;
-    }
-    pressure += d.pressure;
+    coins += s.coins;
   }
-  console.log(`${label.padEnd(40)} held ${pct(held, surges)}  coins/min ${String(Math.round(coins / n / mins)).padStart(4)}  surge ${(size / sizes).toFixed(0).padStart(3)}  peak alive ${String(peak).padStart(3)}  pressure ${(pressure / n).toFixed(2)}`);
-}
-
-const N = 40;
-const CASUAL: Tapper = { rate: 2, aim: 0.6, air: true };
-const KEEN: Tapper = { rate: 3.5, aim: 0.35, air: true };
-const BOT: Tapper = { rate: 5, aim: 0, air: true };
-console.log('-- a new player, first 5 minutes --');
-report('buys, taps 2/s (sloppy aim) + airstrikes', Array.from({ length: N }, (_, i) => newPlayer(i + 1, 300, true, 8, CASUAL)), 300);
-report('buys, taps 3.5/s (good aim) + airstrikes', Array.from({ length: N }, (_, i) => newPlayer(i + 1, 300, true, 8, KEEN)), 300);
-report('buys, autoclicker 5/s perfect aim', Array.from({ length: N }, (_, i) => newPlayer(i + 1, 300, true, 8, BOT)), 300);
-report('buys, never taps', Array.from({ length: N }, (_, i) => newPlayer(i + 1, 300, true)), 300);
-report('never buys or taps', Array.from({ length: N }, (_, i) => newPlayer(i + 1, 300, false)), 300);
-{
-  const base = newBase();
-  console.log(`tap cap for a starter base: ${tapDpsCap(base).toFixed(1)} dps (posts ${postDps(base).toFixed(1)} dps)`);
-}
-const first = Array.from({ length: N }, (_, i) => newPlayer(i + 1, 60, false));
-report('first minute (no buying)', first, 60);
-console.log('surge sizes, first minute:', first[0]!.sizes.join(' '));
-const eager = Array.from({ length: N }, (_, i) => newPlayer(i + 1, 300, true));
-console.log('coins/min over 5 minutes (eager buyer, incl. spending):', (eager.reduce((a, r) => a + r.coins, 0) / N).toFixed(0), 'left at the end');
-
-console.log('\n-- steady state (director settled, 20+ min played) --');
-const builds: [string, BaseState][] = [
-  ['start (HQ1, 1 pistol)', newBase()],
-  ['HQ1, 2 pistols', b(1, 1, [['pistol', 1], ['pistol', 1]])],
-  ['HQ2, 2 pistol L2 + gun, walls 2', b(2, 2, [['pistol', 2], ['pistol', 2], ['gun', 1]])],
-  ['HQ3, mixed L3, walls 3', b(3, 3, [['pistol', 3], ['gun', 3], ['shotgun', 2], ['pistol', 2]])],
-  ['HQ3, only 2 pistol L1 (neglected)', b(3, 1, [['pistol', 1], ['pistol', 1]])],
-  ['HQ5, mixed L5, walls 5', b(5, 5, [['gun', 5], ['gun', 5], ['shotgun', 5], ['pistol', 5], ['shotgun', 4], ['gun', 4]])],
-  ['HQ8, all L8, walls 8', b(8, 8, [['gun', 8], ['gun', 8], ['shotgun', 8], ['shotgun', 8], ['gun', 8], ['pistol', 8], ['shotgun', 8], ['gun', 8]])],
-];
-for (const [label, base] of builds) steady(label, base);
-
-console.log('\n-- coarse headless vs live (same rules) --');
-for (const [label, base] of [builds[1]!, builds[3]!, builds[4]!]) {
-  steady(`live    ${label}`, base, false, 16);
-  steady(`coarse  ${label}`, base, true, 16);
-}
-
-console.log('\n-- cost --');
-{
-  const base = builds[3]![1];
-  const s = new Siege(base, PLOTS[3]!, 1, { ...newDirector(), played: 20 * 60, pressure: 1.5 });
-  s.runFor(30);
-  const t0 = performance.now();
-  let ticks = 0;
-  for (; ticks < 20 * 60 * 2; ticks++) s.step();
-  const live = (performance.now() - t0) / ticks;
-  const c = new Siege(base, PLOTS[3]!, 1, { ...newDirector(), played: 20 * 60, pressure: 1.5 }, { coarse: true, ramp: false });
-  const t1 = performance.now();
-  c.runFor(CONFIG.offline.every);
-  console.log(`live tick ${(live * 1000).toFixed(0)} µs at ~${s.combat.liveUnits} zombies; one offline chunk (${CONFIG.offline.every}s coarse) ${(performance.now() - t1).toFixed(1)} ms`);
+  console.log(`HQ${i + 1}: live held ${pct(live.held * 100, 100)} ${live.perSurge.toFixed(0)}/surge | coarse held ${pct(held, n)} ${(coins / n).toFixed(0)}/surge`);
 }

@@ -57,6 +57,8 @@ export interface Building extends BuildingDef {
   maxHp: number;
   alive: boolean;
   reload: number;
+  /** While set, damage can't take it below this much health (a walkthrough surge can't be lost). */
+  floor?: number;
 }
 
 export interface Unit {
@@ -285,7 +287,7 @@ export class Combat {
   private damage(b: Building, amount: number, res: StepResult) {
     if (!b.alive) return;
     if (amount > 0) this.lastHitTick = this.tick;
-    b.hp = Math.max(0, b.hp - amount);
+    b.hp = Math.max(b.floor ?? 0, b.hp - amount);
     this.dirty.add(b.id);
     if (b.hp === 0) {
       b.alive = false;

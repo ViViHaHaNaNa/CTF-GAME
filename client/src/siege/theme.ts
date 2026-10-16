@@ -126,6 +126,7 @@ export const THEME = {
     coinOutline: css('--map-coin-outline'),
     arrow: rgb('--map-arrow'),
     arrowOutline: css('--map-arrow-outline'),
+    incoming: rgb('--map-incoming'),
     shake: { first: num('--map-shake-first'), breach: num('--map-shake-breach'), pincer: num('--map-shake-pincer'), shotgun: num('--map-shake-shotgun'), strike: num('--map-shake-strike') },
   },
   /** Mode chips under the map tags. */

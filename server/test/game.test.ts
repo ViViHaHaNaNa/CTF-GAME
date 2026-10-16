@@ -82,7 +82,7 @@ describe('zombie siege', () => {
     for (let i = 0; i < n * CONFIG.tickRate; i++) game.tick();
   };
 
-  it('a player who logs in is under siege within seconds: every side, packed snapshots, batched kill coins', () => {
+  it("a new player's first surge comes within seconds: the walkthrough from one side, packed snapshots, batched kill coins", () => {
     const { game, sent } = setup();
     const p = game.login('Meera', 'M2002');
     game.connect(p.id);
@@ -90,9 +90,9 @@ describe('zombie siege', () => {
     const start = p.coins;
     secs(game, CONFIG.siege.firstSurge + 0.2);
     const surge = sent.find((s) => s.ev === 'siege')?.data as { type: string; n: number; sides: number[] };
-    expect(surge).toMatchObject({ type: 'surge', n: 1 });
-    for (const n of surge.sides) expect(n).toBeGreaterThan(0);
-    secs(game, 20);
+    expect(surge).toMatchObject({ type: 'surge', n: 1, tutorial: true });
+    expect(surge.sides.filter((n) => n > 0)).toHaveLength(1);
+    secs(game, 30);
     const snaps = sent.filter((s) => s.ev === 'snap' && s.to === `base:${p.plot}`);
     expect(snaps.length).toBeGreaterThan(50);
     const last = decodeSnapshot(snaps.at(-1)!.data as Uint8Array);
@@ -122,7 +122,7 @@ describe('zombie siege', () => {
     const { game, sent } = setup();
     const owner = game.login('Owner', 'O1111');
     game.watch(owner.plot, 1); // a spectator, owner offline
-    secs(game, 30);
+    secs(game, 60);
     const rec = game.players.get(owner.id)!;
     expect(rec.bank).toBeGreaterThan(0);
     expect(rec.offline.waves).toBeGreaterThan(0);
@@ -133,12 +133,13 @@ describe('zombie siege', () => {
     const { game, advance } = setup();
     const p = game.login('Dev', 'D3003');
     const coins = p.coins;
+    // One headless surge each time one is due (the level's countdown after the last one).
     for (let i = 0; i < 60; i++) {
-      advance(CONFIG.offline.every * 1000 + 1);
+      advance((CONFIG.siege.gap[0]! + CONFIG.siege.maxSurge + 31) * 1000);
       game.tickOffline(10);
     }
     const rec = game.players.get(p.id)!;
-    expect(rec.offline.waves).toBeGreaterThan(60);
+    expect(rec.offline.waves).toBe(60);
     // The bank stops at its cap or when the vault would be full, whichever comes first.
     const credited = rec.bank;
     expect(credited).toBe(Math.min(CONFIG.offline.bankCap, vaultCapacity(1) - coins + rec.offline.coinsLost));
@@ -165,6 +166,7 @@ describe('zombie siege', () => {
     const rec = game.players.get(p.id)!;
     rec.coins = 5000;
     rec.base = { hq: 4, walls: 1, posts: rec.base.posts.map(() => null) };
+    rec.siege = { ...rec.siege!, surges: 5 }; // past the walkthrough
     game.connect(p.id);
     game.watch(p.plot, 1);
     let guard = 0;
@@ -172,8 +174,9 @@ describe('zombie siege', () => {
     const b = sent.find((s) => s.ev === 'siege' && (s.data as { type: string }).type === 'breach')!.data as { lost: number; total: number };
     expect(b.lost).toBe(CONFIG.siege.breach.maxLoss);
     expect(b.total).toBe(game.players.get(p.id)!.coins);
-    secs(game, CONFIG.siege.breach.breather + 2);
-    expect(game.baseLive(p.plot).phase).toBe('wave');
+    // The countdown to the next surge starts.
+    secs(game, 2);
+    expect(game.baseLive(p.plot)).toMatchObject({ phase: 'wave', siege: { phase: 'breather' } });
   });
 });
 
@@ -185,10 +188,14 @@ describe('commander taps', () => {
     game.connect(p.id);
     game.connect(q.id);
     game.watch(p.plot, 1);
-    for (let i = 0; i < (CONFIG.siege.firstSurge + 1.5) * CONFIG.tickRate; i++) game.tick();
     const plot = getWorld().plots[p.plot]!;
-    const snap = decodeSnapshot(game.baseLive(p.plot).snapshot!);
-    const z = snap.u.find((u) => u[5] !== 3 && u[5] !== 2)!;
+    // Wait for a zombie to be standing on the field (the walkthrough sends them one at a time).
+    let z: number[] | undefined;
+    for (let i = 0; i < 40 * CONFIG.tickRate && !z; i++) {
+      game.tick();
+      z = decodeSnapshot(game.baseLive(p.plot).snapshot!).u.find((u) => u[5] === 0 || u[5] === 1);
+    }
+    z = z!;
     game.tap(p.id, z[2] / 16, z[3] / 16);
     const hit = sent.find((s) => s.ev === 'tap' && s.to === `base:${p.plot}`)?.data as { ok: boolean; hits: unknown[]; mag: number };
     expect(hit).toMatchObject({ ok: true, mag: CONFIG.commander.weapons.pistol.magazine - 1 });

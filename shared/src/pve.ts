@@ -4,10 +4,12 @@ import { HQ_RECT, PLOT, SLOTS, VAULT_RECT, WALLS } from './layout.ts';
 import type { BaseState } from './types.ts';
 import { getWorld, sideTile, type WorldPlot } from './world.ts';
 
-// Zombie defence (PvE): one continuous siege per base. Surges come from every side at once: the
-// base's graveyard, the street/alley edges, its manholes and cracks opening in the yard. A director
-// runs the rhythm (a peak, a 3-5 s breather, the next peak, a thin trickle in between), the scripted
-// first minute, pincers later on, and dynamic difficulty. Zombies only ever attack their own base.
+// Zombie defence (PvE): one siege per grinding base. Surges come on a regular, visible countdown that
+// grows with the Main Tower level (no trickle in between). Early play is guided: a new player's first
+// surge is a walkthrough from one side that can't be lost; until level 3 surges are small, from 1-2
+// sides, announced for the whole countdown. Sides (1 -> all 4 + the graveyard), zombie types (Big at 3,
+// Axe at 4, a boss from 6), size and gap all grow with level. The player can call a surge early for
+// coins. A director nudges size to keep a target share held. Zombies only ever attack their own base.
 //
 // Everything is decided by the base, its plot, a seed and the director's state, so a siege plays out
 // the same way online (streamed live) or headless (offline bases, resolved at a coarse tick rate).
@@ -98,8 +100,8 @@ export function newDirector(): DirectorState {
 }
 
 export type SiegeEvent =
-  | { type: 'surge'; n: number; size: number; sides: number[]; pincer: boolean }
-  | { type: 'held'; n: number; kills: number; coins: number }
+  | { type: 'surge'; n: number; size: number; sides: number[]; pincer: boolean; tutorial: boolean; boss: boolean }
+  | { type: 'held'; n: number; kills: number; coins: number; bonus: number }
   | { type: 'breach'; n: number }
   /** An airstrike landed. */
   | { type: 'strike'; x: number; y: number; kills: number; coins: number };
@@ -178,7 +180,7 @@ export interface SiegeOptions {
   defenceBoost?: number;
   /** Headless resolution at a coarse tick rate (offline bases). */
   coarse?: boolean;
-  /** Start with the scripted first minute (default true; headless runs skip it). */
+  /** May run the walkthrough first surge for a player who has never had one (default true; headless runs don't). */
   ramp?: boolean;
   /** Seconds before the first surge (default CONFIG.siege.firstSurge). */
   firstDelay?: number;
@@ -209,7 +211,10 @@ export class Siege {
   /** Count played time for the director (the owner is online). */
   counting = true;
   private readonly rng: () => number;
-  private readonly rampOn: boolean;
+  /** The coming (or current) surge's sides: 0 north, 1 east, 2 south, 3 west, 4 graveyard. */
+  incoming: number[] = [];
+  /** The coming (or current) surge is the walkthrough. */
+  tutorial: boolean;
   private base: BaseState;
   private boost: number;
   private queue: Spawn[] = [];
@@ -221,7 +226,6 @@ export class Siege {
   private eased = false;
   /** Lowest Main Tower health share during the current surge. */
   private surgeLow = 1;
-  private nextTrickle = 0;
   /** How far out the edge spawns may be on each side (street: further than an alley). */
   private readonly edgeOut: number[];
   private readonly manholes: ({ x: number; y: number } | null)[];
@@ -237,7 +241,7 @@ export class Siege {
     this.boost = opts.defenceBoost ?? 0;
     this.combat = new Combat(seed, baseBuildings(base, plot, opts.defenceBoost ?? 0, true), { crowd: true, coarse: opts.coarse });
     this.rng = mulberry32(seed ^ 0x9e3779b9);
-    this.rampOn = opts.ramp ?? true;
+    this.tutorial = (opts.ramp ?? true) && director.surges === 0;
     this.until = this.ticks(opts.firstDelay ?? CONFIG.siege.firstSurge);
     const world = getWorld();
     this.edgeOut = [0, 1, 2, 3].map((side) => {
@@ -248,6 +252,7 @@ export class Siege {
     this.graves = world.graveyards[plot.graveyard]!.graves;
     this.hqX = plot.x + HQ_RECT.x + HQ_RECT.w / 2;
     this.hqY = plot.y + HQ_RECT.y + HQ_RECT.h / 2;
+    this.planIncoming();
   }
 
   private ticks(seconds: number) {
@@ -338,7 +343,7 @@ export class Siege {
     let victims: Unit[] = [];
     let tx = x;
     let ty = y;
-    const near = c.unitsNear(x, y, C.hitRadius);
+    const near = c.unitsNear(x, y, this.base.hq < CONFIG.siege.guidedBelow ? C.hitRadiusGuided : C.hitRadius);
     if (near.length) {
       const target = near[0]!;
       tx = target.x;
@@ -458,16 +463,9 @@ export class Siege {
       c.addUnit(UNIT_KINDS.indexOf(s.kind), zombieStats(s.kind, this.base.hq), s.x, s.y, s.rise ? rise : 0, this.n);
       this.surgeAlive++;
     }
-    if (this.phase === 'breather' && c.tick >= this.nextTrickle) {
-      this.nextTrickle = c.tick + this.ticks(S.trickleEvery);
-      // A stray: never while the base is losing, and never over the cap.
-      if (this.hqShare() >= S.difficulty.easeBelow && c.liveUnits < S.maxAlive) {
-        const s = this.spawnAt(Math.floor(this.rng() * 4), 'z_small', 0);
-        c.addUnit(UNIT_KINDS.indexOf('z_small'), zombieStats('z_small', this.base.hq), s.x, s.y, s.rise ? rise : 0, 0);
-      }
-    }
 
-    let earned = this.landStrikes();
+    let earned = this.landStrikes() + this.held;
+    this.held = 0;
     const r = c.step();
     earned += this.account(r.kills);
 
@@ -492,6 +490,16 @@ export class Siege {
     return earned;
   }
 
+  /** Play one whole surge instantly, from now to its end (headless bases). Returns the seconds it took. */
+  runSurge(): number {
+    const c = this.combat;
+    const t0 = c.tick;
+    const limit = t0 + this.ticks(CONFIG.siege.maxSurge + 30);
+    const n = this.n;
+    while (c.tick < limit && !(this.n > n && this.phase === 'breather')) this.step();
+    return (c.tick - t0) / c.rate;
+  }
+
   /** Play `seconds` of siege instantly (headless bases). */
   runFor(seconds: number): void {
     const end = this.combat.tick + this.ticks(seconds);
@@ -507,7 +515,7 @@ export class Siege {
       const dy = u.y - this.hqY;
       const side = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : dy > 0 ? 2 : 0;
       const kind = UNIT_KINDS[u.kind];
-      const weight = kind === 'z_big' ? 3 : kind === 'z_axe' ? 2 : 1;
+      const weight = kind === 'z_boss' ? 10 : kind === 'z_big' ? 3 : kind === 'z_axe' ? 2 : 1;
       const close = Math.max(Math.abs(dx), Math.abs(dy)) < PLOT / 2 - 2 ? 2 : 1; // inside the walls counts double
       out[side] += weight * close;
     }
@@ -516,61 +524,99 @@ export class Siege {
 
   // ---- director -------------------------------------------------------------------------------------
 
-  private startSurge() {
-    const S = CONFIG.siege;
-    const c = this.combat;
-    const d = this.director;
-    this.n++;
-    const ramp = this.rampOn && this.n <= S.ramp.length;
-    const minutes = d.played / 60;
-    let size: number;
-    if (ramp) {
-      // The scripted first minute. Surge 1 is always the same small, winnable size; later ones can only ease.
-      size = S.ramp[this.n - 1]!.size;
-      if (this.n > 1) size = Math.round(size * Math.min(1, d.pressure));
-    } else {
-      const z = S.size;
-      const threat = z.base + z.perHq * (this.base.hq - 1) + z.perKill * firepower(this.base, this.boost);
-      size = Math.round(threat * (1 + z.perMinute * Math.min(minutes, z.maxMinutes)) * d.pressure);
-      size = Math.max(4, Math.min(z.max, size));
-    }
-    const pincer = !ramp && this.n >= (this.rampOn ? S.pincerFrom : 1) && size >= 8;
+  /** A value from a per-level table (index = Main Tower level - 1). */
+  private byLevel<T>(table: readonly T[]): T {
+    return table[Math.min(table.length, Math.max(1, this.base.hq)) - 1]!;
+  }
 
-    // Sides: every side gets some; a pincer piles most of the surge onto 2-3 of them at the same moment.
+  /** Pick the sides of the coming surge (shown while the countdown runs). Sides unlock with level. */
+  private planIncoming() {
+    const S = CONFIG.siege;
     const order = [0, 1, 2, 3];
     for (let i = 3; i > 0; i--) {
       const j = Math.floor(this.rng() * (i + 1));
       [order[i], order[j]] = [order[j]!, order[i]!];
     }
-    const mains = pincer ? order.slice(0, this.rng() < 0.5 ? 2 : 3) : [];
-    const grave = Math.max(1, Math.round(size * S.graveyardShare));
-    const counts = [0, 0, 0, 0, grave];
-    let rest = size - grave;
+    const sides = order.slice(0, this.tutorial ? 1 : this.byLevel(S.sides));
+    if (!this.tutorial && this.base.hq >= S.graveyardFrom) sides.push(GRAVEYARD_SIDE);
+    this.incoming = sides.sort((x, y) => x - y);
+  }
+
+  /** What a screen shows about this siege: surge number, phase, countdown, incoming sides, walkthrough. */
+  info() {
+    const E = CONFIG.siege.callEarly;
+    const left = this.nextIn();
+    // When "call early" opens (seconds from now; 0 = now) and what it would pay right now.
+    const opensIn = this.phase === 'surge' ? -1 : Math.max(0, left - this.byLevel(CONFIG.siege.gap) * (1 - E.minWait));
+    const early = this.phase !== 'surge' && opensIn === 0 && left >= E.minLeft ? Math.round(left * this.byLevel(E.perSecond)) : 0;
+    return { n: this.n, phase: this.phase, nextIn: Math.ceil(left), incoming: this.incoming, tutorial: this.tutorial, guided: this.base.hq < CONFIG.siege.guidedBelow, early, earlyOpensIn: Math.ceil(opensIn) };
+  }
+
+  /**
+   * Start the next surge now instead of waiting out the countdown: pays coins for every second skipped
+   * (none with less than `minLeft` to go). Returns the bonus, 0 if it can't be called now.
+   */
+  callEarly(): number {
+    const E = CONFIG.siege.callEarly;
+    if (this.phase === 'surge') return 0;
+    const left = (this.until - this.combat.tick) / this.combat.rate;
+    if (left < E.minLeft || left > this.byLevel(CONFIG.siege.gap) * (1 - E.minWait) + 1e-6) return 0;
+    this.until = this.combat.tick;
+    return Math.round(left * this.byLevel(E.perSecond));
+  }
+
+  private startSurge() {
+    const S = CONFIG.siege;
+    const c = this.combat;
+    const d = this.director;
+    this.n++;
+    const tutorial = this.tutorial;
+    const size = tutorial ? S.tutorial.size : Math.max(3, Math.min(S.maxSize, Math.round((this.byLevel(S.size) + this.byLevel(S.perFire) * firepower(this.base, this.boost)) * d.pressure)));
+    const window = tutorial ? S.tutorial.spawnWindow : this.byLevel(S.spawnWindow);
+    const sides = this.incoming.filter((s) => s !== GRAVEYARD_SIDE);
+    const graveyard = this.incoming.includes(GRAVEYARD_SIDE);
+    const pincer = !tutorial && this.base.hq >= S.pincerFrom && sides.length >= 3;
+    const mains = pincer ? sides.slice(0, this.rng() < 0.5 ? 2 : 3) : [];
+
+    // Share the surge out over its sides (the graveyard takes its share first; pincer sides most of the rest).
+    const counts = [0, 0, 0, 0, 0];
+    let rest = size;
+    if (graveyard) {
+      counts[GRAVEYARD_SIDE] = Math.max(1, Math.round(size * S.graveyardShare));
+      rest -= counts[GRAVEYARD_SIDE]!;
+    }
     if (pincer) {
-      const main = Math.min(rest, Math.round(size * S.pincerShare));
+      const main = Math.round(rest * S.pincerShare);
       for (let i = 0; i < main; i++) counts[mains[i % mains.length]!]!++;
       rest -= main;
-      const others = order.filter((s) => !mains.includes(s));
-      for (let i = 0; i < rest; i++) counts[others[i % others.length]!]!++;
+      const others = sides.filter((s) => !mains.includes(s));
+      for (let i = 0; i < rest; i++) counts[(others.length ? others : mains)[i % (others.length || mains.length)]!]!++;
     } else {
-      for (let i = 0; i < rest; i++) counts[order[i % 4]!]!++;
+      for (let i = 0; i < rest; i++) counts[sides[i % sides.length]!]!++;
     }
 
-    const big = this.share('z_big', minutes);
-    const axe = this.share('z_axe', minutes);
+    const big = tutorial ? 0 : this.byLevel(S.mix.z_big);
+    const axe = tutorial ? 0 : this.byLevel(S.mix.z_axe);
     const kindOf = (): ZombieKind => {
       const r = this.rng();
       return r < big ? 'z_big' : r < big + axe ? 'z_axe' : 'z_small';
     };
+    // The surge comes in pulses spread over its window: each pulse lands within a few seconds, from all the
+    // surge's sides (a pincer's main sides take theirs in one go). The walkthrough just trickles in.
+    const pulses = tutorial ? 1 : this.byLevel(S.pulses);
+    const pulseAt = (k: number) => (pulses === 1 ? 0 : (k * (window - S.pulseSpread)) / (pulses - 1));
     const spawns: Spawn[] = [];
     counts.forEach((count, side) => {
-      const burst = mains.includes(side) ? S.pincerBurst : S.spawnWindow;
       for (let i = 0; i < count; i++) {
-        // The first of each side comes at once: zombies on every side from the first second.
-        const at = c.tick + this.ticks(i === 0 ? this.rng() * 0.3 : this.rng() * burst);
-        spawns.push({ ...this.spawnAt(side, kindOf(), at) });
+        let t: number;
+        if (tutorial) t = i === 0 ? 0 : this.rng() * window;
+        else if (mains.includes(side)) t = pulseAt(Math.floor(pulses / 2)) + this.rng() * S.pincerBurst;
+        else t = pulseAt(i % pulses) + (i < pulses ? this.rng() * 0.3 : this.rng() * S.pulseSpread);
+        spawns.push(this.spawnAt(side, kindOf(), c.tick + this.ticks(t)));
       }
     });
+    const boss = !tutorial && this.rng() < this.byLevel(S.bossChance);
+    if (boss) spawns.push({ ...this.spawnAt(sides[Math.floor(this.rng() * sides.length)]!, 'z_boss', c.tick + this.ticks(window * 0.4)), rise: false });
     spawns.sort((a, b) => a.at - b.at);
     this.queue = spawns;
     this.qi = 0;
@@ -581,13 +627,10 @@ export class Siege {
     this.surgeCoins = 0;
     this.eased = false;
     this.surgeLow = 1;
-    this.events.push({ type: 'surge', n: this.n, size, sides: counts, pincer });
-  }
-
-  /** Big/Axe share of a surge: grows with Main Tower level and minutes played. */
-  private share(kind: 'z_big' | 'z_axe', minutes: number) {
-    const m = CONFIG.siege.mix[kind];
-    return Math.min(m.max, m.perHq * (this.base.hq - 1) + m.perMinute * minutes);
+    // The walkthrough can't be lost.
+    const hq = c.hq;
+    if (hq) hq.floor = tutorial ? Math.round(hq.maxHp * S.tutorial.hqFloor) : undefined;
+    this.events.push({ type: 'surge', n: this.n, size: spawns.length, sides: counts, pincer, tutorial, boss });
   }
 
   /** Where a zombie on `side` appears: off the edge (runs in), a crack in the yard, the manhole, or a grave. */
@@ -610,41 +653,48 @@ export class Siege {
     return { at, kind, x, y, rise: crack };
   }
 
-  private endSurge() {
+  /** Between surges: repair, then a regular countdown (by level) to the next one, whose sides are picked now. */
+  private countdown() {
     const S = CONFIG.siege;
-    const d = this.director;
     const c = this.combat;
-    d.surges++;
-    d.held++;
-    const t = this.target();
-    // New players settle fast: an easy surge climbs faster in their first minutes (after that, the plain step keeps the target exact).
-    const easy = this.surgeLow >= S.difficulty.easyAbove && d.played / 60 < S.difficulty.newMinutes ? S.difficulty.easyMult : 1;
-    d.pressure = Math.min(S.difficulty.max, d.pressure + (easy * S.difficulty.down * (1 - t)) / t);
-    this.events.push({ type: 'held', n: this.n, kills: this.surgeKills, coins: this.surgeCoins });
     this.queue = [];
     this.qi = 0;
     c.repair(S.repair);
-    const ramp = this.rampOn && this.n <= S.ramp.length;
-    const [lo, hi] = S.breather;
+    const hq = c.hq;
+    if (hq) hq.floor = undefined;
+    this.tutorial = false;
     this.phase = 'breather';
-    this.until = c.tick + this.ticks(ramp ? S.ramp[this.n - 1]!.breather : lo + this.rng() * (hi - lo));
-    this.nextTrickle = c.tick + this.ticks(S.trickleEvery);
+    this.until = c.tick + this.ticks(this.byLevel(S.gap));
+    this.planIncoming();
   }
+
+  private endSurge() {
+    const S = CONFIG.siege;
+    const d = this.director;
+    d.surges++;
+    d.held++;
+    const t = this.target();
+    d.pressure = Math.min(S.difficulty.max, d.pressure + (S.difficulty.down * (1 - t)) / t);
+    // Holding a surge pays a bonus by level (the server credits it like kill coins, into the vault).
+    const bonus = this.byLevel(S.holdBonus);
+    this.held += bonus;
+    this.coins += bonus;
+    this.events.push({ type: 'held', n: this.n, kills: this.surgeKills, coins: this.surgeCoins + bonus, bonus });
+    this.countdown();
+  }
+
+  /** Surge-hold bonuses not yet collected by the caller (step() returns them with the kill coins). */
+  private held = 0;
 
   private breach() {
     const S = CONFIG.siege;
     const d = this.director;
-    const c = this.combat;
     this.breaches++;
     d.surges++;
     d.pressure = Math.max(S.difficulty.min, d.pressure - S.difficulty.down);
     this.events.push({ type: 'breach', n: this.n });
-    c.killAll();
-    c.repair(1);
-    this.queue = [];
-    this.qi = 0;
-    this.phase = 'breather';
-    this.until = c.tick + this.ticks(S.breach.breather);
-    this.nextTrickle = this.until;
+    this.combat.killAll();
+    this.combat.repair(1);
+    this.countdown();
   }
 }

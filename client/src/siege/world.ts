@@ -108,6 +108,7 @@ const ZOMBIE_SHEETS: Record<string, [ZombieSheets, ZombieSheets]> = {
   z_small: [{ walk: 'zSmallWalk', attack: 'zSmallAttack', death: 'zSmallDeath' }, { walk: 'zSmallWalkL', attack: 'zSmallAttackL', death: 'zSmallDeathL' }],
   z_big: [{ walk: 'zBigWalk', attack: 'zBigAttack', death: 'zBigDeath' }, { walk: 'zBigWalkL', attack: 'zBigAttackL', death: 'zBigDeathL' }],
   z_axe: [{ walk: 'zAxeWalk', attack: 'zAxeAttack', death: 'zAxeDeath' }, { walk: 'zAxeWalkL', attack: 'zAxeAttackL', death: 'zAxeDeathL' }],
+  z_boss: [{ walk: 'zBigWalk', attack: 'zBigAttack', death: 'zBigDeath' }, { walk: 'zBigWalkL', attack: 'zBigAttackL', death: 'zBigDeathL' }],
 };
 /** Zoomed out further than this (device px per art px), units drop to a still frame without shadow or health bar. */
 const LOD_K = 1.75;
@@ -196,6 +197,8 @@ export class WorldView {
   private shakeUntil = 0;
   /** Where the zombies are pressing hardest on your own base (north, east, south, west), from the server. */
   pressure: { sides: number[]; at: number } | null = null;
+  /** Sides the next surge on your base comes from (0-3, 4 = graveyard), shown as arrows while set. */
+  incoming: number[] = [];
   /** Told when your own Main Tower loses health (for the red vignette). */
   onHqHurt: ((hp: number, drop: number) => void) | null = null;
   bases = new Map<number, BaseSummary>();
@@ -966,8 +969,56 @@ export class WorldView {
     this.drawPressureArrow(g, now);
   }
 
+  /** A screen-edge arrow toward side `side` of your base (or toward its graveyard), `rgb` colour. */
+  private edgeArrow(g: CanvasRenderingContext2D, side: number, rgb: readonly number[], size: number, alpha: number) {
+    const d = this.dpr;
+    const p = world.plots[this.myPlot]!;
+    const [bx, by] = this.toScreen((p.x + PLOT / 2) * T, (p.y + PLOT / 2) * T);
+    const W = this.canvas.width;
+    const H = this.canvas.height;
+    const m = 34 * d;
+    const top = 64 * d;
+    let ang: number;
+    let x: number;
+    let y: number;
+    if (side === 4) {
+      // The graveyard sits at a corner: point from the base toward it, from the screen edge that way.
+      const gy = world.graveyards[p.graveyard]!;
+      const [gx, gyy] = this.toScreen((gy.x + gy.w / 2) * T, (gy.y + gy.h / 2) * T);
+      ang = Math.atan2(gyy - by, gx - bx);
+      x = Math.max(m, Math.min(W - m, bx + Math.cos(ang) * W));
+      y = Math.max(top, Math.min(H - m, by + Math.sin(ang) * H));
+    } else {
+      ang = [-Math.PI / 2, 0, Math.PI / 2, Math.PI][side]!;
+      x = side === 1 ? W - m : side === 3 ? m : Math.max(m, Math.min(W - m, bx));
+      y = side === 0 ? top : side === 2 ? H - m : Math.max(top, Math.min(H - m, by));
+    }
+    g.save();
+    g.translate(Math.round(x), Math.round(y));
+    g.rotate(ang);
+    g.globalAlpha = alpha;
+    g.fillStyle = `rgb(${rgb.join(', ')})`;
+    g.strokeStyle = THEME.siege.arrowOutline;
+    g.lineWidth = 2 * d;
+    g.beginPath();
+    g.moveTo(size, 0);
+    g.lineTo(-size * 0.4, -size * 0.85);
+    g.lineTo(-size * 0.1, 0);
+    g.lineTo(-size * 0.4, size * 0.85);
+    g.closePath();
+    g.stroke();
+    g.fill();
+    g.restore();
+    g.globalAlpha = 1;
+  }
+
   /** A pulsing arrow at the screen edge on the side of your base where the zombies press hardest. */
   private drawPressureArrow(g: CanvasRenderingContext2D, now: number) {
+    // Before a surge: yellow arrows at every side it will come from.
+    if (this.incoming.length && this.myPlot >= 0) {
+      const pulse = 0.5 + 0.5 * Math.sin(now / 220);
+      for (const side of this.incoming) this.edgeArrow(g, side, THEME.siege.incoming, (14 + 4 * pulse) * this.dpr, 0.55 + 0.45 * pulse);
+    }
     const pr = this.pressure;
     if (!pr || this.myPlot < 0 || now - pr.at > 3000) return;
     const total = pr.sides.reduce((a, b) => a + b, 0);
@@ -1521,9 +1572,11 @@ export class WorldView {
       g.fillStyle = THEME.unitShadow;
       g.fillRect(Math.round(x - 4), Math.round(y - 1), 8, 2);
     }
-    g.drawImage(sheet.img, f * sheet.fw, 0, sheet.fw, sheet.fh, Math.round(x - sheet.fw / 2), Math.round(y - sheet.fh + 1), sheet.fw, sheet.fh);
+    // The boss is a Big drawn at twice the size.
+    const k = kind === 'z_boss' ? 2 : 1;
+    g.drawImage(sheet.img, f * sheet.fw, 0, sheet.fw, sheet.fh, Math.round(x - (sheet.fw * k) / 2), Math.round(y - sheet.fh * k + 1), sheet.fw * k, sheet.fh * k);
     if (fade) g.globalAlpha = 1;
-    if (!lod && u.state < 2 && u.hp < 100) this.hpBar(g, Math.round(x - 5), Math.round(y - sheet.fh - 2), 10, u.hp, THEME.hp.unit);
+    if (!lod && u.state < 2 && (u.hp < 100 || k > 1)) this.hpBar(g, Math.round(x - 5 * k), Math.round(y - sheet.fh * k - 2), 10 * k, u.hp, THEME.hp.unit);
   }
 
   private drawRaider(g: CanvasRenderingContext2D, u: UnitView, kind: string, x: number, y: number, now: number) {

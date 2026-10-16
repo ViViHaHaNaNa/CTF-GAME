@@ -123,6 +123,9 @@
   --mode-pve-ink: #0b1a10;
   --mode-pvp: #ff5a3c;
   --mode-pvp-ink: #ffffff;
+  --coach: #fff1a8;                  /* walkthrough prompts */
+  --coach-ink: #1a1400;
+  --coach-edge: #c99a12;
   --star: #ffd23f;                   /* raid stars */
   --star-shadow: #5a3a00;
   --combo-shadow: #7a1a0a;
@@ -303,6 +306,7 @@
   --map-cmd-smoke: 60, 50, 50;
   --map-cmd-flash: #fffbe0;
   --map-shake-shotgun: 2;
+  --map-incoming: 255, 210, 63;      /* arrows at the sides the next surge comes from */
   --map-shake-strike: 4;
   --map-deploy: 255, 77, 61;
   --map-deploy-edge: rgba(255, 150, 130, 0.85);
