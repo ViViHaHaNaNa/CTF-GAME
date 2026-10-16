@@ -13,7 +13,7 @@ import type { Snapshot } from './types.ts';
 // pool. Two optional modes: `crowd` (zombie mobs spread out instead of walking in single file) and
 // `coarse` (headless resolution at a lower tick rate, for bases nobody is looking at).
 
-export type BuildingKind = 'hq' | 'post' | 'wall';
+export type BuildingKind = 'hq' | 'post' | 'wall' | 'vault';
 
 export interface PostGun {
   range: number;
@@ -114,6 +114,8 @@ const PUSH_SPEED = 2.5;
 
 export class Combat {
   tick = 0;
+  /** Last tick anything took damage (a building or a unit): raids end when nobody has hit anything for a while. */
+  lastHitTick = 0;
   readonly units: Unit[] = [];
   readonly buildings = new Map<number, Building>();
   readonly rng: () => number;
@@ -282,6 +284,7 @@ export class Combat {
 
   private damage(b: Building, amount: number, res: StepResult) {
     if (!b.alive) return;
+    if (amount > 0) this.lastHitTick = this.tick;
     b.hp = Math.max(0, b.hp - amount);
     this.dirty.add(b.id);
     if (b.hp === 0) {
@@ -292,6 +295,7 @@ export class Combat {
 
   private hurt(u: Unit, amount: number, res: StepResult) {
     if (u.state === 'dead') return;
+    if (amount > 0) this.lastHitTick = this.tick;
     u.hp -= amount;
     if (u.hp <= 0) {
       u.hp = 0;

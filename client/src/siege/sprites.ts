@@ -89,6 +89,9 @@ const FILES = {
 } as const;
 
 /** Grave sprites live in their own folder so they can be replaced without touching the pack. */
+/** The vault: our own art (shared/scripts/draw-vault.py), intact and cracked open. */
+const VAULT = ['/game-assets/vault/vault.png', '/game-assets/vault/vault_broken.png'];
+
 const GRAVES = ['/game-assets/graveyard/grave_1.png', '/game-assets/graveyard/grave_2.png', '/game-assets/graveyard/grave_3.png', '/game-assets/graveyard/grave_4.png'];
 
 export type SpriteKey = keyof typeof FILES;
@@ -104,6 +107,8 @@ export interface Sprites extends Record<SpriteKey, Sheet> {
   /** Scenery images by index into PROP_FILES. */
   props: HTMLImageElement[];
   graves: HTMLImageElement[];
+  /** [intact, cracked open] */
+  vault: HTMLImageElement[];
 }
 
 /**
@@ -154,10 +159,10 @@ export async function loadSheet(file: string): Promise<Sheet> {
 
 export async function loadSprites(onProgress?: (done: number, total: number) => void): Promise<Sprites> {
   const named = Object.entries(FILES) as [SpriteKey, string][];
-  const total = named.length + PROP_FILES.length + GRAVES.length;
+  const total = named.length + PROP_FILES.length + GRAVES.length + VAULT.length;
   let done = 0;
   const tick = <T>(p: Promise<T>) => p.then((v) => (onProgress?.(++done, total), v));
-  const [sheets, props, graves] = await Promise.all([
+  const [sheets, props, graves, vault] = await Promise.all([
     Promise.all(
       named.map(([key, file]) =>
         tick(loadImage(url(file))).then((img): [SpriteKey, Sheet] => {
@@ -168,8 +173,9 @@ export async function loadSprites(onProgress?: (done: number, total: number) => 
     ),
     Promise.all(PROP_FILES.map((f) => tick(loadImage(url(f))))),
     Promise.all(GRAVES.map((g) => tick(loadImage(g)))),
+    Promise.all(VAULT.map((v) => tick(loadImage(v)))),
   ]);
-  return { ...(Object.fromEntries(sheets) as Record<SpriteKey, Sheet>), props, graves };
+  return { ...(Object.fromEntries(sheets) as Record<SpriteKey, Sheet>), props, graves, vault };
 }
 
 /** Draw one frame of a sheet. `flip` mirrors it horizontally around its own centre. */

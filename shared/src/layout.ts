@@ -10,6 +10,9 @@ export const RING = { x0: 2, y0: 2, x1: 11, y1: 11 };
 /** Main Tower footprint (plot-local). */
 export const HQ_RECT = { x: 5, y: 6, w: 3, h: 2 };
 
+/** The vault (where the base's coins sit): just inside the north wall, between the first posts. */
+export const VAULT_RECT = { x: 5, y: 3, w: 2, h: 1 };
+
 /** Post slots in unlock order (slot i unlocks when slotsUnlocked(hq) > i). One tile each. */
 export const SLOTS: { x: number; y: number }[] = [
   { x: 4, y: 4 },

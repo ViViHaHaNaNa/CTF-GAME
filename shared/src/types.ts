@@ -111,20 +111,32 @@ export interface RaidStatus {
   attackerId: number;
   attacker: string;
   defender: string;
-  /** Seconds left. */
-  left: number;
-  /** 0..100 */
+  /** 0..100 (Main Tower, posts and vault; walls don't count) */
   destruction: number;
+  /** Stars earned so far (0..3). */
+  stars: number;
+  /** The vault has been cracked. */
+  vault: boolean;
   deployed: number;
+  /** Raiders the attacker can still send (by the troop limit; coins permitting). */
+  armyLeft: number;
 }
+
+/** Why a raid ended. 'cancelled' = nothing was deployed: no cost, no reward, no shield. */
+export type RaidEndReason = 'cleared' | 'army' | 'ended' | 'stall' | 'cancelled' | 'failsafe';
 
 export interface RaidResult {
   id: number;
   plot: number;
   attacker: string;
   defender: string;
+  /** 1+ stars. */
   won: boolean;
+  stars: number;
+  reason: RaidEndReason;
   destruction: number;
+  /** The vault was cracked. */
+  vault: boolean;
   loot: number;
   trophies: number;
   spent: number;

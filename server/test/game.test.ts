@@ -249,8 +249,9 @@ describe('raids', () => {
     expect(game.players.get(a.id)!.coins).toBe(2000 - 12 * CONFIG.pvp.raiders.r_bat.cost);
     let guard = 0;
     while (!sent.some((s) => s.ev === 'raidEnd') && guard++ < 10_000) game.tick();
-    const res = sent.find((s) => s.ev === 'raidEnd')!.data as { won: boolean; loot: number; trophies: number };
-    expect(res.won).toBe(true);
+    const res = sent.find((s) => s.ev === 'raidEnd')!.data as { won: boolean; stars: number; reason: string; vault: boolean; loot: number; trophies: number };
+    expect(res).toMatchObject({ won: true, stars: 3, reason: 'cleared', vault: true });
+    // Everything down, vault included: the whole stake.
     expect(res.loot).toBe(Math.min(1000 * CONFIG.pvp.loot.pct, CONFIG.pvp.loot.capBase + CONFIG.pvp.loot.capPerHq));
     expect(game.players.get(d.id)!.coins).toBe(1000 - res.loot);
     expect(game.players.get(a.id)!.trophies).toBe(res.trophies);
@@ -275,12 +276,54 @@ describe('raids', () => {
     expect(sent.some((s) => s.ev === 'feed' && (s.data as { text: string }).text === 'Attacker is now #1!')).toBe(true);
   });
 
-  it('a raid with nothing deployed ends as a loss', () => {
-    const { game, a, d, sent } = twoPlayers();
+  it('nothing deployed within 30 s: cancelled, no cost to either player', () => {
+    const { game, a, d, sent, advance } = twoPlayers();
+    const rec = game.players.get(a.id)!;
+    rec.immuneUntil = 1_000_000 + 10 * 60_000;
+    rec.boosts = { attack: { pct: 0.25, uses: 3 } };
     game.attack(a.id, d.plot);
+    expect(game.players.get(a.id)!.immuneUntil).toBe(0);
     let guard = 0;
     while (!sent.some((s) => s.ev === 'raidEnd') && guard++ < 10_000) game.tick();
-    expect((sent.find((s) => s.ev === 'raidEnd')!.data as { won: boolean }).won).toBe(false);
+    const res = sent.find((s) => s.ev === 'raidEnd')!.data as { reason: string; loot: number; trophies: number };
+    expect(res).toMatchObject({ reason: 'cancelled', loot: 0, trophies: 0 });
+    expect(guard).toBe(CONFIG.pvp.stall.noDeploy * CONFIG.tickRate);
+    const after = game.players.get(a.id)!;
+    expect(after.coins).toBe(2000);
+    expect(after.immuneUntil).toBe(1_000_000 + 10 * 60_000);
+    expect(after.boosts.attack?.uses).toBe(3);
+    expect(game.players.get(d.id)!.coins).toBe(1000);
+    // No shield for the defender: nothing happened to them.
+    advance(1);
+    expect(game.raidBlock(game.login('Third', 'T9004').id, d.plot)).toBeNull();
+  });
+
+  it('End attack scores whatever is destroyed so far', () => {
+    const { game, a, d, sent } = twoPlayers();
+    game.attack(a.id, d.plot);
+    const plot = getWorld().plots[d.plot]!;
+    for (let i = 0; i < 3; i++) game.deploy(a.id, 'r_bat', plot.x + 0.5, plot.y + 0.5 + i * 0.5);
+    for (let i = 0; i < 3 * CONFIG.tickRate; i++) game.tick();
+    game.retreat(a.id);
+    game.tick();
+    const res = sent.find((s) => s.ev === 'raidEnd')!.data as { reason: string; stars: number; won: boolean };
+    expect(res.reason).toBe('ended');
+    expect(res.won).toBe(res.stars > 0);
+  });
+
+  it('every raider dead and no coins for another: the raid ends', () => {
+    const { game, a, d, sent } = twoPlayers();
+    game.attack(a.id, d.plot);
+    const plot = getWorld().plots[d.plot]!;
+    game.players.get(a.id)!.coins = CONFIG.pvp.raiders.r_bat.cost;
+    game.deploy(a.id, 'r_bat', plot.x + 0.5, plot.y + 0.5);
+    let guard = 0;
+    while (!sent.some((s) => s.ev === 'raidEnd') && guard++ < 10_000) game.tick();
+    expect((sent.find((s) => s.ev === 'raidEnd')!.data as { reason: string }).reason).toBe('army');
+    // The live status never had a timer in it.
+    const status = sent.filter((s) => s.ev === 'raid').at(-1)!.data as Record<string, unknown>;
+    expect(status).not.toHaveProperty('left');
+    expect(status).toMatchObject({ armyLeft: 0 });
   });
 
   it('deploying needs coins, charged by the server', () => {

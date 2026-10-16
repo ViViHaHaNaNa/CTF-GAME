@@ -178,6 +178,11 @@ function frame(now: number) {
   requestAnimationFrame(frame);
 }
 
+/** ★★☆ for a star count. */
+function starText(n: number): string {
+  return '★'.repeat(n) + '☆'.repeat(Math.max(0, 3 - n));
+}
+
 function clock(ms: number) {
   const s = Math.max(0, Math.ceil(ms / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
@@ -205,7 +210,7 @@ function renderScoreboard() {
   $('sb-dmg').textContent = `${dmg}%`;
   $('sb-fill').style.width = `${Math.min(100, dmg)}%`;
   $('sb-fill').classList.toggle('win', dmg >= 50);
-  $('sb-time').textContent = r ? clock(r.left * 1000) : '-';
+  $('sb-stars').textContent = starText(r?.stars ?? 0);
   $('sb-troops').textContent = String(r?.deployed ?? 0);
 }
 
@@ -216,11 +221,11 @@ function showResult(r: RaidResult) {
   $('sb-dmg').textContent = `${r.destruction}%`;
   $('sb-fill').style.width = `${Math.min(100, r.destruction)}%`;
   $('sb-fill').classList.toggle('win', r.won);
-  $('sb-time').textContent = 'over';
+  $('sb-stars').textContent = starText(r.stars);
   const el = $('result');
   el.className = `arena-result ${r.won ? 'won' : 'held'}`;
-  const detail = r.won ? `${r.destruction}% destroyed · +${r.loot} coins · +${r.trophies} trophies` : `${r.destruction}% destroyed · ${r.attacker} loses ${Math.abs(r.trophies)} trophies`;
-  el.innerHTML = `<b>${esc(r.won ? `${r.attacker} wins!` : `${r.defender} holds!`)}</b><span>${esc(detail)}</span>`;
+  const detail = r.reason === 'cancelled' ? 'Called off: nothing was sent' : r.won ? `${r.destruction}% destroyed${r.vault ? ' · vault cracked' : ''} · +${r.loot} coins · +${r.trophies} trophies` : `${r.destruction}% destroyed · ${r.attacker} loses ${Math.abs(r.trophies)} trophies`;
+  el.innerHTML = `<b>${esc(r.reason === 'cancelled' ? 'No raid' : r.won ? `${r.attacker} wins ${starText(r.stars)}` : `${r.defender} holds!`)}</b><span>${esc(detail)}</span>`;
   el.hidden = false;
 }
 

@@ -7,6 +7,10 @@ import {
   WALLS,
   Combat,
   Raid,
+  raidLoot,
+  raidStars,
+  raidTrophies,
+  type RaiderKind,
   Siege,
   applyAction,
   baseBuildings,
@@ -386,17 +390,109 @@ describe('raids', () => {
         expect(r.canDeploy('r_bat', plot.x + 0.5, plot.y + 0.5 + i * 0.3)).toBeNull();
         r.deploy('r_bat', plot.x + 0.5, plot.y + 0.5 + i * 0.3);
       }
-      while (!r.done) r.step();
-      return [r.won, r.endReason, r.combat.tick, r.combat.destruction()];
+      while (!r.done) r.step(false);
+      return [r.won, r.stars, r.endReason, r.combat.tick, r.combat.destruction()];
     };
     expect(play()).toEqual(play());
   });
 
-  it('ends on time even with nothing deployed', () => {
+  const rate = CONFIG.tickRate;
+  const S = CONFIG.pvp.stall;
+  const noPosts = () => ({ ...newBase(), posts: SLOTS.map(() => null) });
+  /** A raider with custom damage, dropped on the apron. */
+  const drop = (r: Raid, damage: number, kind: RaiderKind = 'r_bat', at = 0.5) => {
+    r.deploy(kind, plot.x + at, plot.y + 0.5);
+    r.combat.units.at(-1)!.stats = { ...r.combat.units.at(-1)!.stats, damage };
+  };
+
+  it('has no countdown: it keeps going while damage is being dealt, past 50%, until everything is down', () => {
+    const r = new Raid(1, plot, newBase(), 3, 7);
+    for (let i = 0; i < 20; i++) r.deploy('r_helmet', plot.x + 0.5 + (i % 5) * 0.5, plot.y + 0.5 + Math.floor(i / 5) * 0.4);
+    // The old rules ended a raid at 50% (or the Main Tower); now it carries on.
+    let halfAt = -1;
+    while (!r.done) {
+      r.step(false);
+      if (halfAt < 0 && r.destruction() >= 0.5) halfAt = r.combat.tick;
+    }
+    expect(halfAt).toBeGreaterThan(0);
+    expect(r.combat.tick).toBeGreaterThan(halfAt);
+    expect(r.combat.hqDestroyed).toBe(true);
+    expect(r.endReason).toBe('cleared');
+    expect(r.stars).toBe(3);
+    expect(r.vaultDown()).toBe(true);
+  });
+
+  it('nothing deployed for 30 s: cancelled', () => {
     const r = new Raid(1, plot, newBase(), 1, 1);
     while (!r.done) r.step();
+    expect(r.endReason).toBe('cancelled');
+    expect(r.combat.tick).toBe(S.noDeploy * rate);
     expect(r.won).toBe(false);
-    expect(r.endReason).toBe('idle');
+  });
+
+  it('nobody dealing damage for 15 s after the first deploy ends it', () => {
+    const r = new Raid(1, plot, noPosts(), 1, 1);
+    drop(r, 0);
+    while (!r.done) r.step();
+    expect(r.endReason).toBe('stall');
+    expect(r.combat.tick).toBeLessThanOrEqual(S.noDamage * rate + 2);
+  });
+
+  it('every raider dead and nothing left to send ends it; with army left it waits (until the stall rule)', () => {
+    const fight = (armyLeft: boolean) => {
+      const r = new Raid(1, plot, newBase(), 1, 3);
+      r.deploy('r_bat', plot.x + 0.5, plot.y + 0.5);
+      while (!r.done) r.step(armyLeft);
+      return r;
+    };
+    expect(fight(false).endReason).toBe('army');
+    expect(fight(true).endReason).toBe('stall');
+  });
+
+  it('a hidden failsafe ends any raid after 6 minutes', () => {
+    const r = new Raid(1, plot, { ...noPosts(), walls: 8 }, 1, 1);
+    drop(r, 1);
+    while (!r.done) r.step();
+    expect(r.endReason).toBe('failsafe');
+    expect(r.combat.tick).toBe(S.failsafe * rate);
+  });
+
+  it('raiders never stand idle: always walking to a target or hitting one', () => {
+    const r = new Raid(1, plot, newBase(), 4, 5);
+    for (const [i, k] of (['r_bat', 'r_pistol', 'r_helmet', 'r_shotgun'] as RaiderKind[]).entries()) r.deploy(k, plot.x + 0.5 + i, plot.y + 0.5);
+    const seen = new Map<number, { x: number; y: number; t: number }>();
+    for (let t = 0; t < 60 * rate && !r.done; t++) {
+      r.step(false);
+      for (const u of r.combat.units) {
+        if (u.state === 'dead') continue;
+        expect(['move', 'attack']).toContain(u.state);
+        expect(u.targetId).toBeGreaterThan(0);
+        // A walking unit makes progress.
+        const s = seen.get(u.id);
+        if (u.state === 'move' && s && t - s.t >= rate) expect(Math.hypot(u.x - s.x, u.y - s.y)).toBeGreaterThan(0.1);
+        if (!s || t - s.t >= rate) seen.set(u.id, { x: u.x, y: u.y, t });
+      }
+    }
+  });
+
+  it('ending early scores what was destroyed: stars, loot share and trophies', () => {
+    const r = new Raid(1, plot, newBase(), 1, 9);
+    for (let i = 0; i < 6; i++) r.deploy('r_bat', plot.x + 0.5, plot.y + 0.5 + i * 0.4);
+    while (!r.vaultDown() && !r.done) r.step();
+    r.end();
+    expect(r.endReason).toBe('ended');
+    expect(r.stars).toBe(r.currentStars());
+    expect(raidStars(0.49, false)).toBe(0);
+    expect(raidStars(0.5, false)).toBe(1);
+    expect(raidStars(0.5, true)).toBe(2);
+    expect(raidStars(1, true)).toBe(3);
+    const f = CONFIG.pvp.loot.fromVault;
+    expect(raidLoot(300, 0, false)).toBe(0);
+    expect(raidLoot(300, 1 / 3, true)).toBe(Math.round(300 * ((1 - f) / 3 + f)));
+    expect(raidLoot(300, 1, true)).toBe(300);
+    expect(raidTrophies(30, 3)).toBe(30);
+    expect(raidTrophies(30, 1)).toBe(10);
+    expect(raidTrophies(30, 0)).toBe(-15);
   });
 
   it('loot and trophies are capped and shrink against much weaker players', () => {

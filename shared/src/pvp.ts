@@ -1,8 +1,8 @@
 import { CONFIG, RAIDER_KINDS, UNIT_KINDS, type RaiderKind } from './config.ts';
 import { Combat, type UnitStats } from './engine.ts';
 import { inDeployZone } from './layout.ts';
-import { baseBuildings } from './pve.ts';
-import type { BaseState } from './types.ts';
+import { VAULT_ID, baseBuildings } from './pve.ts';
+import type { BaseState, RaidEndReason } from './types.ts';
 
 // PvP raids, Clash-of-Clans style, on the same combat engine as the zombie waves.
 // The defender's posts fight automatically; the attacker deploys raiders on the apron outside the walls.
@@ -22,15 +22,36 @@ export function isRaiderKind(k: unknown): k is RaiderKind {
   return typeof k === 'string' && (RAIDER_KINDS as readonly string[]).includes(k);
 }
 
-export type RaidEnd = 'hq' | 'destruction' | 'time' | 'retreat' | 'idle';
+/** Stars for a raid: 1 for destroying CONFIG.pvp.stars.destruction of what counts, 1 for the Main Tower, 1 for everything. */
+export function raidStars(destruction: number, hqDown: boolean): number {
+  return (destruction >= CONFIG.pvp.stars.destruction ? 1 : 0) + (hqDown ? 1 : 0) + (destruction >= 1 ? 1 : 0);
+}
 
+/** Loot from what was destroyed: `fromVault` of the stake for the vault, the rest in proportion to destruction. */
+export function raidLoot(stake: number, destruction: number, vaultDown: boolean): number {
+  const f = CONFIG.pvp.loot.fromVault;
+  return Math.round(stake * ((1 - f) * destruction + f * (vaultDown ? 1 : 0)));
+}
+
+/** Trophies for the attacker: a win pays stars/3 of the stake (at least the minimum), a 0-star raid costs a share of it. */
+export function raidTrophies(stake: number, stars: number): number {
+  const t = CONFIG.pvp.trophies;
+  return stars > 0 ? Math.max(t.min, Math.round((stake * stars) / 3)) : -Math.round(stake * t.lossFactor);
+}
+
+/**
+ * A raid has no countdown. It ends when everything that counts is destroyed, when every raider is dead
+ * and the attacker can't send more, or when they end it. Anti-stall rules end it too (no damage for a
+ * while after the first deploy; nothing deployed at all, which cancels it) and a hidden failsafe caps it.
+ */
 export class Raid {
   readonly combat: Combat;
   deployed = 0;
   done = false;
   won = false;
-  endReason: RaidEnd | null = null;
-  private lastDeployTick = 0;
+  stars = 0;
+  endReason: RaidEndReason | null = null;
+  private firstDeployTick = -1;
 
   constructor(
     readonly id: number,
@@ -42,10 +63,6 @@ export class Raid {
     readonly boosts: { attack?: number; defence?: number } = {},
   ) {
     this.combat = new Combat(seed, baseBuildings(defenderBase, plot, boosts.defence ?? 0));
-  }
-
-  get ticksLeft(): number {
-    return Math.max(0, CONFIG.pvp.duration * CONFIG.tickRate - this.combat.tick);
   }
 
   /** Validate and place a raider at a world position (tile units). The caller charges the coins. */
@@ -61,32 +78,54 @@ export class Raid {
   deploy(kind: RaiderKind, x: number, y: number): void {
     this.combat.addUnit(UNIT_KINDS.indexOf(kind), raiderStats(kind, this.attackerHq, this.boosts.attack ?? 0), x, y);
     this.deployed++;
-    this.lastDeployTick = this.combat.tick;
+    if (this.firstDeployTick < 0) this.firstDeployTick = this.combat.tick;
   }
 
-  retreat() {
-    this.finish('retreat');
+  /** The attacker taps End attack: rewards from whatever is destroyed so far. */
+  end() {
+    if (!this.done) this.finish('ended');
   }
 
-  step(): void {
+  /** Share of what counts (Main Tower, posts, vault) destroyed, 0..1. */
+  destruction(): number {
+    return this.combat.destruction();
+  }
+
+  vaultDown(): boolean {
+    return this.combat.buildings.get(VAULT_ID)?.alive === false;
+  }
+
+  /** Stars as things stand. */
+  currentStars(): number {
+    return raidStars(this.destruction(), this.combat.hqDestroyed);
+  }
+
+  /**
+   * One tick. `armyLeft`: can the attacker still send a raider (troop limit and coins)? The server
+   * knows the coins; by default only the troop limit counts.
+   */
+  step(armyLeft = this.deployed < CONFIG.pvp.maxDeploys): void {
     if (this.done) return;
     const c = this.combat;
+    const S = CONFIG.pvp.stall;
+    const r = c.rate;
     c.step();
-    if (c.hqDestroyed) return this.finish('hq');
-    if (c.destruction() >= CONFIG.pvp.winDestruction) return this.finish('destruction');
-    if (this.ticksLeft === 0) return this.finish('time');
-    const idle = c.tick - this.lastDeployTick > CONFIG.pvp.idleEnd * CONFIG.tickRate;
-    if (idle && c.liveUnits === 0) this.finish('idle');
+    if (this.destruction() >= 1) return this.finish('cleared');
+    if (this.deployed > 0 && c.liveUnits === 0 && !armyLeft) return this.finish('army');
+    if (this.deployed > 0 && c.tick - Math.max(this.firstDeployTick, c.lastHitTick) >= S.noDamage * r) return this.finish('stall');
+    if (this.deployed === 0 && c.tick >= S.noDeploy * r) return this.finish('cancelled');
+    if (c.tick >= S.failsafe * r) this.finish('failsafe');
   }
 
-  private finish(reason: RaidEnd) {
+  private finish(reason: RaidEndReason) {
     this.done = true;
     this.endReason = reason;
-    this.won = this.combat.hqDestroyed || this.combat.destruction() >= CONFIG.pvp.winDestruction;
+    this.stars = reason === 'cancelled' ? 0 : this.currentStars();
+    this.won = this.stars > 0;
   }
 }
 
-/** Loot a win takes from a defender with `coins`, before the weaker-target factor. */
+/** The loot stake against a defender with `coins` (a full-destruction raid with the vault takes all of it), before the weaker-target factor. */
 export function lootable(coins: number, defenderHq: number): number {
   const l = CONFIG.pvp.loot;
   return Math.max(0, Math.min(coins - l.protectedFloor, Math.round(coins * l.pct), l.capBase + l.capPerHq * defenderHq));

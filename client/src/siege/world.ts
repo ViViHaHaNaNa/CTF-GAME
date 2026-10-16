@@ -8,6 +8,8 @@ import {
   RING,
   SLOTS,
   UNIT_KINDS,
+  VAULT_ID,
+  VAULT_RECT,
   WALLS,
   ALLEY,
   PROP_FILES,
@@ -52,7 +54,7 @@ const HPX = world.h * T;
 /** Crossroads in the middle of the map, where global crates land (world px). */
 export const CRATE_SPOT = { x: world.centre[0] * T, y: world.centre[1] * T + 8 };
 
-export type BasePick = { kind: 'hq' } | { kind: 'walls' } | { kind: 'slot'; slot: number };
+export type BasePick = { kind: 'hq' } | { kind: 'walls' } | { kind: 'vault' } | { kind: 'slot'; slot: number };
 
 interface UnitView {
   id: number;
@@ -118,7 +120,7 @@ const BOOM_MS = 650;
 /** One depth-sorted thing to draw on a base (records are reused frame to frame). */
 interface DrawItem {
   y: number;
-  /** 0 wall, 1 Main Tower, 2 post, 3 empty slot, 4 unit */
+  /** 0 wall, 1 Main Tower, 2 post, 3 empty slot, 4 unit, 5 Commander, 6 vault */
   kind: number;
   i: number;
   unit: UnitView | null;
@@ -446,6 +448,7 @@ export class WorldView {
     const tx = Math.floor(wx / T) - p.x;
     const ty = Math.floor(wy / T) - p.y;
     if (tx >= HQ_RECT.x && tx < HQ_RECT.x + HQ_RECT.w && ty >= HQ_RECT.y - 1 && ty < HQ_RECT.y + HQ_RECT.h) return { kind: 'hq' };
+    if (tx >= VAULT_RECT.x && tx < VAULT_RECT.x + VAULT_RECT.w && ty >= VAULT_RECT.y - 1 && ty < VAULT_RECT.y + VAULT_RECT.h) return { kind: 'vault' };
     const slot = SLOTS.findIndex((s) => s.x === tx && (s.y === ty || s.y - 1 === ty));
     if (slot >= 0) return { kind: 'slot', slot };
     const onRing = (tx === RING.x0 || tx === RING.x1 || ty === RING.y0 || ty === RING.y1) && tx >= RING.x0 && tx <= RING.x1 && ty >= RING.y0 && ty <= RING.y1;
@@ -1245,6 +1248,7 @@ export class WorldView {
     const reinforced = base.walls >= CONFIG.walls.reinforcedFromLevel;
     WALLS.forEach((w, i) => put(oy + w.y * T + 14, 0, i, null));
     put(oy + (HQ_RECT.y + HQ_RECT.h) * T, 1, 0, null);
+    put(oy + (VAULT_RECT.y + VAULT_RECT.h) * T, 6, 0, null);
     const mine = plot === this.myPlot;
     const unlocked = slotsUnlocked(base.hq);
     SLOTS.forEach((s, i) => {
@@ -1288,6 +1292,9 @@ export class WorldView {
           this.drawSlot(g, ox + s.x * T, oy + s.y * T, it.i < unlocked);
           break;
         }
+        case 6:
+          this.drawVault(g, ox + VAULT_RECT.x * T, oy + VAULT_RECT.y * T, l?.hp.get(VAULT_ID) ?? 100);
+          break;
         case 5: {
           const wp = world.plots[plot]!;
           this.drawCommander(g, plot, base, l, now, ox - wp.x * T, oy - wp.y * T);
@@ -1380,6 +1387,14 @@ export class WorldView {
     if (dir === 'h') g.drawImage((reinforced ? this.sprites.wallReinH : this.sprites.wallWoodH).img, x, y + 1);
     else g.drawImage((reinforced ? this.sprites.wallReinV : this.sprites.wallWoodV).img, x + 4, y);
     if (hp < 100) this.hpBar(g, x + 2, y - 2, 12, hp);
+  }
+
+  /** The vault (2x1 tiles at x, y): cracked open once raiders break it. */
+  private drawVault(g: CanvasRenderingContext2D, x: number, y: number, hp: number) {
+    const img = this.sprites.vault[hp <= 0 ? 1 : 0]!;
+    this.softShadow(g, x + 16, y + 15, 14, 3);
+    g.drawImage(img, x, y + T - img.height + 1);
+    if (hp > 0 && hp < 100) this.hpBar(g, x + 6, y + T - img.height - 2, 20, hp);
   }
 
   private drawHq(g: CanvasRenderingContext2D, x: number, y: number, level: number, hp: number) {

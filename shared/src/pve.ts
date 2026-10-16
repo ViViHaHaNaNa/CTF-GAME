@@ -1,6 +1,6 @@
 import { COMMANDER_WEAPONS, CONFIG, UNIT_KINDS, postStats, type ZombieKind } from './config.ts';
 import { Combat, mulberry32, type BuildingDef, type StepResult, type Unit, type UnitStats } from './engine.ts';
-import { HQ_RECT, PLOT, SLOTS, WALLS } from './layout.ts';
+import { HQ_RECT, PLOT, SLOTS, VAULT_RECT, WALLS } from './layout.ts';
 import type { BaseState } from './types.ts';
 import { getWorld, sideTile, type WorldPlot } from './world.ts';
 
@@ -13,6 +13,7 @@ import { getWorld, sideTile, type WorldPlot } from './world.ts';
 // the same way online (streamed live) or headless (offline bases, resolved at a coarse tick rate).
 
 export const HQ_ID = 1;
+export const VAULT_ID = 2;
 export const wallId = (i: number) => 100 + i;
 export const postId = (slot: number) => 200 + slot;
 
@@ -29,7 +30,10 @@ export function baseBuildings(base: BaseState, plot: { x: number; y: number }, d
   const boost = 1 + defenceBoost;
   const ox = plot.x;
   const oy = plot.y;
-  const defs: BuildingDef[] = [{ id: HQ_ID, kind: 'hq', x: ox + HQ_RECT.x, y: oy + HQ_RECT.y, w: HQ_RECT.w, h: HQ_RECT.h, hp: CONFIG.hq.hp(base.hq) }];
+  const defs: BuildingDef[] = [
+    { id: HQ_ID, kind: 'hq', x: ox + HQ_RECT.x, y: oy + HQ_RECT.y, w: HQ_RECT.w, h: HQ_RECT.h, hp: CONFIG.hq.hp(base.hq) },
+    { id: VAULT_ID, kind: 'vault', x: ox + VAULT_RECT.x, y: oy + VAULT_RECT.y, w: VAULT_RECT.w, h: VAULT_RECT.h, hp: CONFIG.vault.hp(base.hq) },
+  ];
   const wallHp = CONFIG.walls.hp(base.walls);
   for (const w of WALLS) defs.push({ id: wallId(w.i), kind: 'wall', x: ox + w.x, y: oy + w.y, w: 1, h: 1, hp: wallHp });
   base.posts.forEach((p, slot) => {

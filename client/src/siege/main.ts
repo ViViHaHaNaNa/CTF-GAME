@@ -9,6 +9,7 @@ import {
   inOtherPlot,
   inTapReach,
   liveBoosts,
+  lootable,
   postStats,
   quote,
   raiderUnlocked,
@@ -242,10 +243,12 @@ function bindNet() {
     lastRaidEnd = r.id;
     if (myRaid && r.id === myRaid.id) {
       endRaidMode();
-      if (r.won) toast(`Raid won! ${r.destruction}% destroyed. +${r.loot} coins, +${r.trophies} trophies`, 'good', 6000);
-      else toast(`Raid failed (${r.destruction}% destroyed). ${r.trophies} trophies`, 'bad', 6000);
+      if (r.reason === 'cancelled') toast('Raid called off: nothing was sent, so it cost nothing.', '', 5000);
+      else if (r.won) toast(`${starText(r.stars)} Raid won! ${r.destruction}% destroyed${r.vault ? ', vault cracked' : ''}. +${r.loot} coins, +${r.trophies} trophies`, 'good', 6000);
+      else toast(`Raid failed (${r.destruction}% destroyed${r.loot ? `, +${r.loot} coins` : ''}). ${r.trophies} trophies`, 'bad', 6000);
     } else if (player && r.plot === player.plot) {
-      if (r.won) toast(`${r.attacker} broke through and took ${r.loot} coins. Your base is shielded for a bit.`, 'bad', 6000);
+      if (r.reason === 'cancelled') return;
+      if (r.won) toast(`${r.attacker} raided you ${starText(r.stars)} and took ${r.loot} coins. Your base is shielded for a bit.`, 'bad', 6000);
       else toast(`You held off ${r.attacker}!`, 'good', 5000);
     }
   });
@@ -1006,12 +1009,18 @@ function renderBanner(now: number) {
   }
 }
 
+
+/** ★★☆ for a star count. */
+function starText(n: number): string {
+  return '★'.repeat(n) + '☆'.repeat(Math.max(0, 3 - n));
+}
+
 function renderAttackBar() {
   if (!myRaid || !player) return;
-  const t = Math.max(0, myRaid.left);
-  $('raid-title').textContent = `Raiding ${myRaid.defender}`;
-  $('raid-time').textContent = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+  $('raid-title').textContent = `Raiding ${myRaid.defender}${myRaid.vault ? ' · vault cracked!' : ''}`;
+  $('raid-stars').textContent = starText(myRaid.stars);
   $('raid-dmg').textContent = `${myRaid.destruction}%`;
+  $('raid-army').textContent = String(myRaid.armyLeft);
   const html = RAIDER_KINDS.map((k) => {
     const c = CONFIG.pvp.raiders[k];
     const locked = !raiderUnlocked(k, player!.base.hq);
@@ -1110,10 +1119,10 @@ function otherPanel(): string {
   return `${head(esc(s.name))}<p class="sub">${status}</p>${stats([
     ['Main Tower', `Lv ${s.hq}`],
     ['Trophies', s.trophies],
-    ['Lootable', `~${s.loot}`],
+    ['Loot', `up to ~${s.loot}`],
     ['Walls', `Lv ${s.walls}`],
     ['Posts', posts],
-    ['Win', `+${win} ♛`],
+    ['Win', `up to +${win} ♛ (3★)`],
   ])}<div class="actions"><button class="btn" data-attack="${s.p}" ${why ? 'disabled' : ''}>Attack<small>${why ? esc(why) : 'Raiders cost coins to send'}</small></button><button class="btn secondary" data-spectate="${s.p}">Spectate<small>Watch this base</small></button></div>`;
 }
 
@@ -1130,7 +1139,7 @@ function livePanel(): string {
   const rows = list
     .map((b) => {
       const l = view.live.get(b.p)?.raid;
-      const extra = l ? `${l.destruction}% · ${clock(l.left * 1000)}` : 'live';
+      const extra = l ? `${starText(l.stars)} ${l.destruction}%` : 'live';
       return `<li><button data-jump="${b.p}"><span class="nm">${esc(b.raider ?? '?')} ⚔ ${esc(b.name)}</span><span class="val">${extra}</span></button></li>`;
     })
     .join('');
@@ -1192,6 +1201,13 @@ function minePanel(): string {
       ['Health each', CONFIG.walls.hp(base.walls)],
       ['Next level', base.walls < CONFIG.walls.maxLevel ? `${CONFIG.walls.hp(base.walls + 1)} (${nextKind})` : 'Max'],
     ])}<div class="actions">${button(`Upgrade to Lv ${base.walls + 1}`, { kind: 'walls' })}</div>${waveNote}`;
+  }
+  if (sel.kind === 'vault') {
+    const f = Math.round(100 * CONFIG.pvp.loot.fromVault);
+    return `${head('Vault')}<p class="sub">Your coins sit here. Raiders who crack it take ${f}% of the loot they could steal; the rest depends on how much of your base they destroy. It grows tougher with your Main Tower. Keep posts close to it.</p>${stats([
+      ['Health', CONFIG.vault.hp(base.hq)],
+      ['Loot at stake now', `up to ${lootable(player!.coins, base.hq)} coins`],
+    ])}${waveNote}`;
   }
   const slot = sel.slot;
   const p = base.posts[slot];

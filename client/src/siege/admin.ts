@@ -144,7 +144,7 @@ function render() {
       )
       .join('') || '<tr><td colspan="8" class="note">No players.</td></tr>',
   );
-  put('raids', s.raids.map((r) => `<li><b>${esc(r.attacker)}</b> ⚔ <b>${esc(r.defender)}</b> · ${r.destruction}% · ${clock(r.left * 1000)} left</li>`).join('') || '<li class="note">None right now.</li>');
+  put('raids', s.raids.map((r) => `<li><b>${esc(r.attacker)}</b> ⚔ <b>${esc(r.defender)}</b> · ${r.destruction}% · ${'★'.repeat(r.stars)}${'☆'.repeat(3 - r.stars)} · ${r.deployed} sent</li>`).join('') || '<li class="note">None right now.</li>');
   put('feed', [...s.feed].reverse().map((f) => `<li>${new Date(f.t).toLocaleTimeString()} · ${esc(f.text)}</li>`).join('') || '<li class="note">Nothing yet.</li>');
 }
 

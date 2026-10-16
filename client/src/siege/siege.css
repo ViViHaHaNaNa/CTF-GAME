@@ -85,6 +85,7 @@ body.siege { overflow: hidden; display: flex; flex-direction: column; height: 10
 .attack-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: var(--text-sm); }
 .attack-top > span:first-child { font-weight: var(--weight-heavy); color: var(--danger-text); flex: 1; min-width: 120px; }
 .raid-stat { color: var(--muted); }
+.raid-stars { font-size: var(--text-lg); letter-spacing: 2px; color: var(--star); text-shadow: 1px 1px 0 var(--star-shadow); }
 .raid-stat b { color: var(--ink); font-family: var(--font-mono); }
 .troops { display: flex; gap: var(--gap); overflow-x: auto; }
 .troop { flex: 1 0 88px; min-height: 56px; border-radius: var(--radius); border: var(--border) solid var(--line); background: var(--surface-2); color: var(--ink); font: inherit; font-weight: var(--weight-bold); font-size: var(--text-sm); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }

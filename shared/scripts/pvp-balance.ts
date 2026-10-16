@@ -7,7 +7,8 @@ const b = (hq: number, walls: number, posts: [string, number][]): BaseState => (
   hq, walls, posts: Array.from({ length: 8 }, (_, i) => (posts[i] ? { type: posts[i]![0] as never, level: posts[i]![1] } : null)),
 });
 function raid(label: string, def: BaseState, atkHq: number, army: [RaiderKind, number][], n = 60) {
-  let wins = 0, destr = 0, cost = 0, ticks = 0;
+  let wins = 0, destr = 0, cost = 0, ticks = 0, stars = 0, vaults = 0;
+  const why = new Map<string, number>();
   for (let s = 1; s <= n; s++) {
     const r = new Raid(s, plot, def, atkHq, s * 977);
     // drop the army on the apron near one corner, a few at a time
@@ -15,15 +16,20 @@ function raid(label: string, def: BaseState, atkHq: number, army: [RaiderKind, n
     for (const [kind, count] of army) for (let i = 0; i < count; i++) {
       r.deploy(kind, plot.x + 0.5 + (i % 3) * 0.6, plot.y + 0.5 + Math.floor(i / 3) * 0.4);
       cost += CONFIG.pvp.raiders[kind].cost;
-      for (let k = 0; k < 4; k++) r.step();
+      for (let k = 0; k < 4; k++) r.step(true);
       t++;
     }
-    while (!r.done) r.step();
+    // Army spent: the raid plays out until the raiders are dead or everything is down (no timer).
+    while (!r.done) r.step(false);
     if (r.won) wins++;
+    stars += r.stars;
+    if (r.vaultDown()) vaults++;
+    why.set(r.endReason!, (why.get(r.endReason!) ?? 0) + 1);
     destr += r.combat.destruction();
     ticks += r.combat.tick;
   }
-  console.log(`${label.padEnd(46)} win ${String(Math.round((100 * wins) / n)).padStart(3)}%  destruction ${(100 * destr / n).toFixed(0).padStart(3)}%  cost ${String(Math.round(cost / n)).padStart(3)}  lasts ${(ticks / n / CONFIG.tickRate).toFixed(0).padStart(3)}s`);
+  const reasons = [...why].map(([k, v]) => `${k} ${v}`).join(', ');
+  console.log(`${label.padEnd(46)} win ${String(Math.round((100 * wins) / n)).padStart(3)}%  stars ${(stars / n).toFixed(1)}  destruction ${(100 * destr / n).toFixed(0).padStart(3)}%  vault ${String(Math.round((100 * vaults) / n)).padStart(3)}%  cost ${String(Math.round(cost / n)).padStart(3)}  lasts ${(ticks / n / CONFIG.tickRate).toFixed(0).padStart(3)}s  (${reasons})`);
 }
 raid('HQ1 attacker: 6 bats vs starter base', newBase(), 1, [['r_bat', 6]]);
 raid('HQ1 attacker: 10 bats vs starter base', newBase(), 1, [['r_bat', 10]]);

@@ -119,6 +119,8 @@
   --ammo: #ffd23f;                   /* tap-to-attack ammo bar, combo, airstrike button */
   --ammo-spent: rgba(255, 255, 255, 0.16);
   --combo: #ffd23f;
+  --star: #ffd23f;                   /* raid stars */
+  --star-shadow: #5a3a00;
   --combo-shadow: #7a1a0a;
   --strike: #ff5a3c;
   --strike-ink: #ffffff;

@@ -60,6 +60,11 @@ export const CONFIG = {
     postUnlock: { pistol: 1, gun: 2, shotgun: 3 } as Record<PostType, number>,
   },
 
+  /** The vault: raiders who crack it take a bigger share of the loot. It grows tougher with the Main Tower. */
+  vault: {
+    hp: (hq: number) => 250 + 90 * (hq - 1),
+  },
+
   posts: {
     maxLevel: 8,
     /** Level at which survivors get helmets (visual only). */
@@ -210,12 +215,22 @@ export const CONFIG = {
   },
 
   pvp: {
-    /** Battle length in seconds. */
-    duration: 180,
-    /** Destruction share (non-wall buildings) that wins the raid. Losing the Main Tower also wins it. */
-    winDestruction: 0.5,
-    /** The raid ends early if no raider is alive and nothing was deployed for this long. */
-    idleEnd: 20,
+    /**
+     * Raids have no countdown. One ends when everything that counts is down (Main Tower, posts, vault;
+     * not walls), when every raider is dead and the attacker can't send more, or when they tap End attack.
+     * Anti-stall: these end it too, so a raid can never hang.
+     */
+    stall: {
+      /** After the first deploy: this long with no damage dealt by either side ends the raid. */
+      noDamage: 15,
+      /** Nothing deployed this long after the battle starts: cancelled, no cost to either player. */
+      noDeploy: 30,
+      /** Hidden failsafe (never shown): no raid runs longer than this. */
+      failsafe: 360,
+    },
+    /** Stars: one for destroying this share of what counts, one for the Main Tower, one for everything. A win is 1+ star. */
+    stars: { destruction: 0.5 },
+    /** Raiders the attacker can send in one raid (with enough coins). */
     maxDeploys: 40,
     /** Raider stats grow with the attacker's Main Tower level. */
     troopScale: (hq: number) => 1 + 0.15 * (hq - 1),
@@ -227,7 +242,12 @@ export const CONFIG = {
       r_shotgun: { unlockHq: 4, cost: 45, hp: 65, speed: 1.0, damage: 20, cooldown: 1.4, range: 1.8, wallMult: 1 },
     } as Record<RaiderKind, { unlockHq: number; cost: number; hp: number; speed: number; damage: number; cooldown: number; range: number; wallMult: number }>,
     loot: {
-      /** Share of the defender's coins a winning raid steals... */
+      /**
+       * Loot comes from what was destroyed, win or lose: `fromVault` of the stake for cracking the vault,
+       * the rest in proportion to the destruction share.
+       */
+      fromVault: 0.5,
+      /** The stake: this share of the defender's coins... */
       pct: 0.2,
       /** ...capped at base + perHq * defender HQ level... */
       capBase: 300,
@@ -241,7 +261,7 @@ export const CONFIG = {
       perDiff: 0.05,
       min: 5,
       max: 50,
-      /** A failed raid costs the attacker this share of what a win would have paid. */
+      /** A win pays stars/3 of the stake (at least `min`); a 0-star raid costs the attacker this share of the stake. */
       lossFactor: 0.5,
     },
     /** Raiding a much weaker player (fewer trophies) pays less loot: factor shrinks to `min` at `span` trophies below. */

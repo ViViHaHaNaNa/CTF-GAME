@@ -14,11 +14,15 @@ import {
   grantCrate,
   liveBoosts,
   isRaiderKind,
+  RAIDER_KINDS,
   lootable,
   newBase,
   newDirector,
   parseAction,
   quote,
+  raidLoot,
+  raidTrophies,
+  raiderUnlocked,
   rollRarity,
   trophyStake,
   weakerFactor,
@@ -82,6 +86,8 @@ interface RaidState {
   spent: number;
   /** The attacker's loot boost, used up by this raid. */
   lootBoost: number;
+  /** The attacker's boosts and immunity before the raid, given back if it's cancelled (nothing deployed). */
+  before: { boosts: PlayerRecord['boosts']; immuneUntil: number };
 }
 
 interface CrateState {
@@ -429,6 +435,7 @@ export class GameServer {
     const b = liveBoosts(a.boosts, t);
     if (b.attack) b.attack = { ...b.attack, uses: b.attack.uses - 1 };
     if (b.loot) b.loot = { ...b.loot, uses: b.loot.uses - 1 };
+    const before = { boosts: a.boosts, immuneUntil: a.immuneUntil };
     a.boosts = liveBoosts(b, t);
     a.immuneUntil = 0;
     this.save(a);
@@ -436,7 +443,7 @@ export class GameServer {
     this.out.toPlayer(a.id, 'player', this.view(a));
     const id = ++this.raidSeq;
     const raid = new Raid(id, getWorld().plots[plot]!, d.base, a.base.hq, seedOf(id, this.tickNo), { attack: attackBoost, defence: this.defenceBoost(d) });
-    const r: RaidState = { raid, attackerId: a.id, defenderId: d.id, spent: 0, lootBoost };
+    const r: RaidState = { raid, attackerId: a.id, defenderId: d.id, spent: 0, lootBoost, before };
     this.raids.set(id, r);
     this.raidByPlot.set(plot, id);
     this.raidByAttacker.set(a.id, id);
@@ -527,10 +534,18 @@ export class GameServer {
     this.ownSiege(id)?.siege.reload();
   }
 
+  /** The attacker taps End attack: the raid is scored on what's destroyed so far. */
   retreat(attackerId: number) {
     const rid = this.raidByAttacker.get(attackerId);
     if (rid === undefined) return;
-    this.raids.get(rid)!.raid.retreat();
+    this.raids.get(rid)!.raid.end();
+  }
+
+  /** Raiders the attacker can still send: the troop limit, and enough coins for the cheapest one unlocked. */
+  private armyLeft(r: RaidState): number {
+    const a = this.players.get(r.attackerId)!;
+    const cheapest = Math.min(...RAIDER_KINDS.filter((k) => raiderUnlocked(k, a.base.hq)).map((k) => CONFIG.pvp.raiders[k].cost));
+    return a.coins >= cheapest ? Math.max(0, CONFIG.pvp.maxDeploys - r.raid.deployed) : 0;
   }
 
   raidStatus(r: RaidState): RaidStatus {
@@ -540,9 +555,11 @@ export class GameServer {
       attackerId: r.attackerId,
       attacker: this.players.get(r.attackerId)!.name,
       defender: this.players.get(r.defenderId)!.name,
-      left: Math.ceil(r.raid.ticksLeft / CONFIG.tickRate),
-      destruction: Math.round(100 * r.raid.combat.destruction()),
+      destruction: Math.round(100 * r.raid.destruction()),
+      stars: r.raid.currentStars(),
+      vault: r.raid.vaultDown(),
       deployed: r.raid.deployed,
+      armyLeft: this.armyLeft(r),
     };
   }
 
@@ -636,7 +653,7 @@ export class GameServer {
 
   private tickRaid(r: RaidState) {
     const raid = r.raid;
-    raid.step();
+    raid.step(this.armyLeft(r) > 0);
     const plot = raid.plot.id;
     if (raid.combat.tick % CONFIG.snapshotEvery === 0 || raid.done) this.out.toBase(plot, 'snap', encodeSnapshot(plot, raid.combat.snapshot()));
     if (raid.combat.tick % CONFIG.tickRate === 0) this.out.toBase(plot, 'raid', this.raidStatus(r));
@@ -648,21 +665,40 @@ export class GameServer {
     const plot = raid.plot.id;
     const a = this.players.get(r.attackerId)!;
     const d = this.players.get(r.defenderId)!;
+    this.raids.delete(raid.id);
+    this.raidByPlot.delete(plot);
+    this.raidByAttacker.delete(a.id);
+    this.markDirty(plot);
+    this.markDirty(a.plot);
+    const destruction = raid.destruction();
+    const vault = raid.vaultDown();
+    const base = { id: raid.id, plot, attacker: a.name, defender: d.name, stars: raid.stars, reason: raid.endReason!, destruction: Math.round(100 * destruction), vault, spent: r.spent };
+    if (raid.endReason === 'cancelled') {
+      // Nothing was sent: no cost to either side. The attacker gets their boosts and immunity back.
+      a.boosts = r.before.boosts;
+      a.immuneUntil = r.before.immuneUntil;
+      this.save(a);
+      const result: RaidResult = { ...base, won: false, loot: 0, trophies: 0 };
+      this.out.toBase(plot, 'raidEnd', result);
+      this.out.toPlayer(a.id, 'raidEnd', result);
+      this.out.toPlayer(a.id, 'player', this.view(a));
+      if (this.live.has(plot)) this.startSiege(plot, { ramp: false, firstDelay: AFTER_RAID });
+      return;
+    }
+    // Rewards come from whatever was destroyed when it ended, however it ended.
     const stake = trophyStake(a.trophies, d.trophies);
     const rankBefore = this.rankOf(a.id);
-    let loot = 0;
-    let trophies = 0;
-    if (raid.won) {
-      loot = Math.round(lootable(d.coins, d.base.hq) * weakerFactor(a.trophies, d.trophies) * (1 + r.lootBoost));
-      loot = Math.max(0, Math.min(loot, d.coins - CONFIG.pvp.loot.protectedFloor));
-      d.coins -= loot;
-      a.coins += loot;
-      trophies = stake;
-      a.trophies += stake;
-      d.trophies = Math.max(0, d.trophies - stake);
+    let loot = raidLoot(lootable(d.coins, d.base.hq) * weakerFactor(a.trophies, d.trophies) * (1 + r.lootBoost), destruction, vault);
+    loot = Math.max(0, Math.min(loot, d.coins - CONFIG.pvp.loot.protectedFloor));
+    d.coins -= loot;
+    a.coins += loot;
+    let trophies = raidTrophies(stake, raid.stars);
+    if (trophies > 0) {
+      a.trophies += trophies;
+      d.trophies = Math.max(0, d.trophies - trophies);
     } else {
-      trophies = -Math.round(stake * CONFIG.pvp.trophies.lossFactor);
       const lose = Math.min(a.trophies, -trophies);
+      trophies = -lose;
       a.trophies -= lose;
       d.trophies += lose;
     }
@@ -673,17 +709,13 @@ export class GameServer {
     }
     this.save(a);
     this.save(d);
-    this.raids.delete(raid.id);
-    this.raidByPlot.delete(plot);
-    this.raidByAttacker.delete(a.id);
-    this.markDirty(plot);
-    this.markDirty(a.plot);
-    const result: RaidResult = { id: raid.id, plot, attacker: a.name, defender: d.name, won: raid.won, destruction: Math.round(100 * raid.combat.destruction()), loot, trophies, spent: r.spent };
+    const result: RaidResult = { ...base, won: raid.won, loot, trophies };
     this.out.toBase(plot, 'raidEnd', result);
     this.out.toPlayer(a.id, 'raidEnd', result);
     this.out.toPlayer(d.id, 'player', this.view(d));
     this.out.toPlayer(a.id, 'player', this.view(a));
-    this.pushFeed(raid.won ? `${a.name} raided ${d.name} for ${loot} coins (+${trophies} trophies)` : `${d.name} fought off ${a.name}`, 'raid');
+    const stars = '★'.repeat(raid.stars);
+    this.pushFeed(raid.won ? `${a.name} raided ${d.name} ${stars} for ${loot} coins (+${trophies} trophies)` : `${d.name} fought off ${a.name}${loot ? ` (lost ${loot} coins)` : ''}`, 'raid');
     // Climbing into the top 3 (or to #1) is news.
     const rankAfter = this.rankOf(a.id);
     if (!this.admin.frozen && rankAfter < rankBefore && rankAfter <= 3 && a.trophies > 0) this.pushFeed(rankAfter === 1 ? `${a.name} is now #1!` : `${a.name} climbed to #${rankAfter}`, 'rank');
