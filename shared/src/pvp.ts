@@ -10,7 +10,8 @@ import type { BaseState } from './types.ts';
 export function raiderStats(kind: RaiderKind, attackerHq: number, attackBoost = 0): UnitStats {
   const r = CONFIG.pvp.raiders[kind];
   const k = CONFIG.pvp.troopScale(attackerHq);
-  return { hp: Math.round(r.hp * k), speed: r.speed, damage: Math.round(r.damage * k * (1 + attackBoost)), cooldown: r.cooldown, range: r.range, wallMult: r.wallMult, target: 'nearest' };
+  const pace = CONFIG.pace;
+  return { hp: Math.round(r.hp * k), speed: r.speed * pace.raiderSpeed, damage: Math.round(r.damage * k * (1 + attackBoost)), cooldown: r.cooldown * pace.raiderCooldown, range: r.range, wallMult: r.wallMult, target: 'nearest' };
 }
 
 export function raiderUnlocked(kind: RaiderKind, hq: number): boolean {

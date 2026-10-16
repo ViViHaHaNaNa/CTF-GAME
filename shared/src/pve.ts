@@ -33,9 +33,9 @@ export function zombieStats(kind: ZombieKind, hq: number): UnitStats {
   const z = CONFIG.zombies[kind];
   return {
     hp: Math.round(z.hp * CONFIG.waves.hpScale(hq)),
-    speed: z.speed,
+    speed: z.speed * CONFIG.pace.zombieSpeed,
     damage: Math.round(z.damage * CONFIG.waves.damageScale(hq)),
-    cooldown: z.cooldown,
+    cooldown: z.cooldown * CONFIG.pace.zombieCooldown,
     range: z.range,
     wallMult: z.wallMult,
     target: 'hq',

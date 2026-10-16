@@ -76,6 +76,7 @@ client/public/game-assets/graveyard/        grave_1..4.png (our own; replace fre
 - **Main Tower** has no sprite in the pack: it's a shipping container that changes colour and gains antennas/AC/barrels with level.
 - **Login**: display name + roll number; one account per roll number and the name must match on return. The session token lives in localStorage.
 - **Questions**: 30 short-answer questions (fill-in-the-blank, predict-the-output) in C, C++ and Python: 13 from v1 plus 17 new ones, each checked by actually running the code. v1's write-a-function questions were dropped (they needed a code sandbox). Add more by editing `server/data/questions.json` (id, prompt, code, lang, kind, answers, difficulty) and restarting the server; a test checks every question accepts its own answers.
+- **Combat pace** (`CONFIG.pace`): raiders walk 1.6x and they and the posts attack 30% more often; zombies walk 1.25x. To keep it fair, posts got -5% damage / +10% health and kill coins -15%. Checked with `shared/scripts/pve-balance.ts` and `pvp-balance.ts`: income within ~10% of before, a neglected base is breached 12% of waves (was 10%), and every raid tipping point is unchanged (e.g. 3 bats lose / 4 win vs a starter base); raids are ~30% shorter.
 - **Pacing** (from `shared/scripts/pve-balance.ts`): about 22 coins/min at the start, 39/min with two pistols, around 93/min at Main Tower Lv 2; new players start with 120 coins, enough for a second post straight away.
 
 ## Asset licence (important)

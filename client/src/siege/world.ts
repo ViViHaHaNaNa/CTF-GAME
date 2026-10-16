@@ -778,7 +778,7 @@ export class WorldView {
       frame = Math.floor(now / 110 + u.id);
     } else {
       sheet = s[sh.walk] as Sheet;
-      frame = Math.floor(now / 120 + u.id);
+      frame = Math.floor(now / (120 / CONFIG.pace.zombieSpeed) + u.id); // legs keep up with the walking pace
     }
     g.fillStyle = 'rgba(0, 0, 0, 0.25)';
     g.fillRect(Math.round(x - 4), Math.round(y - 1), 8, 2);
@@ -797,7 +797,7 @@ export class WorldView {
       g.globalAlpha = 1;
       return;
     }
-    const frame = Math.floor(now / 100 + u.id) % 6;
+    const frame = Math.floor(now / (u.state === 0 ? 100 / CONFIG.pace.raiderSpeed : 100) + u.id) % 6;
     const img = this.survivor(look.weapon, look.helmet, frame, u.state === 0, 'rgba(200, 40, 40, 0.35)');
     const ox = Math.round(x - 14);
     const oy = Math.round(y - 19);

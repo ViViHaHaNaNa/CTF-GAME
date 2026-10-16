@@ -27,6 +27,23 @@ export const CONFIG = {
     starterPost: 'pistol' as PostType,
   },
 
+  /**
+   * Combat pace. Speeds and cooldowns in the tables below are base values; the game multiplies them
+   * by these. Movement in tiles per second, cooldowns in seconds between hits/shots.
+   */
+  pace: {
+    /** Raider walking speed. */
+    raiderSpeed: 1.6,
+    /** Time between raider hits/shots. */
+    raiderCooldown: 0.7,
+    /** Time between post shots. */
+    postCooldown: 0.7,
+    /** Zombie walking speed. */
+    zombieSpeed: 1.25,
+    /** Time between zombie hits. */
+    zombieCooldown: 1,
+  },
+
   hq: {
     maxLevel: 8,
     hp: (level: number) => 600 + 250 * (level - 1),
@@ -43,9 +60,10 @@ export const CONFIG = {
     /** Level at which survivors get helmets (visual only). */
     helmetFromLevel: 4,
     types: {
-      pistol: { build: 60, range: 5.5, damage: 7, damagePerLevel: 3, cooldown: 0.6, hp: 150, hpPerLevel: 50, splash: 0 },
-      gun: { build: 180, range: 7, damage: 12, damagePerLevel: 5, cooldown: 0.9, hp: 180, hpPerLevel: 60, splash: 0 },
-      shotgun: { build: 300, range: 3.5, damage: 9, damagePerLevel: 4, cooldown: 1.3, hp: 220, hpPerLevel: 70, splash: 0.9 },
+      // Retuned for the faster pace (posts fire every cooldown x pace.postCooldown): a touch less damage, more health.
+      pistol: { build: 60, range: 5.5, damage: 7, damagePerLevel: 3, cooldown: 0.6, hp: 165, hpPerLevel: 55, splash: 0 },
+      gun: { build: 180, range: 7, damage: 11, damagePerLevel: 5, cooldown: 0.9, hp: 198, hpPerLevel: 66, splash: 0 },
+      shotgun: { build: 300, range: 3.5, damage: 9, damagePerLevel: 4, cooldown: 1.3, hp: 242, hpPerLevel: 77, splash: 0.9 },
     } as Record<PostType, { build: number; range: number; damage: number; damagePerLevel: number; cooldown: number; hp: number; hpPerLevel: number; splash: number }>,
     /** Upgrade cost from level L to L+1 = build cost * growth^L. */
     upgradeGrowth: 1.55,
@@ -62,9 +80,11 @@ export const CONFIG = {
   },
 
   zombies: {
-    z_small: { hp: 30, speed: 1.4, damage: 5, cooldown: 0.8, range: 0.55, wallMult: 1, coins: 8 },
-    z_big: { hp: 140, speed: 0.55, damage: 18, cooldown: 1.4, range: 0.65, wallMult: 1, coins: 20 },
-    z_axe: { hp: 70, speed: 0.9, damage: 10, cooldown: 1.0, range: 0.6, wallMult: 3, coins: 12 },
+    // Speeds/cooldowns are base values (x pace.zombieSpeed / pace.zombieCooldown). Coins trimmed for the
+    // faster pace, which kills more zombies per minute, so income stays about where it was.
+    z_small: { hp: 30, speed: 1.4, damage: 5, cooldown: 0.8, range: 0.55, wallMult: 1, coins: 7 },
+    z_big: { hp: 140, speed: 0.55, damage: 18, cooldown: 1.4, range: 0.65, wallMult: 1, coins: 17 },
+    z_axe: { hp: 70, speed: 0.9, damage: 10, cooldown: 1.0, range: 0.6, wallMult: 3, coins: 10 },
   } as Record<ZombieKind, { hp: number; speed: number; damage: number; cooldown: number; range: number; wallMult: number; coins: number }>,
 
   waves: {
@@ -104,6 +124,7 @@ export const CONFIG = {
     maxDeploys: 40,
     /** Raider stats grow with the attacker's Main Tower level. */
     troopScale: (hq: number) => 1 + 0.15 * (hq - 1),
+    /** Base raider stats: speed x pace.raiderSpeed, cooldown x pace.raiderCooldown. */
     raiders: {
       r_bat: { unlockHq: 1, cost: 20, hp: 55, speed: 1.6, damage: 10, cooldown: 0.7, range: 0.5, wallMult: 1 },
       r_pistol: { unlockHq: 2, cost: 25, hp: 40, speed: 1.2, damage: 7, cooldown: 0.8, range: 3, wallMult: 0.6 },
@@ -193,7 +214,7 @@ export function postStats(type: PostType, level: number) {
   return {
     range: t.range,
     damage: t.damage + t.damagePerLevel * (level - 1),
-    cooldown: t.cooldown,
+    cooldown: Math.round(t.cooldown * CONFIG.pace.postCooldown * 100) / 100,
     hp: t.hp + t.hpPerLevel * (level - 1),
     splash: t.splash,
   };
