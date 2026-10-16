@@ -15,7 +15,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { io, type Socket } from 'socket.io-client';
-import { CONFIG, PLOT, RAIDER_KINDS, getWorld, inDeployZone, type BaseSummary, type CrateView, type Question } from '@siege/shared';
+import { CONFIG, PLOT, RAIDER_KINDS, decodeSnapshot, getWorld, inDeployZone, type BaseSummary, type CrateView, type Question } from '@siege/shared';
 
 const args = process.argv.slice(2);
 const opt = (name: string, def: string) => {
@@ -38,7 +38,9 @@ if (EXTERNAL && !args.includes('--yes')) {
 
 // ---- measurements ---------------------------------------------------------------------------------
 
-const lat: Record<string, number[]> = { login: [], act: [], deploy: [], reconnect: [], answer: [] };
+const lat: Record<string, number[]> = { login: [], act: [], deploy: [], reconnect: [], answer: [], airstrike: [] };
+/** Commander taps: sent, hit results back, refusals by reason, kills. */
+const taps = { sent: 0, ok: 0, kills: 0, refused: new Map<string, number>(), firstAt: 0, lastAt: 0 };
 const errors = new Map<string, number>();
 let received = 0;
 /** Bytes of packed combat snapshots received by all screens. */
@@ -59,7 +61,7 @@ const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const pick = <T>(xs: T[]): T | undefined => xs[Math.floor(Math.random() * xs.length)];
 
 /** Expected rejections (rules of the game), not failures. */
-const NORMAL = /more coins|locked|Max|Main Tower|Empty slot|already has a post|Shielded|Immune|under attack|current raid|own base|not raiding|raid is over|Troop limit|Wait|Too late|gone|Slow down|level/i;
+const NORMAL = /No zombies to bomb|Airstrike ready in|more coins|locked|Max|Main Tower|Empty slot|already has a post|Shielded|Immune|under attack|current raid|own base|not raiding|raid is over|Troop limit|Wait|Too late|gone|Slow down|level/i;
 
 function ack<T>(s: Socket, ev: string, data: unknown, kind: string): Promise<({ ok: true } & T) | { ok: false; error: string } | null> {
   const t0 = performance.now();
@@ -115,6 +117,8 @@ class Bot {
   hq = 1;
   raiding: number | null = null;
   stopped = false;
+  /** Zombies on our own base from the latest snapshot (world tiles), to aim at. */
+  targets: [number, number][] = [];
 
   constructor(readonly n: number) {}
 
@@ -152,6 +156,18 @@ class Bot {
         if (m.raids) this.raiding = m.raids.find((r) => r.attackerId === this.id)?.plot ?? null;
       });
       s.on('coins', (c: { coins: number }) => (this.coins = c.coins));
+      s.on('snap', (buf: ArrayBuffer) => {
+        const snap = decodeSnapshot(buf);
+        if (snap.p === this.plot) this.targets = snap.u.filter((u) => u[5] === 0 || u[5] === 1).map((u) => [u[2] / 16, u[3] / 16]);
+      });
+      s.on('tap', (r: { p: number; ok: boolean; error?: string; kills?: number }) => {
+        if (r.p !== this.plot) return;
+        if (r.ok) {
+          // Hits for our own base come back on the base's room; count each bot's own shots once.
+          taps.ok++;
+          taps.kills += r.kills ?? 0;
+        } else taps.refused.set(r.error ?? '?', (taps.refused.get(r.error ?? '?') ?? 0) + 1);
+      });
       s.on('player', (p: { coins: number; base: { hq: number } }) => {
         this.coins = p.coins;
         this.hq = p.base.hq;
@@ -223,7 +239,29 @@ class Bot {
     if (!this.stopped) await this.connect(url);
   }
 
+  /** An autoclicker: taps at the maximum fire rate at a zombie on our base (or near the Main Tower), airstrikes when ready. */
+  async tapLoop(until: number) {
+    const interval = 1000 / CONFIG.commander.weapons.pistol.fireRate;
+    let nextStrike = Date.now() + rand(2000, 8000);
+    while (!this.stopped && Date.now() < until) {
+      await sleep(interval);
+      if (!this.socket?.connected || this.plot < 0 || this.raiding !== null) continue;
+      const p = world.plots[this.plot]!;
+      const t = pick(this.targets) ?? [p.x + 7 + rand(-4, 4), p.y + 7 + rand(-4, 4)];
+      this.socket.emit('tap', { x: t[0], y: t[1] });
+      taps.sent++;
+      taps.firstAt ||= Date.now();
+      taps.lastAt = Date.now();
+      if (Date.now() > nextStrike && this.targets.length) {
+        nextStrike = Date.now() + (CONFIG.commander.airstrike.cooldown + 1) * 1000;
+        const [x, y] = pick(this.targets)!;
+        void ack(this.socket, 'airstrike', { x, y }, 'airstrike');
+      }
+    }
+  }
+
   async run(url: string, until: number) {
+    void this.tapLoop(until);
     while (!this.stopped && Date.now() < until) {
       const r = Math.random();
       if (r < 0.55) await this.upgrade();
@@ -302,7 +340,10 @@ async function main() {
   row('deploy', lat.deploy!);
   row('answer', lat.answer!);
   row('reconnect', lat.reconnect!);
+  row('airstrike', lat.airstrike!);
   console.log(`  raids ${raidsStarted}, raiders deployed ${deploys}, messages received ${received} (${Math.round(received / secs)}/s across all screens)`);
+  const tapSecs = Math.max(1, (taps.lastAt - taps.firstAt) / 1000);
+  console.log(`  commander taps: ${taps.sent} sent (${(taps.sent / tapSecs).toFixed(0)}/s across ${CLIENTS} bots), ${taps.ok} resolved as shots, ${taps.kills} zombies killed by taps; refused: ${[...taps.refused].map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}`);
   console.log(`  combat snapshots: ${Math.round(snapBytes / secs / 1024)} KB/s across all screens (${(snapBytes / secs / 1024 / (CLIENTS + SPECTATORS)).toFixed(1)} KB/s per screen)`);
   console.log(`  server: tick avg ${worst('tickAvgMs')} ms (worst 10 s window), tick max ${worst('tickMaxMs')} ms, loop lag max ${worst('loopLagMaxMs')} ms, memory ${worst('memoryMb')} MB, tick errors ${worst('tickErrors')}`);
   const crates = [...crateWinners.entries()];
@@ -315,6 +356,7 @@ async function main() {
   const checks: [string, boolean][] = [
     [`every player logged in (${connected}/${CLIENTS})`, connected === CLIENTS],
     [`actions answered fast (p95 ${pct(lat.act!, 95)} ms < 250 ms)`, pct(lat.act!, 95) < 250],
+    [`max-rate taps all answered (${taps.ok + [...taps.refused.values()].reduce((x, y) => x + y, 0)}/${taps.sent}; reconnects drop a few)`, taps.ok + [...taps.refused.values()].reduce((x, y) => x + y, 0) >= taps.sent * 0.9],
     [`deploys answered fast (p95 ${pct(lat.deploy!, 95)} ms < 250 ms)`, pct(lat.deploy!, 95) < 250],
     [`game ticks fit their 50 ms budget (max ${worst('tickMaxMs')} ms)`, worst('tickMaxMs') < 50],
     [`no tick errors (${worst('tickErrors')})`, worst('tickErrors') === 0],

@@ -1,10 +1,13 @@
 import {
+  COMMANDER_WEAPONS,
   CONFIG,
   PLOT,
   POST_TYPES,
   RAIDER_KINDS,
   boostLabel,
   getWorld,
+  inOtherPlot,
+  inTapReach,
   liveBoosts,
   postStats,
   quote,
@@ -12,6 +15,7 @@ import {
   slotsUnlocked,
   trophyStake,
   type BaseAction,
+  type BaseState,
   type BaseSummary,
   type CrateView,
   type FeedItem,
@@ -26,7 +30,7 @@ import { SERVER_URL } from './config.ts';
 import { Net, saveToken, savedToken } from './net.ts';
 import { sfx } from './retro.ts';
 import { loadSprites } from './sprites.ts';
-import { bindLiveStream, type SiegeMessage } from './stream.ts';
+import { bindLiveStream, type SiegeMessage, type TapMessage } from './stream.ts';
 import { THEME, baseColor, loadFonts } from './theme.ts';
 import { TitleScreen } from './title.ts';
 import { CRATE_SPOT, WorldView } from './world.ts';
@@ -67,6 +71,15 @@ let siege: { n: number; phase: string; nextIn: number; sides: number[]; hq: numb
 let flash: { text: string; cls: string; until: number } | null = null;
 /** Next time a growl may play (ms). */
 let nextGrowl = 0;
+/**
+ * The Commander's gun as this screen predicts it (local ms); every server answer and the twice-a-second
+ * pressure update set it back to the server's numbers.
+ */
+const gun = { mag: 0, reloadEnd: 0, nextShot: 0, weapon: -1, combo: 0, mult: 1, airReadyAt: 0 };
+/** Waiting for a tap on the map to place an airstrike. */
+let aimingStrike = false;
+const CMD = CONFIG.commander;
+const WEAPON_NAME = { pistol: 'Pistol', gun: 'Gun', shotgun: 'Shotgun' } as const;
 /** The arcade title screen (shown to anyone not logged in). */
 const title = new TitleScreen($('title'), {
   login: (name, roll) => net.login(name, roll),
@@ -142,6 +155,7 @@ function frame(now: number) {
   drawMinimap(now);
   renderBanner(now);
   growls(now);
+  renderCmdBar(now);
   requestAnimationFrame(frame);
 }
 
@@ -261,6 +275,9 @@ function bindNet() {
     } else if (m.type === 'held') {
       if (!flash || flash.until < now + 500) flash = { text: `Surge ${m.n} held! ${m.kills} down, +${m.coins} coins`, cls: 'held', until: now + 1600 };
       sfx.held();
+    } else if (m.type === 'strike') {
+      view.shake(S.strike * view.dpr, 350);
+      sfx.boom();
     } else if (m.type === 'breach') {
       if (m.total !== undefined) player.coins = m.total;
       renderHud();
@@ -271,11 +288,33 @@ function bindNet() {
       sfx.boom();
     }
   });
-  s.on('pressure', (m: { p: number; sides: number[]; hq: number; n: number; phase: string; nextIn: number }) => {
+  s.on('pressure', (m: { p: number; sides: number[]; hq: number; n: number; phase: string; nextIn: number; ammo: { mag: number; reload: number; weapon: number; airIn: number; combo: number } }) => {
     if (!player || m.p !== player.plot) return;
     const now = performance.now();
+    // Resync the gun unless a shot is in flight (the prediction is fresher for a moment).
+    if (now - gun.nextShot > 300) {
+      gun.mag = m.ammo.mag;
+      gun.reloadEnd = m.ammo.reload ? now + m.ammo.reload * 1000 : 0;
+      gun.weapon = m.ammo.weapon;
+      if (!m.ammo.combo) gun.combo = 0;
+    }
+    gun.airReadyAt = now + m.ammo.airIn * 1000;
     siege = { n: m.n, phase: m.phase, nextIn: m.nextIn, sides: m.sides, hq: m.hq, at: now };
     view.pressure = { sides: m.sides, at: now };
+  });
+  s.on('tap', (m: TapMessage) => {
+    if (!player || m.p !== player.plot) return;
+    const now = performance.now();
+    if (m.mag !== undefined) {
+      gun.mag = m.mag;
+      gun.reloadEnd = m.reload ? now + m.reload * 1000 : 0;
+    }
+    if (!m.ok) return;
+    const before = gun.mult;
+    gun.combo = m.combo;
+    gun.mult = m.mult;
+    if (m.kills) sfx.kill(m.mult);
+    renderCombo(m.mult > before);
   });
   s.on('feed', (f: FeedItem) => addFeed(f));
   s.on('status', (st: { paused: boolean; frozen: boolean }) => {
@@ -317,6 +356,7 @@ function bindInput() {
   /** Recent drag positions, for the release velocity. */
   let trail: { x: number; y: number; t: number }[] = [];
   const DRAG_START = 8;
+  let pressedAt = 0;
   const local = (e: PointerEvent | WheelEvent) => {
     const r = canvas.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
@@ -332,6 +372,7 @@ function bindInput() {
     pointers.set(e.pointerId, pos);
     if (pointers.size === 1) {
       start = pos;
+      pressedAt = e.timeStamp;
       dragging = false;
       pinched = false;
       trail = [{ ...pos, t: e.timeStamp }];
@@ -389,7 +430,7 @@ function bindInput() {
       // Only fling if the finger was still moving when it lifted.
       if (e.timeStamp - b.t < 50) view.fling((b.x - a.x) / dt, (b.y - a.y) / dt);
     }
-    if (wasTap && e.type === 'pointerup') void tap(pos.x, pos.y);
+    if (wasTap && e.type === 'pointerup') void tap(pos.x, pos.y, e.timeStamp - pressedAt);
   };
   canvas.addEventListener('pointerup', up);
   canvas.addEventListener('pointercancel', up);
@@ -439,6 +480,14 @@ function bindInput() {
   });
 
   $('menu-btn').addEventListener('click', () => ($('menu').hidden = !$('menu').hidden));
+  $('ammo').addEventListener('click', () => reloadGun());
+  $('strike-btn').addEventListener('click', () => toggleStrikeAim());
+  window.addEventListener('keydown', (e) => {
+    if (!player || (e.target as HTMLElement).closest('input, textarea') || !$('cmd-bar').offsetParent) return;
+    if (e.key === 'r' || e.key === 'R') reloadGun();
+    else if (e.key === 'q' || e.key === 'Q') toggleStrikeAim();
+    else if (e.key === 'Escape' && aimingStrike) toggleStrikeAim();
+  });
   // Sound: the same switch as the title screen's. Browsers only allow audio after a tap or key press.
   const soundIcon = () => {
     $('sound-btn').textContent = sfx.muted ? '🔇' : '🔊';
@@ -470,9 +519,38 @@ function bindInput() {
   });
 }
 
-async function tap(cssX: number, cssY: number) {
+/** Your own base's siege is on and in reach of this world point (px): taps there are shots. */
+function canShoot(wx: number, wy: number): boolean {
+  if (!player || myRaid || org.paused) return false;
+  const l = view.live.get(player.plot);
+  const p = world.plots[player.plot]!;
+  if (l?.phase !== 'wave' || !inTapReach(p, wx / 16, wy / 16)) return false;
+  // On a neighbour's plot a tap opens their base, unless one of your zombies is right there.
+  return !inOtherPlot(p, wx / 16, wy / 16) || view.zombiesNear(player.plot, wx, wy, CMD.hitRadius * 16).length > 0;
+}
+
+/** Longest press that still counts as a shot (a longer hold is a look, not a trigger pull). */
+const SHOT_PRESS_MS = 450;
+
+async function tap(cssX: number, cssY: number, pressMs = 0) {
   if (!player) return;
   const [wx, wy] = view.toWorld(cssX, cssY);
+  if (canShoot(wx, wy)) {
+    if (aimingStrike) return void callStrike(wx, wy);
+    // A zombie under your thumb: shoot it. Otherwise a tap on the Main Tower, a slot or a wall opens its
+    // card as before, and anything else (open ground, the street) is a shot toward that point.
+    const zombie = view.zombiesNear(player.plot, wx, wy, CMD.hitRadius * 16).length > 0;
+    const p = world.plots[player.plot]!;
+    const pick = !zombie && wx >= p.x * 16 && wy >= p.y * 16 && wx < (p.x + PLOT) * 16 && wy < (p.y + PLOT) * 16 ? view.pickInBase(p, wx, wy) : null;
+    if (!pick) {
+      if (pressMs <= SHOT_PRESS_MS) fireAt(wx, wy);
+      return;
+    }
+  } else if (aimingStrike) {
+    toggleStrikeAim();
+    toast('Call the airstrike on your own base', '', 2000);
+    return;
+  }
   // Raiding: taps in the red zone send troops.
   if (myRaid && view.inDeploy(myRaid.plot, wx, wy)) {
     const r = await net.deploy(troop, wx / 16, wy / 16);
@@ -501,6 +579,140 @@ async function tap(cssX: number, cssY: number) {
     view.selectedPick = view.pickInBase(p, wx, wy);
     openPanel('mine', p.id);
   } else openPanel('other', p.id);
+}
+
+// ---- the Commander ---------------------------------------------------------------------------------------
+
+function weaponName(): 'pistol' | 'gun' | 'shotgun' {
+  return COMMANDER_WEAPONS[player?.base.cmd ?? 0] ?? 'pistol';
+}
+
+/** Shoot at a world point (px): predicted here at once, resolved by the server. */
+function fireAt(wx: number, wy: number) {
+  if (!player) return;
+  const now = performance.now();
+  const name = weaponName();
+  const w = CMD.weapons[name];
+  if (gun.weapon !== (player.base.cmd ?? 0)) {
+    gun.weapon = player.base.cmd ?? 0;
+    gun.mag = w.magazine;
+    gun.reloadEnd = 0;
+  }
+  if (gun.reloadEnd && now >= gun.reloadEnd) {
+    gun.mag = w.magazine;
+    gun.reloadEnd = 0;
+  }
+  if (gun.reloadEnd) {
+    sfx.dry();
+    const a = $('ammo');
+    a.classList.remove('flash');
+    void a.offsetWidth;
+    a.classList.add('flash');
+    return;
+  }
+  if (now < gun.nextShot) return; // the fire rate (the server enforces it too)
+  gun.nextShot = now + 1000 / w.fireRate;
+  gun.mag--;
+  if (gun.mag <= 0) {
+    gun.mag = 0;
+    gun.reloadEnd = now + w.reload * 1000;
+    sfx.reloadClick();
+  }
+  const targets = view.zombiesNear(player.plot, wx, wy, CMD.hitRadius * 16, 1);
+  const aim = targets[0] ?? { x: wx, y: wy };
+  const pellets = w.pellets > 1 ? view.zombiesNear(player.plot, aim.x, aim.y, w.spread * 16, w.pellets).map((z) => [z.x, z.y] as [number, number]) : [];
+  view.commanderFire(player.plot, aim.x, aim.y, now, pellets);
+  sfx.shot(name);
+  if (name === 'shotgun') view.shake(THEME.siege.shake.shotgun * view.dpr, 120);
+  net.tap(wx / 16, wy / 16);
+}
+
+function reloadGun() {
+  if (!player) return;
+  const w = CMD.weapons[weaponName()];
+  const now = performance.now();
+  if (gun.reloadEnd || gun.mag >= w.magazine) return;
+  gun.reloadEnd = now + w.reload * 1000;
+  sfx.reloadClick();
+  net.reload();
+}
+
+function toggleStrikeAim() {
+  if (!aimingStrike && performance.now() < gun.airReadyAt) {
+    toast(`Airstrike ready in ${Math.ceil((gun.airReadyAt - performance.now()) / 1000)}s`, '', 1500);
+    return;
+  }
+  aimingStrike = !aimingStrike;
+  if (aimingStrike) toast('Tap the map to call the airstrike', '', 2000);
+}
+
+async function callStrike(wx: number, wy: number) {
+  aimingStrike = false;
+  const r = await net.airstrike(wx / 16, wy / 16);
+  if (!r.ok) return toast(r.error, 'bad', 2000);
+  gun.airReadyAt = performance.now() + r.ready * 1000;
+  sfx.whistle(CMD.airstrike.delay);
+}
+
+let comboShown = '';
+function renderCombo(bump: boolean) {
+  const el = $('combo');
+  const text = gun.combo >= 2 ? `${gun.combo} KILLS${gun.mult > 1 ? ` · x${gun.mult} COINS` : ''}` : '';
+  if (text !== comboShown) {
+    comboShown = text;
+    el.textContent = text;
+    el.hidden = !text;
+  }
+  if (bump) {
+    el.classList.remove('bump');
+    void el.offsetWidth;
+    el.classList.add('bump');
+  }
+}
+
+let roundsShown = '';
+/** The ammo bar, combo and airstrike button: shown while your base is under siege and on screen. */
+function renderCmdBar(now: number) {
+  if (!player) return;
+  const l = view.live.get(player.plot);
+  const p = world.plots[player.plot]!;
+  const [x0, y0, x1, y1] = view.viewRect();
+  const onScreen = (p.x + PLOT) * 16 > x0 && p.x * 16 < x1 && (p.y + PLOT) * 16 > y0 && p.y * 16 < y1;
+  const show = l?.phase === 'wave' && !myRaid && onScreen && !org.paused;
+  const bar = $('cmd-bar');
+  if (bar.hidden === show) bar.hidden = !show;
+  view.canvas.classList.toggle('aim', show);
+  view.canvas.classList.toggle('strike-aim', show && aimingStrike);
+  if (!show) {
+    if (aimingStrike) aimingStrike = false;
+    return;
+  }
+  const name = weaponName();
+  const w = CMD.weapons[name];
+  if (gun.weapon !== (player.base.cmd ?? 0)) {
+    gun.weapon = player.base.cmd ?? 0;
+    gun.mag = w.magazine;
+    gun.reloadEnd = 0;
+  }
+  const reloading = gun.reloadEnd > now;
+  if (gun.reloadEnd && !reloading) {
+    gun.mag = w.magazine;
+    gun.reloadEnd = 0;
+  }
+  const key = `${name}${gun.mag}${reloading}`;
+  if (key !== roundsShown) {
+    roundsShown = key;
+    $('ammo-name').textContent = WEAPON_NAME[name].toUpperCase();
+    $('rounds').innerHTML = Array.from({ length: w.magazine }, (_, i) => `<i${i >= gun.mag ? ' class="spent"' : ''}></i>`).join('');
+    $('ammo').classList.toggle('reloading', reloading);
+  }
+  $('reload-fill').style.width = reloading ? `${100 * (1 - (gun.reloadEnd - now) / (w.reload * 1000))}%` : '0';
+  const cd = Math.max(0, Math.ceil((gun.airReadyAt - now) / 1000));
+  const btn = $('strike-btn');
+  btn.classList.toggle('cooling', cd > 0);
+  btn.classList.toggle('aiming', aimingStrike);
+  const cdText = cd > 0 ? String(cd) : '';
+  if ($('strike-cd').textContent !== cdText) $('strike-cd').textContent = cdText;
 }
 
 async function panelClick(e: MouseEvent) {
@@ -781,7 +993,7 @@ function renderBanner(now: number) {
       text = '⚠ The ground is moving...';
       cls = 'attack';
     } else if (siege.phase === 'surge') {
-      text = `☠ Surge ${siege.n}: ${zombies} zombies at your walls!`;
+      text = `☠ Surge ${siege.n}: ${zombies} zombie${zombies === 1 ? '' : 's'} at your walls!`;
       cls = 'attack';
     } else text = `Breather... next surge in ${siege.nextIn}s${zombies ? ` (${zombies} stragglers)` : ''}`;
   }
@@ -964,13 +1176,14 @@ function minePanel(): string {
       if (moreSlots > 0) unlocks.push(`+${moreSlots} post slot`);
       for (const t of POST_TYPES) if (CONFIG.hq.postUnlock[t] === next) unlocks.push(`${POST_NAME[t]}s`);
       for (const k of RAIDER_KINDS) if (CONFIG.pvp.raiders[k].unlockHq === next) unlocks.push(`${RAIDER_NAME[k]} raiders`);
+      for (const k of COMMANDER_WEAPONS) if (CMD.weapons[k].unlockHq === next && k !== 'pistol') unlocks.push(`Commander ${WEAPON_NAME[k]}`);
       unlocks.push(`posts & walls up to Lv ${next}`);
     }
     return `${head(`Main Tower · Lv ${base.hq}`)}<p class="sub">The heart of your base. If zombies destroy it you lose some coins; raiders who destroy it win. Its level caps everything else.</p>${stats([
       ['Health', CONFIG.hq.hp(base.hq)],
       ['Post slots', `${slotsUnlocked(base.hq)}/8`],
       ['Next level', next <= CONFIG.hq.maxLevel ? unlocks.join(', ') : 'Max'],
-    ])}<div class="actions">${button(`Upgrade to Lv ${next}`, { kind: 'hq' })}</div>${waveNote}`;
+    ])}<div class="actions">${button(`Upgrade to Lv ${next}`, { kind: 'hq' })}</div>${commanderCard(base)}${waveNote}`;
   }
   if (sel.kind === 'walls') {
     const kind = base.walls >= CONFIG.walls.reinforcedFromLevel ? 'Reinforced' : 'Wooden';
@@ -1003,6 +1216,20 @@ function minePanel(): string {
   ])}<div class="actions">${button(`Upgrade to Lv ${p.level + 1}`, { kind: 'post', slot })}</div>${waveNote}`;
 }
 
+/** The Commander's weapon and what the next one gives (on the Main Tower card). */
+function commanderCard(base: BaseState): string {
+  const cur = COMMANDER_WEAPONS[base.cmd ?? 0] ?? 'pistol';
+  const nextName = COMMANDER_WEAPONS[(base.cmd ?? 0) + 1];
+  const line = (k: (typeof COMMANDER_WEAPONS)[number]) => {
+    const x = CMD.weapons[k];
+    return `${x.pellets > 1 ? `${x.pellets} x ${x.damage}` : x.damage} dmg · ${x.fireRate}/s · ${x.magazine} rounds · ${x.reload}s reload`;
+  };
+  return `<h3>Commander</h3><p class="sub">Tap zombies around your base to shoot them yourself. Kills in a row build a coin combo; the ✈ button calls an airstrike every ${CMD.airstrike.cooldown}s.</p>${stats([
+    ['Weapon', `${WEAPON_NAME[cur]}: ${line(cur)}`],
+    ...(nextName ? [['Next', `${WEAPON_NAME[nextName]}: ${line(nextName)}`] as [string, string]] : []),
+  ])}${nextName ? `<div class="actions">${button(`Arm with ${WEAPON_NAME[nextName]}`, { kind: 'commander' })}</div>` : ''}`;
+}
+
 function actionDone(a: BaseAction): string {
   switch (a.kind) {
     case 'hq':
@@ -1013,6 +1240,8 @@ function actionDone(a: BaseAction): string {
       return `${POST_NAME[a.type]} built!`;
     case 'post':
       return 'Post upgraded!';
+    case 'commander':
+      return `Commander armed with a ${WEAPON_NAME[weaponName()]}!`;
   }
 }
 

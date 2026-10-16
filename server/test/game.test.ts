@@ -175,6 +175,49 @@ describe('zombie siege', () => {
   });
 });
 
+describe('commander taps', () => {
+  it('taps on your own siege are resolved by the server and shown to everyone watching; others cannot tap it', () => {
+    const { game, sent } = setup();
+    const p = game.login('Arjun', 'R7007');
+    const q = game.login('Other', 'R7008');
+    game.connect(p.id);
+    game.connect(q.id);
+    game.watch(p.plot, 1);
+    for (let i = 0; i < (CONFIG.siege.firstSurge + 1.5) * CONFIG.tickRate; i++) game.tick();
+    const plot = getWorld().plots[p.plot]!;
+    const snap = decodeSnapshot(game.baseLive(p.plot).snapshot!);
+    const z = snap.u.find((u) => u[5] !== 3 && u[5] !== 2)!;
+    game.tap(p.id, z[2] / 16, z[3] / 16);
+    const hit = sent.find((s) => s.ev === 'tap' && s.to === `base:${p.plot}`)?.data as { ok: boolean; hits: unknown[]; mag: number };
+    expect(hit).toMatchObject({ ok: true, mag: CONFIG.commander.weapons.pistol.magazine - 1 });
+    expect(hit.hits.length).toBe(1);
+    // Too fast: refused, and only the shooter hears about it.
+    game.tap(p.id, z[2] / 16, z[3] / 16);
+    expect(sent.find((s) => s.ev === 'tap' && s.to === `p:${p.id}`)?.data).toMatchObject({ ok: false, error: 'too fast' });
+    // Someone else can't shoot at it, and you can't shoot far from your base.
+    const hitsBefore = sent.filter((s) => s.ev === 'tap' && s.to === `base:${p.plot}`).length;
+    game.tap(q.id, z[2] / 16, z[3] / 16);
+    game.tap(p.id, plot.x + 40, plot.y);
+    expect(sent.filter((s) => s.ev === 'tap' && s.to === `base:${p.plot}`).length).toBe(hitsBefore);
+    expect(sent.find((s) => s.ev === 'tap' && s.to === `p:${q.id}`)?.data).toMatchObject({ ok: false, error: 'no siege' });
+    expect(sent.filter((s) => s.ev === 'tap' && s.to === `p:${p.id}`).at(-1)?.data).toMatchObject({ ok: false, error: 'out of reach' });
+    // Airstrike: once, then its cooldown.
+    expect(game.airstrike(p.id, plot.x + 7, plot.y + 1)).toMatchObject({ ok: true });
+    expect(() => game.airstrike(p.id, plot.x + 7, plot.y + 1)).toThrow(/ready in/);
+    expect(sent.some((s) => s.ev === 'airstrike' && s.to === `base:${p.plot}`)).toBe(true);
+  });
+
+  it('the Commander weapon is bought with coins once the Main Tower allows it', () => {
+    const { game } = setup();
+    const p = game.login('Neha', 'R7009');
+    expect(() => game.act(p.id, { kind: 'commander' })).toThrow(/Main Tower level 2/);
+    game.players.get(p.id)!.coins = 5000;
+    game.act(p.id, { kind: 'hq' });
+    expect(game.act(p.id, { kind: 'commander' }).base.cmd).toBe(1);
+    expect(game.worldSummary().find((b) => b.id === p.id)!.cmd).toBe(1);
+  });
+});
+
 describe('raids', () => {
   function twoPlayers() {
     const s = setup();

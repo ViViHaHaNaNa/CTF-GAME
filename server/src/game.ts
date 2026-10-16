@@ -9,6 +9,7 @@ import {
   checkAnswer,
   currentPct,
   encodeSnapshot,
+  inTapReach,
   getWorld,
   grantCrate,
   liveBoosts,
@@ -467,6 +468,65 @@ export class GameServer {
     return { coins: a.coins };
   }
 
+  // ---- the Commander (tap-to-attack) ------------------------------------------------------------
+
+  /** The siege on a player's own base, if they may shoot at it right now (online, running, no raid there). */
+  private ownSiege(id: number): { p: PlayerRecord; siege: Siege } | null {
+    if (this.admin.paused) return null;
+    const p = this.players.get(id);
+    if (!p || this.raidByPlot.has(p.plot)) return null;
+    const siege = this.live.get(p.plot)?.siege;
+    return siege ? { p, siege } : null;
+  }
+
+  /**
+   * A tap on your own base during its siege (world tiles). The siege resolves it (fire rate, magazine,
+   * damage cap); hits go to everyone watching the base, a refusal only back to the player.
+   */
+  tap(id: number, rawX: unknown, rawY: unknown) {
+    const own = this.ownSiege(id);
+    const x = Number(rawX);
+    const y = Number(rawY);
+    const me = this.players.get(id);
+    // Every tap gets an answer, so the shooter's screen never waits on one (no siege: paused, raided...).
+    if (!own) {
+      if (me) this.out.toPlayer(id, 'tap', { p: me.plot, ok: false, error: 'no siege' });
+      return;
+    }
+    const plot = getWorld().plots[own.p.plot]!;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !inTapReach(plot, x, y)) {
+      this.out.toPlayer(id, 'tap', { p: plot.id, ok: false, error: 'out of reach', ...own.siege.ammo() });
+      return;
+    }
+    const r = own.siege.tap(x, y, currentPct(own.p.boosts, 'attack', this.now()));
+    if (!r.ok) {
+      this.out.toPlayer(id, 'tap', { p: plot.id, ...r });
+      return;
+    }
+    this.credit(own.p, r.coins);
+    const q = (v: number) => Math.round(v * 16);
+    this.out.toBase(plot.id, 'tap', { ...r, p: plot.id, x: q(r.x), y: q(r.y), hits: r.hits.map(([hx, hy, d, k]) => [q(hx), q(hy), d, k]) });
+  }
+
+  /** Call an airstrike on your own base's siege. */
+  airstrike(id: number, rawX: unknown, rawY: unknown): { ok: true; ready: number } | { ok: false; error: string } {
+    const own = this.ownSiege(id);
+    if (!own) throw new GameError('no_siege', 'No zombies to bomb right now');
+    const x = Number(rawX);
+    const y = Number(rawY);
+    const plot = getWorld().plots[own.p.plot]!;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !inTapReach(plot, x, y)) throw new GameError('out_of_reach', 'Call it on your own base');
+    const r = own.siege.airstrike(x, y);
+    if (!r.ok) throw new GameError('cooldown', `Airstrike ready in ${Math.ceil(r.ready)}s`);
+    this.out.toBase(plot.id, 'airstrike', { p: plot.id, x: Math.round(x * 16), y: Math.round(y * 16), delay: r.delay, radius: CONFIG.commander.airstrike.radius });
+    return { ok: true, ready: r.ready };
+  }
+
+  /** Reload the Commander's gun now. */
+  reload(id: number) {
+    this.ownSiege(id)?.siege.reload();
+  }
+
   retreat(attackerId: number) {
     const rid = this.raidByAttacker.get(attackerId);
     if (rid === undefined) return;
@@ -550,7 +610,7 @@ export class GameServer {
     if (s.combat.tick % CONFIG.snapshotEvery === 0) this.out.toBase(plot, 'snap', encodeSnapshot(plot, s.combat.snapshot()));
     // Where the pressure is, for the owner's edge arrow and red vignette (even when the base is off screen).
     if (s.combat.tick % (CONFIG.tickRate / 2) === 0 && this.isOnline(p.id)) {
-      this.out.toPlayer(p.id, 'pressure', { p: plot, sides: s.pressure(), hq: Math.round(100 * s.hqShare()), n: s.n, phase: s.phase, nextIn: Math.ceil(s.nextIn()) });
+      this.out.toPlayer(p.id, 'pressure', { p: plot, sides: s.pressure(), hq: Math.round(100 * s.hqShare()), n: s.n, phase: s.phase, nextIn: Math.ceil(s.nextIn()), ammo: s.ammo() });
     }
   }
 
@@ -651,9 +711,14 @@ export class GameServer {
   /** Nobody is looking: play the next stretch of this base's siege headlessly at the coarse tick rate. */
   runOffline(p: PlayerRecord) {
     p.waveNo++;
-    const s = new Siege(p.base, getWorld().plots[p.plot]!, seedOf(p.id, p.waveNo), p.siege!, { defenceBoost: this.defenceBoost(p), coarse: true, ramp: false, firstDelay: 0 });
+    // Nobody taps while you're away: the siege runs at no more than the offline pressure cap.
+    const d = p.siege!;
+    const online = d.pressure;
+    d.pressure = Math.min(online, CONFIG.offline.pressureCap);
+    const s = new Siege(p.base, getWorld().plots[p.plot]!, seedOf(p.id, p.waveNo), d, { defenceBoost: this.defenceBoost(p), coarse: true, ramp: false, firstDelay: 0 });
     s.counting = false;
     s.runFor(CONFIG.offline.every);
+    if (online > CONFIG.offline.pressureCap) d.pressure = online;
     const room = Math.max(0, CONFIG.offline.bankCap - p.bank);
     const banked = Math.min(room, s.coins);
     p.bank += banked;
@@ -941,6 +1006,7 @@ export class GameServer {
       hq: p.base.hq,
       walls: p.base.walls,
       posts: p.base.posts.map((s) => (s ? [POST_TYPES.indexOf(s.type), s.level] : null)),
+      cmd: p.base.cmd ?? 0,
       trophies: this.admin.frozen ? (this.admin.frozen[p.id] ?? 0) : p.trophies,
       shield: p.shieldUntil > this.now() ? p.shieldUntil : 0,
       immune: p.immuneUntil > this.now() ? p.immuneUntil : 0,

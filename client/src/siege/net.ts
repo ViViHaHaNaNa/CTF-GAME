@@ -82,6 +82,19 @@ export class Net {
     this.socket.emit('retreat');
   }
 
+  /** A Commander shot at world tiles (no answer: the result comes back as 'tap'). */
+  tap(x: number, y: number) {
+    this.socket.emit('tap', { x, y });
+  }
+
+  reload() {
+    this.socket.emit('reload');
+  }
+
+  airstrike(x: number, y: number) {
+    return this.call<{ ready: number }>('airstrike', { x, y });
+  }
+
   buyImmunity(minutes: number) {
     return this.call<{ player: PlayerView }>('immunity', { minutes });
   }

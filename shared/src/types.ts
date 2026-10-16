@@ -43,6 +43,8 @@ export interface BaseState {
   walls: number;
   /** One entry per slot; null = empty. */
   posts: (PostState | null)[];
+  /** Commander weapon: index into COMMANDER_WEAPONS (missing on older saves = 0, the pistol). */
+  cmd?: number;
 }
 
 /** What the client is told about its own player. */
@@ -87,6 +89,8 @@ export interface BaseSummary {
   walls: number;
   /** Per slot: [post type index, level] or null. */
   posts: ([number, number] | null)[];
+  /** Commander weapon index. */
+  cmd: number;
   trophies: number;
   /** Server ms until which the base can't be raided (0 = not shielded). */
   shield: number;

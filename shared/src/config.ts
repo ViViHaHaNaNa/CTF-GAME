@@ -8,6 +8,10 @@ export type PostType = (typeof POST_TYPES)[number];
 export const ZOMBIE_KINDS = ['z_small', 'z_big', 'z_axe'] as const;
 export type ZombieKind = (typeof ZOMBIE_KINDS)[number];
 
+/** The Commander's weapons, in unlock order (BaseState.cmd is an index into this). */
+export const COMMANDER_WEAPONS = ['pistol', 'gun', 'shotgun'] as const;
+export type CommanderWeapon = (typeof COMMANDER_WEAPONS)[number];
+
 export const RAIDER_KINDS = ['r_bat', 'r_pistol', 'r_helmet', 'r_shotgun'] as const;
 export type RaiderKind = (typeof RAIDER_KINDS)[number];
 
@@ -151,8 +155,11 @@ export const CONFIG = {
       /** Pressure multiplies surge size. It starts here, drops `down` after a lost surge and creeps up after a held one (so the held share settles on the target). */
       start: 1,
       min: 0.45,
-      max: 1.6,
+      max: 2.6,
       down: 0.25,
+      /** In a player's first `newMinutes`, a surge held without the Main Tower dropping below `easyAbove` of its health climbs `easyMult` times faster (tappers settle quickly). */
+      easyAbove: 0.9,
+      easyMult: 2.5,
       /** Falling behind: once the Main Tower is below this share of health, only `easeKeep` of the surge's remaining zombies still come. */
       easeBelow: 0.45,
       easeKeep: 0.4,
@@ -169,6 +176,37 @@ export const CONFIG = {
     },
     /** Ticks per second when a siege is resolved headlessly (offline bases): coarse but the same rules. */
     coarseRate: 10,
+  },
+
+  /**
+   * Tap-to-attack: the player's Commander stands by the Main Tower and fires where they tap, during
+   * their own base's zombie siege. The server resolves every shot.
+   */
+  commander: {
+    /** A tap hits the zombie closest to the tap point within this many tiles (generous, for thumbs). */
+    hitRadius: 1.5,
+    /** Nothing that close: the shot still lands at the point and hits whatever is within this. */
+    strayRadius: 0.45,
+    /** Taps count anywhere within this many tiles of your plot: yard, walls, the streets and alleys around it, the graveyard. */
+    reach: 6,
+    /** A shot may arrive this many ticks early (network jitter) and still count as within the fire rate. */
+    rateSlackTicks: 1,
+    /**
+     * Tap damage per second can't exceed share x the posts' damage per second (0.5 = a third of the total
+     * defence), but is always allowed at least `floor`; up to `burst` seconds of it can be spent at once.
+     * Shots beyond that hit softer. Crate attack boosts raise damage and the cap together.
+     */
+    dpsCap: { share: 0.5, floor: 16, burst: 1.5 },
+    weapons: {
+      pistol: { unlockHq: 1, cost: 0, damage: 7, fireRate: 5, magazine: 12, reload: 1.1, pellets: 1, spread: 0 },
+      gun: { unlockHq: 2, cost: 300, damage: 10, fireRate: 5, magazine: 24, reload: 1.5, pellets: 1, spread: 0 },
+      /** Pellets: the first hits the target, the rest the zombies nearest it within `spread` tiles. */
+      shotgun: { unlockHq: 3, cost: 700, damage: 8, fireRate: 2.5, magazine: 6, reload: 1.8, pellets: 5, spread: 1.4 },
+    } as Record<CommanderWeapon, { unlockHq: number; cost: number; damage: number; fireRate: number; magazine: number; reload: number; pellets: number; spread: number }>,
+    /** Kills in a row without a miss: every `step` kills add x1 (up to `max`); tap kills pay coins x the multiplier. Idle `timeout` s resets it. */
+    combo: { step: 8, max: 3, timeout: 5 },
+    /** Tap a spot: after `delay` s, `damage` (x zombie hp scale) to everything within `radius` tiles. */
+    airstrike: { cooldown: 25, delay: 1.2, radius: 2.6, damage: 45 },
   },
 
   pvp: {
@@ -251,6 +289,8 @@ export const CONFIG = {
     bankCap: 500,
     /** Offline bases resolve this many seconds of siege at a time, headlessly (coarse), once per that many seconds. */
     every: 45,
+    /** Nobody taps while you're away: offline sieges use at most this pressure, whatever your tapping earned. */
+    pressureCap: 1,
   },
 
   account: {

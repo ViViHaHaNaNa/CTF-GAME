@@ -16,7 +16,7 @@ export interface BaseLive {
 
 export interface SiegeMessage {
   p: number;
-  type: 'surge' | 'held' | 'breach';
+  type: 'surge' | 'held' | 'breach' | 'strike';
   n: number;
   size?: number;
   sides?: number[];
@@ -25,6 +25,24 @@ export interface SiegeMessage {
   coins?: number;
   lost?: number;
   total?: number;
+}
+
+/** A resolved Commander shot as broadcast (positions in world px). */
+export interface TapMessage {
+  p: number;
+  ok: boolean;
+  error?: string;
+  x: number;
+  y: number;
+  hits: [number, number, number, number][];
+  kills: number;
+  coins: number;
+  bonus: number;
+  combo: number;
+  mult: number;
+  mag: number;
+  reload: number;
+  weapon: number;
 }
 
 export function bindLiveStream(socket: Socket, view: WorldView) {
@@ -55,10 +73,24 @@ export function bindLiveStream(socket: Socket, view: WorldView) {
     const s = decodeSnapshot(buf);
     view.applySnapshot(s.p, s, performance.now());
   });
-  socket.on('siege', (m: SiegeMessage) => {
+  socket.on('siege', (m: SiegeMessage & { x?: number; y?: number }) => {
     const l = view.live.get(m.p);
     if (!l) return;
+    if (m.type === 'strike') {
+      view.airstrikeLand(m.p, m.x! * 16, m.y! * 16, performance.now());
+      return;
+    }
     l.siege = { n: m.n, phase: m.type === 'surge' ? 'surge' : 'breather' };
+  });
+  // The Commander's shots: your own are drawn the moment you tap (prediction); everyone else's on arrival.
+  socket.on('tap', (m: TapMessage) => {
+    if (!m.ok || !view.live.has(m.p)) return;
+    const now = performance.now();
+    if (m.p !== view.myPlot) view.commanderFire(m.p, m.x, m.y, now, m.hits.map(([x, y]) => [x, y]));
+    view.tapHits(m.p, m.hits, now);
+  });
+  socket.on('airstrike', (m: { p: number; x: number; y: number; delay: number; radius: number }) => {
+    if (view.live.has(m.p)) view.airstrikeWarn(m.p, m.x, m.y, m.radius * 16, m.delay * 1000, performance.now());
   });
   socket.on('raid', (r: RaidStatus) => {
     const l = view.liveFor(r.plot);

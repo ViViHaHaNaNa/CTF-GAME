@@ -26,6 +26,14 @@ import {
   firepower,
   postId,
   type SiegeEvent,
+  type TapResult,
+  type ZombieKind,
+  UNIT_KINDS,
+  commanderSpot,
+  inOtherPlot,
+  inTapReach,
+  tapDpsCap,
+  zombieStats,
   quote,
   slotsUnlocked,
   trophyStake,
@@ -235,6 +243,136 @@ describe('zombie siege', () => {
     const one = firepower(newBase());
     expect(firepower(applyAction(newBase(), { kind: 'build', slot: 1, type: 'pistol' }))).toBeCloseTo(one * 2);
     expect(firepower({ hq: 1, walls: 1, posts: SLOTS.map(() => null) })).toBe(0);
+  });
+});
+
+describe('commander (tap-to-attack)', () => {
+  const rate = CONFIG.tickRate;
+  const C = CONFIG.commander;
+  /** A siege with a few still zombies placed by hand (no surges for a while). */
+  const range = (base = newBase()) => {
+    const s = new Siege(base, plot, 1, newDirector(), { firstDelay: 999 });
+    const z = (x: number, y: number, kind: ZombieKind = 'z_small') => s.combat.addUnit(UNIT_KINDS.indexOf(kind), { ...zombieStats(kind, base.hq), speed: 0 }, x, y);
+    return { s, z, wait: (secs: number) => { for (let i = 0; i < secs * rate; i++) s.step(); } };
+  };
+
+  it('hits the zombie closest to the tap point, anywhere around the base (360 degrees, past the walls)', () => {
+    const { s, z } = range();
+    const far = z(plot.x - 3, plot.y + 7); // out on the street to the west
+    const a = z(plot.x + 12.5, plot.y + 3);
+    const b = z(plot.x + 13.2, plot.y + 3); // overlapping clump: the closer one to the tap is hit
+    const r = s.tap(plot.x + 13.1, plot.y + 3.1);
+    expect(r.ok && r.hits.length).toBe(1);
+    expect(b.hp).toBeLessThan(b.maxHp);
+    expect(a.hp).toBe(a.maxHp);
+    s.combat.tick += 10;
+    const r2 = s.tap(plot.x - 2.5, plot.y + 7.5);
+    expect(r2.ok && r2.hits.length).toBe(1);
+    expect(far.hp).toBeLessThan(far.maxHp);
+  });
+
+  it('a tap on empty ground still flies toward the point and hits a zombie near its path', () => {
+    const { s, z } = range();
+    const [cx, cy] = commanderSpot(plot);
+    const onPath = z(cx + 4, cy - 0.6);
+    const r = s.tap(cx + 9, cy - 0.6);
+    expect(r.ok && r.hits.length).toBe(1);
+    expect(onPath.hp).toBeLessThan(onPath.maxHp);
+    s.combat.tick += 10;
+    const miss = s.tap(cx + 9, cy + 6);
+    expect(miss.ok && miss.hits.length).toBe(0);
+  });
+
+  it('enforces the fire rate, the magazine and the reload', () => {
+    const { s, z } = range();
+    z(plot.x + 7, plot.y + 1);
+    const w = C.weapons.pistol;
+    expect(s.tap(plot.x + 7, plot.y + 1).ok).toBe(true);
+    expect(s.tap(plot.x + 7, plot.y + 1)).toMatchObject({ ok: false, error: 'too fast' });
+    let fired = 1;
+    for (let t = 0; t < 10 * rate && fired < w.magazine; t++) {
+      s.combat.tick++;
+      if (s.tap(plot.x + 7, plot.y + 1).ok) fired++;
+    }
+    expect(fired).toBe(w.magazine);
+    const empty = s.tap(plot.x + 7, plot.y + 1);
+    expect(empty).toMatchObject({ ok: false, error: 'reloading' });
+    s.combat.tick += Math.ceil(w.reload * rate);
+    expect(s.tap(plot.x + 7, plot.y + 1).ok).toBe(true);
+  });
+
+  it('an autoclicker at the full fire rate never deals more than the tap damage cap', () => {
+    const { s, z } = range();
+    for (let i = 0; i < 40; i++) z(plot.x + 2 + (i % 10), plot.y + 1 + Math.floor(i / 10) * 0.4, 'z_big');
+    let dealt = 0;
+    const secs = 20;
+    for (let t = 0; t < secs * rate; t++) {
+      const r = s.tap(plot.x + 6, plot.y + 1.5);
+      if (r.ok) for (const h of r.hits) dealt += h[2];
+      s.combat.tick++;
+    }
+    const cap = tapDpsCap(newBase());
+    expect(dealt).toBeLessThanOrEqual(cap * (secs + C.dpsCap.burst) + 20);
+    expect(dealt).toBeGreaterThan(cap * secs * 0.6);
+  });
+
+  it('the shotgun spreads pellets over the clump', () => {
+    const base = { ...newBase(), hq: 3, cmd: 2 };
+    const { s, z } = range(base);
+    const pack = [z(plot.x + 12.5, plot.y + 5), z(plot.x + 12.9, plot.y + 5.4), z(plot.x + 12.3, plot.y + 5.6), z(plot.x + 13.1, plot.y + 4.8)];
+    const r = s.tap(plot.x + 12.5, plot.y + 5);
+    expect(r.ok && r.hits.length).toBe(C.weapons.shotgun.pellets);
+    expect(pack.filter((u) => u.hp < u.maxHp).length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('kills in a row build a combo that pays bonus coins; a miss resets it', () => {
+    const { s, z } = range();
+    let last: TapResult | undefined;
+    for (let i = 0; i < C.combo.step + 1; i++) {
+      const u = z(plot.x + 3 + i * 0.1, plot.y + 1);
+      while (u.state !== 'dead') {
+        s.combat.tick += 5;
+        const r = s.tap(u.x, u.y);
+        if (r.ok) last = r;
+        else s.combat.tick += rate * 2;
+      }
+    }
+    expect(last!.combo).toBe(C.combo.step + 1);
+    expect(last!.mult).toBe(2);
+    expect(last!.bonus).toBeGreaterThan(0);
+    s.combat.tick += 5;
+    const miss = s.tap(plot.x + 7, plot.y + 13);
+    expect(miss.ok && miss.combo).toBe(0);
+  });
+
+  it('an airstrike clears a clump after its warning, then needs its cooldown', () => {
+    // No posts, so only the airstrike can kill them.
+    const { s, z, wait } = range({ ...newBase(), posts: SLOTS.map(() => null) });
+    const clump = Array.from({ length: 12 }, (_, i) => z(plot.x + 11 + (i % 4) * 0.5, plot.y + 2 + Math.floor(i / 4) * 0.5));
+    expect(s.airstrike(plot.x + 11.8, plot.y + 2.5).ok).toBe(true);
+    expect(s.airstrike(plot.x + 11.8, plot.y + 2.5).ok).toBe(false);
+    wait(C.airstrike.delay - 0.2);
+    expect(clump.every((u) => u.state !== 'dead')).toBe(true);
+    wait(0.4);
+    expect(clump.every((u) => u.state === 'dead')).toBe(true);
+    expect(s.events.some((e) => e.type === 'strike' && e.kills === 12)).toBe(true);
+  });
+
+  it('weapons unlock with Main Tower level and cost coins', () => {
+    expect(quote(newBase(), { kind: 'commander' })).toMatchObject({ ok: false, reason: expect.stringMatching(/Main Tower level 2/) });
+    const hq2 = { ...newBase(), hq: 2 };
+    expect(quote(hq2, { kind: 'commander' })).toEqual({ ok: true, cost: C.weapons.gun.cost });
+    const gun = applyAction(hq2, { kind: 'commander' });
+    expect(gun.cmd).toBe(1);
+    expect(quote(gun, { kind: 'commander' }).ok).toBe(false);
+    expect(quote({ ...gun, hq: 3 }, { kind: 'commander' })).toEqual({ ok: true, cost: C.weapons.shotgun.cost });
+    // Taps reach `reach` tiles around the plot (zombies jostled into an alley can still be shot)...
+    expect(inTapReach(plot, plot.x + PLOT + C.reach - 0.5, plot.y + 7)).toBe(true);
+    expect(inTapReach(plot, plot.x + PLOT + C.reach + 0.5, plot.y + 7)).toBe(false);
+    // ...and the client knows when a tap lands on a neighbour's plot (plot 27: street east, alley west).
+    expect(inOtherPlot(plot, plot.x + PLOT + 3.5, plot.y + 7)).toBe(false);
+    expect(inOtherPlot(plot, plot.x + PLOT + 4.5, plot.y + 7)).toBe(true);
+    expect(inOtherPlot(plot, plot.x - 3, plot.y + 7)).toBe(true);
   });
 });
 

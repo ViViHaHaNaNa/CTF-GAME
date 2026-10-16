@@ -116,6 +116,12 @@
   --login-width: 340px;
   --vignette: radial-gradient(ellipse at center, rgba(5, 10, 25, 0) 58%, rgba(5, 10, 25, 0.42) 100%);
   --hurt-vignette: radial-gradient(ellipse at center, rgba(255, 30, 20, 0) 50%, rgba(230, 20, 10, 0.6) 100%);
+  --ammo: #ffd23f;                   /* tap-to-attack ammo bar, combo, airstrike button */
+  --ammo-spent: rgba(255, 255, 255, 0.16);
+  --combo: #ffd23f;
+  --combo-shadow: #7a1a0a;
+  --strike: #ff5a3c;
+  --strike-ink: #ffffff;
   --alarm: #ff2d1f;                  /* "They're coming from everywhere!" banner */
   --alarm-ink: #fff4c2;
   --login-glow: radial-gradient(ellipse at top, #24407a, var(--bg) 70%);
@@ -272,6 +278,19 @@
   --map-shake-first: 5;              /* screen shake, device px: first surge / breach / pincer */
   --map-shake-breach: 7;
   --map-shake-pincer: 2;
+  /* Commander (tap-to-attack) */
+  --map-cmd-tracer: #fff6c8;
+  --map-cmd-tracer-glow: rgba(255, 190, 60, 0.55);
+  --map-cmd-spark: #ffe680;
+  --map-cmd-damage: #ffffff;         /* damage numbers */
+  --map-cmd-kill: #ff5a3c;           /* damage number that killed */
+  --map-cmd-marker: #ffffff;         /* hit-marker X on a kill */
+  --map-cmd-strike: 255, 60, 40;     /* airstrike warning ring */
+  --map-cmd-fire: 255, 150, 40;      /* airstrike fireball */
+  --map-cmd-smoke: 60, 50, 50;
+  --map-cmd-flash: #fffbe0;
+  --map-shake-shotgun: 2;
+  --map-shake-strike: 4;
   --map-deploy: 255, 77, 61;
   --map-deploy-edge: rgba(255, 150, 130, 0.85);
   --map-pick: 255, 233, 120;

@@ -417,6 +417,36 @@ export class Combat {
     }
   }
 
+  // ---- taps & blasts (outside the normal tick) --------------------------------------------------------
+
+  /**
+   * Live, targetable units within `radius` of (x, y), closest to the point first (ties: earliest in the
+   * array). Uses the spatial hash, so it stays cheap with hundreds of zombies.
+   */
+  unitsNear(x: number, y: number, radius: number): Unit[] {
+    this.rehash();
+    const found: { u: Unit; d: number; i: number }[] = [];
+    const gx0 = this.cellX(x - radius), gx1 = this.cellX(x + radius);
+    const gy0 = this.cellY(y - radius), gy1 = this.cellY(y + radius);
+    for (let gy = gy0; gy <= gy1; gy++)
+      for (let gx = gx0; gx <= gx1; gx++)
+        for (let i = this.head[gy * this.hw + gx]!; i >= 0; i = this.next[i]!) {
+          const u = this.units[i]!;
+          if (u.state === 'rise' || u.state === 'dead') continue;
+          const d = Math.hypot(u.x - x, u.y - y);
+          if (d <= radius) found.push({ u, d, i });
+        }
+    found.sort((a, b) => a.d - b.d || a.i - b.i);
+    return found.map((f) => f.u);
+  }
+
+  /** Damage a unit between ticks (a tap or an airstrike). Kills are added to `kills`; true if this one died. */
+  strike(u: Unit, amount: number, kills: StepResult['kills']): boolean {
+    const res: StepResult = { kills, destroyed: [] };
+    this.hurt(u, amount, res);
+    return u.state === 'dead';
+  }
+
   // ---- simulation -------------------------------------------------------------------------------------
 
   /** Count down an attack timer; true when it fires (and it's reloaded). */

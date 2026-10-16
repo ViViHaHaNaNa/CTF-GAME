@@ -1,4 +1,4 @@
-import { CONFIG, POST_TYPES, hqUpgradeCost, postUpgradeCost, slotsUnlocked, wallUpgradeCost, type PostType } from './config.ts';
+import { COMMANDER_WEAPONS, CONFIG, POST_TYPES, hqUpgradeCost, postUpgradeCost, slotsUnlocked, wallUpgradeCost, type PostType } from './config.ts';
 import { SLOTS } from './layout.ts';
 import type { BaseState } from './types.ts';
 
@@ -9,7 +9,9 @@ export type BaseAction =
   | { kind: 'hq' }
   | { kind: 'walls' }
   | { kind: 'build'; slot: number; type: PostType }
-  | { kind: 'post'; slot: number };
+  | { kind: 'post'; slot: number }
+  /** Arm the Commander with the next weapon. */
+  | { kind: 'commander' };
 
 export interface Quote {
   ok: boolean;
@@ -21,7 +23,7 @@ export interface Quote {
 export function newBase(): BaseState {
   const posts: BaseState['posts'] = SLOTS.map(() => null);
   posts[0] = { type: CONFIG.start.starterPost, level: 1 };
-  return { hq: 1, walls: 1, posts };
+  return { hq: 1, walls: 1, posts, cmd: 0 };
 }
 
 /** What an action costs and whether the base allows it (coins are checked separately). */
@@ -46,6 +48,13 @@ export function quote(base: BaseState, a: BaseAction): Quote {
       if (base.hq < need) return { ok: false, cost, reason: `Needs Main Tower level ${need}` };
       return { ok: true, cost };
     }
+    case 'commander': {
+      const next = COMMANDER_WEAPONS[(base.cmd ?? 0) + 1];
+      if (!next) return { ok: false, cost: 0, reason: 'Best weapon already' };
+      const w = CONFIG.commander.weapons[next];
+      if (base.hq < w.unlockHq) return { ok: false, cost: w.cost, reason: `Needs Main Tower level ${w.unlockHq}` };
+      return { ok: true, cost: w.cost };
+    }
     case 'post': {
       const p = base.posts[a.slot];
       if (!p) return { ok: false, cost: 0, reason: 'Empty slot' };
@@ -59,7 +68,7 @@ export function quote(base: BaseState, a: BaseAction): Quote {
 
 /** The base after an action (call only after `quote(...).ok`). */
 export function applyAction(base: BaseState, a: BaseAction): BaseState {
-  const next: BaseState = { hq: base.hq, walls: base.walls, posts: base.posts.map((p) => (p ? { ...p } : null)) };
+  const next: BaseState = { hq: base.hq, walls: base.walls, posts: base.posts.map((p) => (p ? { ...p } : null)), cmd: base.cmd ?? 0 };
   switch (a.kind) {
     case 'hq':
       next.hq++;
@@ -73,6 +82,9 @@ export function applyAction(base: BaseState, a: BaseAction): BaseState {
     case 'post':
       next.posts[a.slot]!.level++;
       break;
+    case 'commander':
+      next.cmd = (next.cmd ?? 0) + 1;
+      break;
   }
   return next;
 }
@@ -81,7 +93,7 @@ export function applyAction(base: BaseState, a: BaseAction): BaseState {
 export function parseAction(raw: unknown): BaseAction | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
-  if (r.kind === 'hq' || r.kind === 'walls') return { kind: r.kind };
+  if (r.kind === 'hq' || r.kind === 'walls' || r.kind === 'commander') return { kind: r.kind };
   if (r.kind === 'build' && typeof r.slot === 'number' && typeof r.type === 'string' && (POST_TYPES as readonly string[]).includes(r.type)) {
     return { kind: 'build', slot: r.slot, type: r.type as PostType };
   }

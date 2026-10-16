@@ -10,6 +10,8 @@ import { GameError, type GameServer } from './game.ts';
 //  attack {plot} (ack)                      wave BaseLive / snap {p, ...Snapshot} / waveEnd
 //  deploy {kind, x, y} (ack)                raid RaidStatus / raidEnd RaidResult / underAttack
 //  retreat                                  coins {coins, delta} / player PlayerView / feed FeedItem
+//  tap {x, y}  (no ack: hits arrive as tap) tap {p, ...TapResult} (everyone watching) / airstrike {p, x, y, delay}
+//  airstrike {x, y} (ack) / reload          siege {p, ...SiegeEvent} / pressure {sides, hq, ammo, ...} (owner)
 //  immunity {minutes} (ack)                 crate CrateView            (a new crate, or it was claimed)
 //  answer {crate, answer} (ack)             status {paused, frozen}    (organiser switches)
 //  logout                                   needLogin
@@ -172,6 +174,27 @@ export function attachSockets(io: Server, game: GameServer): Sessions {
 
     socket.on('retreat', () => {
       if (playerId !== null) game.retreat(playerId);
+    });
+
+    // Taps come fast: the game enforces the fire rate; this only drops floods before they reach it.
+    const allowTap = limiter(12, 8);
+    socket.on('tap', (data: unknown) => {
+      if (playerId === null || !allowTap()) return;
+      const d = (data ?? {}) as { x?: unknown; y?: unknown };
+      game.tap(playerId, d.x, d.y);
+    });
+    socket.on('reload', () => {
+      if (playerId !== null) game.reload(playerId);
+    });
+    socket.on('airstrike', (data: unknown, ack: unknown) => {
+      if (playerId === null) return reply(ack, { ok: false, error: 'Not logged in' });
+      if (!allowAct()) return reply(ack, { ok: false, error: 'Slow down a little' });
+      try {
+        const d = (data ?? {}) as { x?: unknown; y?: unknown };
+        reply(ack, { ...game.airstrike(playerId, d.x, d.y) });
+      } catch (e) {
+        fail(ack, e);
+      }
     });
 
     socket.on('immunity', (data: unknown, ack: unknown) => {

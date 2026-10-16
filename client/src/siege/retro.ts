@@ -335,6 +335,47 @@ export class Sfx {
     n.start(t, 0, 0.8);
   }
 
+  /** A Commander shot: a noise crack with a low punch; bigger for the gun, a deep boom for the shotgun. */
+  shot(weapon: 'pistol' | 'gun' | 'shotgun') {
+    const ctx = this.ctx;
+    if (!ctx || this.muted) return;
+    const t = ctx.currentTime;
+    const big = weapon === 'shotgun' ? 1 : weapon === 'gun' ? 0.6 : 0.4;
+    const n = ctx.createBufferSource();
+    n.buffer = this.noiseBuffer(ctx);
+    const hp = ctx.createBiquadFilter();
+    hp.type = weapon === 'shotgun' ? 'lowpass' : 'bandpass';
+    hp.frequency.value = weapon === 'shotgun' ? 1800 : 2600;
+    const v = ctx.createGain();
+    const dur = 0.06 + big * 0.14;
+    v.gain.setValueAtTime(0.09 + big * 0.06, t);
+    v.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    n.connect(hp).connect(v).connect(ctx.destination);
+    n.start(t, Math.random() * 0.5, dur);
+    this.tone(160 - big * 70, 0, dur, 'square', 0.04 + big * 0.05, 50);
+  }
+
+  /** Empty magazine. */
+  dry() {
+    this.tone(1800, 0, 0.02, 'square', 0.03);
+  }
+
+  /** Reload: two mechanical clicks. */
+  reloadClick() {
+    this.tone(700, 0, 0.03, 'square', 0.035);
+    this.tone(500, 0.12, 0.04, 'square', 0.035);
+  }
+
+  /** A tap kill: a short high tick that climbs with the combo multiplier. */
+  kill(mult: number) {
+    this.tone(880 + 220 * (mult - 1), 0, 0.05, 'square', 0.03);
+  }
+
+  /** Airstrike called: a falling whistle. */
+  whistle(seconds: number) {
+    this.tone(1600, 0, seconds, 'sine', 0.035, 500);
+  }
+
   /** A surge held: two bright notes. */
   held() {
     this.tone(659, 0, 0.08, 'square', 0.035);

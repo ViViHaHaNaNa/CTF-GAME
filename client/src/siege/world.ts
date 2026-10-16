@@ -1,4 +1,5 @@
 import {
+  COMMANDER_WEAPONS,
   CONFIG,
   HQ_ID,
   HQ_RECT,
@@ -12,6 +13,7 @@ import {
   PROP_FILES,
   getWorld,
   isAnimatedProp,
+  commanderSpot,
   inDeployZone,
   killCoins,
   postId,
@@ -27,7 +29,7 @@ import {
   type ZombieKind,
 } from '@siege/shared';
 import { tinyText, tinyWidth } from './retro.ts';
-import { LAYER_OFFSET, drawFrame, type Sheet, type Sprites } from './sprites.ts';
+import { COMMANDER_LAYERS, LAYER_OFFSET, drawFrame, type Facing, type Sheet, type Sprites } from './sprites.ts';
 import { FONT, FONT_DISPLAY, THEME, baseColor, groundRule, recolour, textOn } from './theme.ts';
 
 // Renders the shared world: a camera over one big pixel map at integer zoom (no smoothing).
@@ -88,6 +90,14 @@ export interface LiveState {
   lastShot: Map<number, number>;
   lastSnapAt: number;
   raid: RaidStatus | null;
+  /** The Commander: which way they face and when they last fired (local ms). */
+  cmd: { face: Facing; shotAt: number };
+  /** Commander tracers (brighter and longer-lived than the posts'). */
+  shots: { x0: number; y0: number; x1: number; y1: number; at: number }[];
+  /** Short-lived tap effects: 0 hit spark, 1 damage number, 2 kill hit-marker, 3 ejected casing. */
+  fx: { kind: number; x: number; y: number; vx: number; vy: number; at: number; img: HTMLCanvasElement | null; w: number }[];
+  /** Airstrikes: the warning marker until `land`, then the blast. */
+  strikes: { x: number; y: number; r: number; at: number; land: number }[];
 }
 
 type ZombieSheets = { walk: keyof Sprites; attack: keyof Sprites; death: keyof Sprites };
@@ -102,6 +112,8 @@ const LOD_K = 1.75;
 const CRACK_MS = 3500;
 const POP_MS = 750;
 const MANHOLE_MS = 1400;
+const SHOT_MS = 110;
+const BOOM_MS = 650;
 
 /** One depth-sorted thing to draw on a base (records are reused frame to frame). */
 interface DrawItem {
@@ -136,7 +148,7 @@ function hash(x: number, y: number, s = 0) {
 
 /** Plot-level base description, from the world summary (or the player's own fresher state). */
 function baseOf(s: BaseSummary): BaseState {
-  return { hq: s.hq, walls: s.walls, posts: s.posts.map((p) => (p ? { type: POST_TYPES[p[0]]!, level: p[1] } : null)) };
+  return { hq: s.hq, walls: s.walls, posts: s.posts.map((p) => (p ? { type: POST_TYPES[p[0]]!, level: p[1] } : null)), cmd: s.cmd ?? 0 };
 }
 
 export class WorldView {
@@ -168,6 +180,7 @@ export class WorldView {
   private emberStyle = { glow: '', core: '' };
   /** Where puddles form when it rains (world px). */
   private puddles: { x: number; y: number; r: number; seed: number }[] = [];
+  private numberCache = new Map<string, HTMLCanvasElement>();
   /** Unit views and draw records, reused so busy sieges allocate nothing per frame. */
   private unitPool: UnitView[] = [];
   private drawList: DrawItem[] = [];
@@ -449,7 +462,7 @@ export class WorldView {
   liveFor(plot: number): LiveState {
     let l = this.live.get(plot);
     if (!l) {
-      l = { phase: 'calm', siege: null, units: new Map(), hp: new Map(), tracers: [], puffs: [], cracks: [], manholes: new Map(), pops: [], postFacing: new Map(), lastShot: new Map(), lastSnapAt: 0, raid: null };
+      l = { phase: 'calm', siege: null, units: new Map(), hp: new Map(), tracers: [], puffs: [], cracks: [], manholes: new Map(), pops: [], postFacing: new Map(), lastShot: new Map(), lastSnapAt: 0, raid: null, cmd: { face: 'down', shotAt: -1e9 }, shots: [], fx: [], strikes: [] };
       this.live.set(plot, l);
     }
     return l;
@@ -551,6 +564,274 @@ export class WorldView {
       }
     }
     l.lastSnapAt = now;
+  }
+
+  // ---- the Commander ---------------------------------------------------------------------------------
+
+  /** Where the Commander stands (world px, feet) and the weapon they hold on this plot. */
+  private commander(plot: number): { x: number; y: number; weapon: 'pistol' | 'gun' | 'shotgun' } {
+    const p = world.plots[plot]!;
+    const [fx, fy] = commanderSpot(p);
+    const base = plot === this.myPlot && this.myBase ? this.myBase : this.bases.get(plot);
+    return { x: fx * T, y: fy * T, weapon: COMMANDER_WEAPONS[base?.cmd ?? 0] ?? 'pistol' };
+  }
+
+  /** Which way to face to shoot from (x, y) at (tx, ty). */
+  private faceToward(x: number, y: number, tx: number, ty: number): Facing {
+    const dx = tx - x;
+    const dy = ty - y;
+    return Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up';
+  }
+
+  /** The Commander's body and weapon sheets for a facing. */
+  private commanderSheets(weapon: 'pistol' | 'gun' | 'shotgun', face: Facing): { body: Sheet; gun: Sheet; fire: Sheet } {
+    const s = this.sprites;
+    const W = { pistol: ['pistol', 'pistolDown', 'pistolUp', 'pistolLeft'], gun: ['gun', 'gunDown', 'gunUp', 'gunLeft'], shotgun: ['shotgun', 'shotgunDown', 'shotgunUp', 'shotgunLeft'] } as const;
+    const i = face === 'right' ? 0 : face === 'down' ? 1 : face === 'up' ? 2 : 3;
+    const body = [s.body, s.bodyDown, s.bodyUp, s.bodyLeft][i]!;
+    const fire = [s.fire, s.fireDown, s.fireUp, s.fireLeft][i]!;
+    return { body, gun: s[W[weapon][i]] as Sheet, fire };
+  }
+
+  /** Top-left of the muzzle flash sprite, relative to the body's top-left. */
+  private muzzleOffset(weapon: 'pistol' | 'gun' | 'shotgun', face: Facing, gun: Sheet, fire: Sheet): [number, number] {
+    const o = COMMANDER_LAYERS[weapon][face];
+    const f = LAYER_OFFSET.fire[weapon];
+    if (face === 'right') return [o.x + f.x, o.y + f.y];
+    if (face === 'left') return [o.x + gun.fw - f.x - fire.fw, o.y + f.y];
+    if (face === 'down') return [o.x + Math.floor(gun.fw / 2) - Math.floor(fire.fw / 2), o.y + gun.fh - 2];
+    return [o.x + Math.floor(gun.fw / 2) - Math.floor(fire.fw / 2), o.y - fire.fh + 2];
+  }
+
+  /** World px the Commander's shots leave from when facing `face`. */
+  private muzzle(plot: number, face: Facing): [number, number] {
+    const c = this.commander(plot);
+    const { body, gun, fire } = this.commanderSheets(c.weapon, face);
+    const [mx, my] = this.muzzleOffset(c.weapon, face, gun, fire);
+    return [Math.round(c.x - body.fw / 2) + mx + fire.fw / 2, c.y - body.fh + my + fire.fh / 2];
+  }
+
+  private drawCommander(g: CanvasRenderingContext2D, plot: number, base: BaseState, l: LiveState | null, now: number, ox = 0, oy = 0) {
+    const p = world.plots[plot]!;
+    const [fx, fy] = commanderSpot(p);
+    // `ox/oy` re-base a cached static image (drawn at a different origin).
+    const x = fx * T + ox;
+    const y = fy * T + oy;
+    const weapon = COMMANDER_WEAPONS[base.cmd ?? 0] ?? 'pistol';
+    const face = l?.cmd.face ?? 'down';
+    const { body, gun, fire } = this.commanderSheets(weapon, face);
+    const since = l ? now - l.cmd.shotAt : 1e9;
+    // A pixel of recoil while firing.
+    const kick = since < 70 ? 1 : 0;
+    const kx = face === 'right' ? -kick : face === 'left' ? kick : 0;
+    const ky = face === 'down' ? -kick : face === 'up' ? kick : 0;
+    const bx = Math.round(x - body.fw / 2) + kx;
+    const by = y - body.fh + ky;
+    const frame = l ? Math.floor(now / 170) : 0;
+    g.fillStyle = THEME.unitShadow;
+    g.fillRect(Math.round(x - 5), y - 1, 10, 2);
+    const o = COMMANDER_LAYERS[weapon][face];
+    if (face === 'up') drawFrame(g, gun, frame, bx + o.x, by + o.y);
+    drawFrame(g, body, frame, bx, by);
+    if (face !== 'up') drawFrame(g, gun, frame, bx + o.x, by + o.y);
+    if (since < SHOT_MS * 0.7) {
+      const [mx, my] = this.muzzleOffset(weapon, face, gun, fire);
+      drawFrame(g, fire, Math.floor(since / 25), bx + mx, by + my);
+    }
+  }
+
+  /**
+   * The Commander fires at (tx, ty) world px: turn, flash, tracer, a casing. Called at once for your own
+   * taps (prediction) and when a watched base's tap result arrives.
+   */
+  commanderFire(plot: number, tx: number, ty: number, now: number, pellets: [number, number][] = []) {
+    const l = this.liveFor(plot);
+    const c = this.commander(plot);
+    l.cmd.face = this.faceToward(c.x, c.y - 8, tx, ty);
+    l.cmd.shotAt = now;
+    const [mx, my] = this.muzzle(plot, l.cmd.face);
+    for (const [px, py] of pellets.length ? pellets : [[tx, ty] as [number, number]]) l.shots.push({ x0: mx, y0: my, x1: px, y1: py - 6, at: now });
+    const side = l.cmd.face === 'left' ? 1 : -1;
+    const img = (c.weapon === 'shotgun' ? this.sprites.casingShotgun : c.weapon === 'gun' ? this.sprites.casingGun : this.sprites.casingPistol).img;
+    l.fx.push({ kind: 3, x: c.x, y: c.y - 9, vx: side * (0.03 + Math.random() * 0.03), vy: -0.09 - Math.random() * 0.04, at: now, img: img as unknown as HTMLCanvasElement, w: 0 });
+  }
+
+  /** Live zombies on a plot nearest (x, y) world px within r, closest first (client-side aim prediction). */
+  zombiesNear(plot: number, x: number, y: number, r: number, max = 1): { x: number; y: number }[] {
+    const l = this.live.get(plot);
+    if (!l) return [];
+    const out: { x: number; y: number; d: number }[] = [];
+    for (const u of l.units.values()) {
+      if (u.state >= 2 || !UNIT_KINDS[u.kind]?.startsWith('z_')) continue;
+      const d = Math.hypot(u.x - x, u.y - y);
+      if (d <= r) out.push({ x: u.x, y: u.y, d });
+    }
+    return out.sort((a, b) => a.d - b.d).slice(0, max);
+  }
+
+  /** Server-confirmed hits (world px): damage numbers, sparks, and a hit-marker on kills. */
+  tapHits(plot: number, hits: [number, number, number, number][], now: number) {
+    const l = this.liveFor(plot);
+    for (const [x, y, dmg, killed] of hits) {
+      l.fx.push({ kind: 0, x, y: y - 7, vx: 0, vy: 0, at: now, img: null, w: 0 });
+      l.fx.push({ kind: 1, x: x + (Math.random() - 0.5) * 6, y: y - 16, vx: 0, vy: 0, at: now, img: this.numberImage(dmg, !!killed), w: 0 });
+      if (killed) l.fx.push({ kind: 2, x, y: y - 7, vx: 0, vy: 0, at: now, img: null, w: 0 });
+    }
+  }
+
+  /** An airstrike called on a spot (world px): warning marker until it lands. */
+  airstrikeWarn(plot: number, x: number, y: number, r: number, delayMs: number, now: number) {
+    this.liveFor(plot).strikes.push({ x, y, r, at: now, land: now + delayMs });
+  }
+
+  /** The strike landed (server): blast now, even if the warning drifted. */
+  airstrikeLand(plot: number, x: number, y: number, now: number) {
+    const l = this.liveFor(plot);
+    const s = l.strikes.find((k) => Math.hypot(k.x - x, k.y - y) < 4 && k.land + BOOM_MS > now);
+    if (s) s.land = Math.min(s.land, now);
+    else l.strikes.push({ x, y, r: CONFIG.commander.airstrike.radius * T, at: now, land: now });
+  }
+
+  /** A damage number: white, red when it killed; dark outline, 3x5 pixel font. Cached per value. */
+  private numberImage(n: number, kill: boolean): HTMLCanvasElement {
+    const key = `${n}${kill ? 'k' : ''}`;
+    let c = this.numberCache.get(key);
+    if (c) return c;
+    const text = String(n);
+    c = document.createElement('canvas');
+    c.width = tinyWidth(text) + 2;
+    c.height = 7;
+    const g = c.getContext('2d')!;
+    for (const [dx, dy] of [[0, 1], [2, 1], [1, 0], [1, 2], [2, 2]]) tinyText(g, text, dx!, dy!, THEME.siege.coinOutline);
+    tinyText(g, text, 1, 1, kill ? THEME.cmd.kill : THEME.cmd.damage);
+    this.numberCache.set(key, c);
+    return c;
+  }
+
+  /** Tracers, sparks, numbers, hit-markers, casings and airstrikes (drawn over the units). */
+  private drawTapFx(g: CanvasRenderingContext2D, l: LiveState, now: number) {
+    if (l.shots.length) {
+      let keep = 0;
+      for (const t of l.shots) {
+        const k = (now - t.at) / SHOT_MS;
+        if (k >= 1) continue;
+        l.shots[keep++] = t;
+        g.globalAlpha = 1 - k;
+        g.strokeStyle = THEME.cmd.tracerGlow;
+        g.lineWidth = 2;
+        g.beginPath();
+        g.moveTo(t.x0, t.y0);
+        g.lineTo(t.x1, t.y1);
+        g.stroke();
+        g.strokeStyle = THEME.cmd.tracer;
+        g.lineWidth = 1;
+        g.stroke();
+      }
+      l.shots.length = keep;
+      g.globalAlpha = 1;
+    }
+    if (l.fx.length) {
+      let keep = 0;
+      for (const f of l.fx) {
+        const age = now - f.at;
+        const life = f.kind === 0 ? 180 : f.kind === 1 ? 700 : f.kind === 2 ? 200 : 600;
+        if (age >= life) continue;
+        l.fx[keep++] = f;
+        const k = age / life;
+        if (f.kind === 0) {
+          // Spark: four bright pixels flying apart.
+          g.fillStyle = THEME.cmd.spark;
+          const r = 1 + k * 5;
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0.6, -0.8], [-0.6, -0.8]] as const) g.fillRect(Math.round(f.x + dx * r), Math.round(f.y + dy * r), 1, 1);
+        } else if (f.kind === 1) {
+          g.globalAlpha = k < 0.6 ? 1 : (1 - k) / 0.4;
+          g.drawImage(f.img!, Math.round(f.x - f.img!.width / 2), Math.round(f.y - 12 * Math.sqrt(k)));
+          g.globalAlpha = 1;
+        } else if (f.kind === 2) {
+          // Hit-marker: a white X that flashes on a kill.
+          g.fillStyle = THEME.cmd.marker;
+          const x = Math.round(f.x);
+          const y = Math.round(f.y);
+          for (let i = 2; i <= 4; i++) {
+            g.fillRect(x - i, y - i, 1, 1);
+            g.fillRect(x + i, y - i, 1, 1);
+            g.fillRect(x - i, y + i, 1, 1);
+            g.fillRect(x + i, y + i, 1, 1);
+          }
+        } else {
+          // Casing: hops out, falls back, bounces, fades.
+          const t = Math.min(age, 380);
+          const x = f.x + f.vx * t;
+          const y = f.y + f.vy * t + 0.0006 * t * t;
+          g.globalAlpha = 1 - k * k;
+          g.drawImage(f.img!, Math.round(x), Math.round(Math.min(y, f.y + 8)));
+          g.globalAlpha = 1;
+        }
+      }
+      l.fx.length = keep;
+    }
+    if (l.strikes.length) {
+      let keep = 0;
+      for (const s of l.strikes) {
+        if (now > s.land + BOOM_MS) continue;
+        l.strikes[keep++] = s;
+        if (now < s.land) {
+          // Warning: a pulsing ring that closes in, and a crosshair.
+          const k = Math.min(1, (now - s.at) / Math.max(1, s.land - s.at));
+          const pulse = 0.5 + 0.5 * Math.sin(now / 70);
+          g.strokeStyle = `rgba(${THEME.cmd.strike.join(', ')}, ${0.5 + 0.4 * pulse})`;
+          g.lineWidth = 1;
+          g.beginPath();
+          g.ellipse(s.x, s.y, s.r, s.r * 0.6, 0, 0, Math.PI * 2);
+          g.stroke();
+          g.fillStyle = `rgba(${THEME.cmd.strike.join(', ')}, ${0.12 + 0.18 * k})`;
+          g.beginPath();
+          g.ellipse(s.x, s.y, s.r * k, s.r * 0.6 * k, 0, 0, Math.PI * 2);
+          g.fill();
+          g.fillStyle = `rgb(${THEME.cmd.strike.join(', ')})`;
+          g.fillRect(Math.round(s.x) - 6, Math.round(s.y), 13, 1);
+          g.fillRect(Math.round(s.x), Math.round(s.y) - 4, 1, 9);
+        } else {
+          // Blast: a white flash, an orange fireball, a smoke ring spreading out.
+          const k = (now - s.land) / BOOM_MS;
+          g.globalAlpha = 1 - k;
+          g.fillStyle = `rgba(${THEME.cmd.smoke.join(', ')}, 0.6)`;
+          g.beginPath();
+          g.ellipse(s.x, s.y, s.r * (0.6 + 0.6 * k), s.r * 0.6 * (0.6 + 0.6 * k), 0, 0, Math.PI * 2);
+          g.fill();
+          // Fireball: red rim, orange body, a hot yellow-white core that shrinks first.
+          const f = 1 - k * 0.6;
+          g.fillStyle = `rgb(${THEME.cmd.strike.join(', ')})`;
+          g.beginPath();
+          g.ellipse(s.x, s.y - 4 * k, s.r * 0.75 * f, s.r * 0.5 * f, 0, 0, Math.PI * 2);
+          g.fill();
+          g.fillStyle = `rgb(${THEME.cmd.fire.join(', ')})`;
+          g.beginPath();
+          g.ellipse(s.x, s.y - 5 * k, s.r * 0.58 * f, s.r * 0.38 * f, 0, 0, Math.PI * 2);
+          g.fill();
+          g.fillStyle = THEME.cmd.flash;
+          g.beginPath();
+          g.ellipse(s.x, s.y - 6 * k, s.r * 0.32 * (1 - k), s.r * 0.2 * (1 - k), 0, 0, Math.PI * 2);
+          g.fill();
+          // Debris flung out in an arc.
+          g.fillStyle = `rgb(${THEME.cmd.smoke.join(', ')})`;
+          for (let i = 0; i < 14; i++) {
+            const a = (i / 14) * Math.PI * 2 + hash(i, s.x, 3);
+            const d = s.r * (0.3 + 1.1 * k) * (0.6 + 0.4 * hash(i, s.y, 4));
+            g.fillRect(Math.round(s.x + Math.cos(a) * d), Math.round(s.y + Math.sin(a) * d * 0.6 - 18 * k * (1 - k) * 4), 2, 2);
+          }
+          if (k < 0.25) {
+            g.fillStyle = THEME.cmd.flash;
+            g.globalAlpha = 1 - k * 4;
+            g.beginPath();
+            g.ellipse(s.x, s.y, s.r * 0.5, s.r * 0.32, 0, 0, Math.PI * 2);
+            g.fill();
+          }
+          g.globalAlpha = 1;
+        }
+      }
+      l.strikes.length = keep;
+    }
   }
 
   /** A zombie starts climbing out: from a grave (dirt puff), its manhole (lid pushed aside) or a fresh crack. */
@@ -970,6 +1251,8 @@ export class WorldView {
       if (base.posts[i]) put(oy + s.y * T + 15, 2, i, null);
       else if (mine) put(oy + s.y * T, 3, i, null);
     });
+    const [, cfy] = commanderSpot({ x: 0, y: 0 });
+    put(oy + cfy * T, 5, 0, null);
     const a = l ? Math.min(1, (now - l.lastSnapAt) / SNAP_MS) : 0;
     if (l) for (const u of l.units.values()) put(u.py + (u.y - u.py) * a, 4, 0, u);
     // Sort just the used part of the reused list (insertion sort: it's nearly sorted frame to frame).
@@ -1005,6 +1288,11 @@ export class WorldView {
           this.drawSlot(g, ox + s.x * T, oy + s.y * T, it.i < unlocked);
           break;
         }
+        case 5: {
+          const wp = world.plots[plot]!;
+          this.drawCommander(g, plot, base, l, now, ox - wp.x * T, oy - wp.y * T);
+          break;
+        }
         default: {
           const u = it.unit!;
           this.drawUnit(g, u, u.px + (u.x - u.px) * a, it.y, now, lod);
@@ -1012,7 +1300,10 @@ export class WorldView {
         }
       }
     }
-    if (l) this.drawEffects(g, l, now);
+    if (l) {
+      this.drawEffects(g, l, now);
+      this.drawTapFx(g, l, now);
+    }
   }
 
   /** Under the units: cracks zombies climb out of, and manholes with their lids pushed aside. */

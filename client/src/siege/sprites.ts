@@ -18,6 +18,26 @@ const FILES = {
   helmet: 'Character/Helmet/Helmet_side_Idle-and-Run-Sheet6.png',
   fire: 'Character/Guns/Fire/Fire_side-Sheet3.png',
 
+  // The Commander faces four ways: body (no hands) + weapon-with-hands for down, up and left (right = the ones above).
+  bodyDown: 'Character/Main/Idle/Character_down_idle_no-hands-Sheet6.png',
+  bodyUp: 'Character/Main/Idle/Character_up_idle_no-hands-Sheet6.png',
+  bodyLeft: 'Character/Main/Idle/Character_side-left_idle_no-hands-Sheet6.png',
+  pistolDown: 'Character/Guns/Pistol/Pistol_down_idle-and-run-Sheet6.png',
+  pistolUp: 'Character/Guns/Pistol/Pistol_up_idle-and-run-Sheet6.png',
+  pistolLeft: 'Character/Guns/Pistol/Pistol_side-left_idle-and-run-Sheet6.png',
+  gunDown: 'Character/Guns/Gun/Gun_down_idle-and-run-Sheet6.png',
+  gunUp: 'Character/Guns/Gun/Gun_up_idle-and-run-Sheet6.png',
+  gunLeft: 'Character/Guns/Gun/Gun_side-left_idle-and-run-Sheet6.png',
+  shotgunDown: 'Character/Guns/Shotgun/Shotgun_down_idle-and-run-Sheet6.png',
+  shotgunUp: 'Character/Guns/Shotgun/Shotgun_up_idle-and-run-Sheet6.png',
+  shotgunLeft: 'Character/Guns/Shotgun/Shotgun_side-left_idle-and-run-Sheet6.png',
+  fireDown: 'Character/Guns/Fire/Fire_Down-Sheet3.png',
+  fireUp: 'Character/Guns/Fire/Fire_Up-Sheet3.png',
+  fireLeft: 'Character/Guns/Fire/Fire_side-left-Sheet3.png',
+  casingPistol: 'Character/Guns/Bullets/Pistol-bullet_Casting.png',
+  casingGun: 'Character/Guns/Bullets/Gun-bullet_Casing.png',
+  casingShotgun: 'Character/Guns/Bullets/Shotgun-bullet.png',
+
   zSmallWalk: 'Enemies/Zombie_Small/Zombie_Small_Side_Walk-Sheet6.png',
   zSmallAttack: 'Enemies/Zombie_Small/Zombie_Small_Side_First-Attack-Sheet4.png',
   zSmallDeath: 'Enemies/Zombie_Small/Zombie_Small_Side_First-Death-Sheet6.png',
@@ -99,6 +119,20 @@ export const LAYER_OFFSET = {
   /** Muzzle flash, relative to the weapon frame. */
   fire: { pistol: { x: 7, y: 0 }, gun: { x: 14, y: 1 }, shotgun: { x: 13, y: 0 } },
 } as const;
+
+/** Commander facings, in the order used by `COMMANDER_LAYERS`. */
+export type Facing = 'down' | 'up' | 'right' | 'left';
+
+/**
+ * Commander weapon layer offsets per facing, relative to the body frame's top-left (body is 11x16
+ * facing down/up, 10x16 sideways). Facing up, the weapon is drawn behind the body. Checked against
+ * the pack by rendering every combination (see NOTES.md).
+ */
+export const COMMANDER_LAYERS: Record<'pistol' | 'gun' | 'shotgun', Record<Facing, { x: number; y: number }>> = {
+  pistol: { down: { x: 6, y: 8 }, up: { x: 6, y: -1 }, right: { x: 4, y: 6 }, left: { x: -2, y: 6 } },
+  gun: { down: { x: 6, y: 7 }, up: { x: 6, y: -5 }, right: { x: -1, y: 6 }, left: { x: -5, y: 6 } },
+  shotgun: { down: { x: 5, y: 7 }, up: { x: 5, y: -5 }, right: { x: -1, y: 7 }, left: { x: -4, y: 7 } },
+};
 
 const url = (file: string) => ASSET_ROOT + file.split('/').map(encodeURIComponent).join('/');
 
