@@ -27,6 +27,7 @@ import {
   quote,
   raidLoot,
   raidTrophies,
+  raiderCost,
   raiderUnlocked,
   rollRarity,
   trophyStake,
@@ -486,7 +487,7 @@ export class GameServer {
     const y = Number(rawY);
     const why = r.raid.canDeploy(rawKind, x, y);
     if (why) throw new GameError('bad_deploy', why);
-    const cost = CONFIG.pvp.raiders[rawKind].cost;
+    const cost = raiderCost(rawKind, a.base.hq);
     if (a.coins < cost) throw new GameError('no_coins', `Need ${cost - a.coins} more coins`);
     a.coins -= cost;
     r.spent += cost;
@@ -612,7 +613,7 @@ export class GameServer {
   /** Raiders the attacker can still send: the troop limit, and enough coins for the cheapest one unlocked. */
   private armyLeft(r: RaidState): number {
     const a = this.players.get(r.attackerId)!;
-    const cheapest = Math.min(...RAIDER_KINDS.filter((k) => raiderUnlocked(k, a.base.hq)).map((k) => CONFIG.pvp.raiders[k].cost));
+    const cheapest = Math.min(...RAIDER_KINDS.filter((k) => raiderUnlocked(k, a.base.hq)).map((k) => raiderCost(k, a.base.hq)));
     return a.coins >= cheapest ? Math.max(0, CONFIG.pvp.maxDeploys - r.raid.deployed) : 0;
   }
 
@@ -713,7 +714,7 @@ export class GameServer {
     if (e.type === 'surge') this.setWaveFlag(plot, 2);
     if (e.type === 'breach') {
       this.flushCoins();
-      const lost = breachLoss(p.coins);
+      const lost = breachLoss(p.coins, p.base.hq);
       p.coins -= lost;
       if (!this.isOnline(p.id)) {
         p.offline.breaches++;
@@ -832,14 +833,11 @@ export class GameServer {
   /** One headless surge for an offline grinder; returns how many seconds it lasted. */
   runOffline(p: PlayerRecord): number {
     p.waveNo++;
-    // Nobody taps while you're away: the siege runs at no more than the offline pressure cap.
+    // Offline surges don't move the ramp (counting off): the difficulty waits for the player.
     const d = p.siege!;
-    const online = d.pressure;
-    d.pressure = Math.min(online, CONFIG.offline.pressureCap);
     const s = new Siege(p.base, getWorld().plots[p.plot]!, seedOf(p.id, p.waveNo), d, { defenceBoost: this.defenceBoost(p), coarse: true, ramp: false, firstDelay: 0 });
     s.counting = false;
     const secs = s.runSurge();
-    if (online > CONFIG.offline.pressureCap) d.pressure = online;
     const room = Math.min(Math.max(0, CONFIG.offline.bankCap - p.bank), this.vaultRoom(p));
     const banked = Math.min(room, s.coins);
     p.bank += banked;
@@ -849,7 +847,7 @@ export class GameServer {
       if (e.type === 'surge') continue;
       surges++;
       if (e.type === 'breach') {
-        const l = breachLoss(p.coins);
+        const l = breachLoss(p.coins, p.base.hq);
         p.coins -= l;
         lost += l;
       }

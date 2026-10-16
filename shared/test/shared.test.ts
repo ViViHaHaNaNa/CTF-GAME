@@ -25,6 +25,11 @@ import {
   newBase,
   parseAction,
   killCoins,
+  surgePower,
+  rampGrowth,
+  defenceRating,
+  basicBaseDone,
+  type BaseAction,
   mulberry32,
   newDirector,
   firepower,
@@ -127,31 +132,81 @@ describe('zombie siege', () => {
     expect(new Siege(base, plot, 7, { ...newDirector(), surges: 3 }).tutorial).toBe(false);
   });
 
-  it('sides, zombie types and the boss unlock with level; surges grow', () => {
-    const S = CONFIG.siege;
-    const look = (hq: number) => {
-      const base = { ...newBase(), hq, walls: hq, posts: SLOTS.map((_, i) => (i < 2 ? { type: 'gun' as const, level: hq } : null)) };
-      const s = new Siege(base, plot, 11, { ...newDirector(), surges: 9 }, { firstDelay: 0 });
-      const kinds = new Set<string>();
-      let sides = 0;
-      let size = 0;
-      let boss = false;
-      for (let k = 0; k < 6; k++) {
-        const events = play(s, S.gap[hq - 1]! + S.maxSurge + 1);
-        for (const e of events) if (e.type === 'surge') (sides = Math.max(sides, e.sides.filter((n) => n > 0).length)), (size = Math.max(size, e.size)), (boss ||= e.boss);
-        for (const u of s.combat.units) kinds.add(UNIT_KINDS[u.kind]!);
-      }
-      return { sides: Math.min(4, sides - (hq >= S.graveyardFrom ? 1 : 0)), size, boss, incoming: s.incoming.length };
-    };
-    const l1 = look(1), l2 = look(2), l3 = look(3), l4 = look(4), l8 = look(8);
-    expect([l1.sides, l2.sides, l3.sides, l4.sides]).toEqual([1, 2, 3, 4]);
-    expect(l4.incoming).toBe(5); // all four sides + the graveyard
-    expect(l2.size).toBeGreaterThan(l1.size);
-    expect(l8.size).toBeGreaterThan(l4.size);
-    expect(l8.boss).toBe(true);
-    expect(S.bossChance.slice(0, 5).every((c) => c === 0)).toBe(true);
-    expect(S.mix.z_big.slice(0, 2).every((c) => c === 0) && S.mix.z_big[2]! > 0).toBe(true);
-    expect(S.mix.z_axe.slice(0, 3).every((c) => c === 0) && S.mix.z_axe[3]! > 0).toBe(true);
+  it('every live surge is stronger than the last, whatever happens in it; offline surges leave the ramp alone', () => {
+    const R = CONFIG.siege.ramp;
+    // A built base (guidance over) that loses some and wins some: the ramp grows by the same factor each time.
+    const base = { hq: 3, walls: 3, cmd: 0, posts: SLOTS.map((_, i) => (i < 4 ? { type: 'gun' as const, level: 3 } : null)) };
+    const d = { ...newDirector(), surges: 5 };
+    const s = new Siege(base, plot, 9, d, { firstDelay: 0 });
+    const ramps: number[] = [];
+    for (let k = 0; k < 6; k++) {
+      s.runSurge();
+      ramps.push(d.ramp);
+    }
+    for (let k = 1; k < ramps.length; k++) expect(ramps[k]! / ramps[k - 1]!).toBeCloseTo(rampGrowth(6 + k), 5);
+    const offline = new Siege(base, plot, 9, d, { coarse: true, ramp: false, firstDelay: 0 });
+    offline.counting = false;
+    const before = d.ramp;
+    offline.runSurge();
+    expect(d.ramp).toBe(before);
+  });
+
+  it('the surge power is spent on more zombies first, then tougher ones; hordes every few surges', () => {
+    const R = CONFIG.siege.ramp;
+    expect(surgePower(1)).toEqual({ power: R.start, count: R.start, toughness: 1 });
+    expect(surgePower(R.countCap * 2)).toMatchObject({ count: R.start * R.countCap, toughness: 2 });
+    expect(killCoins('z_big', 2)).toBe(Math.round(2 * CONFIG.siege.power.z_big * CONFIG.siege.coinsPerPower));
+    const base = { hq: 4, walls: 4, cmd: 0, posts: SLOTS.map((_, i) => (i < 5 ? { type: 'gun' as const, level: 4 } : null)) };
+    const d = { ...newDirector(), surges: 1 };
+    const s = new Siege(base, plot, 3, d, { firstDelay: 0 });
+    const hordes: number[] = [];
+    for (let k = 0; k < 10; k++) {
+      const next = s.threat();
+      s.runSurge();
+      if (next.horde) hordes.push(d.surges);
+    }
+    // Every `hordeEvery`th surge the player has ever had is a horde.
+    expect(hordes.length).toBe(2);
+    for (const n of hordes) expect(n % CONFIG.siege.hordeEvery).toBe(0);
+  });
+
+  it('guidance: one side, gentler, no hordes, hints, until the basic base is built; then the full ramp at once', () => {
+    let base = newBase();
+    const d = { ...newDirector(), surges: 1, ramp: 20 };
+    const s = new Siege(base, plot, 4, d, { firstDelay: 0 });
+    expect(s.guided).toBe(true);
+    expect(s.incoming).toHaveLength(1);
+    // The guided ramp is capped.
+    expect(s.threat().next).toBeLessThanOrEqual(Math.ceil(CONFIG.siege.ramp.start * CONFIG.siege.guided.maxRamp * (1 + CONFIG.siege.variance)));
+    for (const a of [{ kind: 'build', slot: 1, type: 'pistol' }, { kind: 'hq' }, { kind: 'post', slot: 0 }, { kind: 'walls' }] as BaseAction[]) {
+      expect(s.guided).toBe(true);
+      base = applyAction(base, a);
+      s.setBase(base);
+    }
+    expect(basicBaseDone(base)).toBe(true);
+    expect(s.guided).toBe(false);
+    expect(s.incoming.length).toBe(CONFIG.siege.sides[1]);
+    expect(s.threat().next).toBeGreaterThan(CONFIG.siege.ramp.start * CONFIG.siege.guided.maxRamp * (1 + CONFIG.siege.variance));
+  });
+
+  it('the threat meter compares the defence with the next surge', () => {
+    const s = new Siege(newBase(), plot, 1, { ...newDirector(), surges: 1 }, { firstDelay: 0 });
+    const t = s.threat();
+    expect(t.defence).toBe(defenceRating(newBase()));
+    expect(t.next).toBeGreaterThan(0);
+    const two = applyAction(newBase(), { kind: 'build', slot: 1, type: 'pistol' });
+    expect(defenceRating(two)).toBeGreaterThan(t.defence);
+  });
+
+  it('aim assist in the walkthrough surge only', () => {
+    const C = CONFIG.commander;
+    const r = (C.hitRadius + C.hitRadiusGuided) / 2;
+    for (const [surges, hit] of [[0, true], [1, false]] as const) {
+      const s = new Siege(newBase(), plot, 1, { ...newDirector(), surges }, { firstDelay: 999 });
+      const u = s.combat.addUnit(0, { ...zombieStats('z_small'), speed: 0 }, plot.x + 7, plot.y + 1);
+      const t = s.tap(u.x + r, u.y);
+      expect(t.ok && t.hits.length > 0).toBe(hit);
+    }
   });
 
   it('surges come on a regular countdown that grows with level, with nothing in between', () => {
@@ -193,21 +248,10 @@ describe('zombie siege', () => {
     expect(s.callEarly()).toBe(0);
   });
 
-  it('aim assist while guided: taps reach further below Main Tower 3', () => {
-    const C = CONFIG.commander;
-    const r = (C.hitRadius + C.hitRadiusGuided) / 2;
-    for (const [hq, hit] of [[1, true], [3, false]] as const) {
-      const s = new Siege({ ...newBase(), hq }, plot, 1, { ...newDirector(), surges: 9 }, { firstDelay: 999 });
-      const u = s.combat.addUnit(0, { ...zombieStats('z_small', hq), speed: 0 }, plot.x + 7, plot.y + 1);
-      const t = s.tap(u.x + r, u.y);
-      expect(t.ok && t.hits.length > 0).toBe(hit);
-    }
-  });
-
   it('spawns hug their own plot: never inside another compound', () => {
     for (const p of [world.plots[0]!, world.plots[27]!, world.plots[63]!]) {
       const base = { ...newBase(), hq: 4, walls: 4, posts: SLOTS.map((_, i) => (i < 3 ? { type: 'gun' as const, level: 3 } : null)) };
-      const s = new Siege(base, p, 3, { ...newDirector(), played: 600 }, { ramp: false, firstDelay: 0 });
+      const s = new Siege(base, p, 3, { ...newDirector(), played: 600, surges: 5, ramp: 3 }, { ramp: false, firstDelay: 0 });
       const seen = new Set<number>();
       for (let t = 0; t < 40 * rate; t++) {
         s.step();
@@ -221,7 +265,7 @@ describe('zombie siege', () => {
     }
   });
 
-  it('a base with no posts gets breached: the field clears, the director eases off, the siege goes on', () => {
+  it('a base with no posts gets breached: the field clears, the ramp still grows, the siege goes on', () => {
     const base = { hq: 3, walls: 1, posts: SLOTS.map(() => null) };
     const d = { ...newDirector(), played: 600 };
     const s = new Siege(base, plot, 5, d, { ramp: false, firstDelay: 0 });
@@ -232,7 +276,8 @@ describe('zombie siege', () => {
       s.events.length = 0;
     }
     expect(breach).toBeGreaterThan(0);
-    expect(d.pressure).toBeLessThan(CONFIG.siege.difficulty.start);
+    // No easing: the ramp grows after a lost surge too.
+    expect(d.ramp).toBeGreaterThan(1);
     expect(s.combat.liveUnits).toBe(0);
     expect(s.combat.hqDestroyed).toBe(false);
     // ...and the countdown to the next surge starts.
@@ -243,10 +288,11 @@ describe('zombie siege', () => {
 
   it('a breach costs a capped share and never goes below the protected floor', () => {
     const { lossPct, maxLoss, protectedFloor } = CONFIG.siege.breach;
-    expect(breachLoss(50)).toBe(0);
-    expect(breachLoss(protectedFloor + 5)).toBeLessThanOrEqual(5);
-    expect(breachLoss(1000)).toBe(Math.min(maxLoss, Math.round(1000 * lossPct)));
-    expect(breachLoss(1_000_000)).toBe(maxLoss);
+    expect(breachLoss(50, 1)).toBe(0);
+    expect(breachLoss(protectedFloor + 5, 1)).toBeLessThanOrEqual(5);
+    expect(breachLoss(1000, 8)).toBe(Math.min(maxLoss[7]!, Math.round(1000 * lossPct)));
+    expect(breachLoss(1_000_000, 1)).toBe(maxLoss[0]);
+    expect(breachLoss(1_000_000, 8)).toBe(maxLoss[7]);
   });
 
   it('upgrades join the running fight at once', () => {
@@ -265,10 +311,10 @@ describe('zombie siege', () => {
     expect(baseBuildings(base, plot).find((b) => b.id === postId(1))!.gun!.range).toBe(CONFIG.posts.types.shotgun.range);
   });
 
-  it('smalls die to one or two shots from a starter pistol; kill coins stay flat with level', () => {
+  it('smalls die to one or two shots from a starter pistol; kills pay by zombie power', () => {
     expect(Math.ceil(CONFIG.zombies.z_small.hp / CONFIG.posts.types.pistol.damage)).toBeLessThanOrEqual(2);
-    expect(killCoins('z_small', 1)).toBe(CONFIG.zombies.z_small.coins);
-    expect(killCoins('z_small', 8)).toBe(CONFIG.zombies.z_small.coins);
+    expect(killCoins('z_small')).toBe(Math.round(CONFIG.siege.power.z_small * CONFIG.siege.coinsPerPower));
+    expect(killCoins('z_big')).toBe(Math.round(CONFIG.siege.power.z_big * CONFIG.siege.coinsPerPower));
   });
 
   it('posts pick exactly the target a full scan would (spatial hash)', () => {

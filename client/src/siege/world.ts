@@ -199,6 +199,8 @@ export class WorldView {
   pressure: { sides: number[]; at: number } | null = null;
   /** Sides the next surge on your base comes from (0-3, 4 = graveyard), shown as arrows while set. */
   incoming: number[] = [];
+  /** Your current surge's toughness (kill coins scale with it). */
+  myToughness = 1;
   /** Told when your own Main Tower loses health (for the red vignette). */
   onHqHurt: ((hp: number, drop: number) => void) | null = null;
   bases = new Map<number, BaseSummary>();
@@ -522,7 +524,7 @@ export class WorldView {
           u.diedAt = now;
           // Every kill on your own base pops its coins right where it fell.
           const k = UNIT_KINDS[kind];
-          if (mine && this.myBase && k?.startsWith('z_')) l.pops.push({ x, y: y - 14, at: now, img: this.popImage(killCoins(k as ZombieKind, this.myBase.hq)) });
+          if (mine && this.myBase && k?.startsWith('z_')) l.pops.push({ x, y: y - 14, at: now, img: this.popImage(killCoins(k as ZombieKind, this.myToughness)) });
         }
         u.state = state;
         u.facing = facing;

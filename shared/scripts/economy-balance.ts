@@ -3,7 +3,7 @@
 // pays (win or lose) and per minute. Targets: an army every 2-3 surges; raiding pays more per minute
 // than grinding, with risk.
 // Usage: npx tsx shared/scripts/economy-balance.ts
-import { CONFIG, Raid, Siege, getWorld, lootable, mulberry32, newDirector, raidLoot, starBonus, vaultCapacity, inDeployZone, PLOT, type BaseState, type RaiderKind } from '../src/index.ts';
+import { CONFIG, Raid, Siege, raiderCost, rampGrowth, getWorld, lootable, mulberry32, newDirector, raidLoot, starBonus, vaultCapacity, inDeployZone, PLOT, type BaseState, type RaiderKind } from '../src/index.ts';
 
 const world = getWorld();
 const PLOTS = [0, 9, 18, 27, 36, 45, 54, 63].map((i) => world.plots[i]!);
@@ -23,10 +23,20 @@ const OVERHEAD = 25;
 /** How full a defender's vault is, typically. */
 const VAULT_FILL = 0.6;
 
+/** Around which surge a steady upgrader sits at each Main Tower level (from shared/scripts/ramp-bots.ts). */
+const SURGE_AT: Record<number, number> = { 1: 3, 2: 9, 3: 18, 4: 26, 5: 33 };
+/** The ramp multiplier after `n` surges. */
+function rampAt(n: number): number {
+  let r = 1;
+  for (let k = 1; k < n; k++) r = Math.min(CONFIG.siege.ramp.max, r * rampGrowth(k));
+  return r;
+}
+
 function grind(base: BaseState): { perMin: number; perSurge: number } {
   let coins = 0, surges = 0, secs = 0;
   for (let i = 1; i <= 6; i++) {
-    const s = new Siege(base, PLOTS[i % PLOTS.length]!, i * 104729, { ...newDirector(), played: 20 * 60, surges: 50 }, { ramp: false, firstDelay: 0 });
+    const n = SURGE_AT[base.hq] ?? 20;
+    const s = new Siege(base, PLOTS[i % PLOTS.length]!, i * 104729, { ...newDirector(), played: 20 * 60, surges: n, ramp: rampAt(n) }, { ramp: false, firstDelay: 0 });
     s.counting = false;
     // Six surges, each with the level's countdown before it (no calling early).
     for (let k = 0; k < 6; k++) s.runSurge();
@@ -41,7 +51,7 @@ function grind(base: BaseState): { perMin: number; perSurge: number } {
 function raid(level: (typeof LEVELS)[number], n: number, runs = 40) {
   const army: RaiderKind[] = [];
   for (const [k, c] of level.mix) for (let i = 0; i < c * n; i++) army.push(k);
-  const cost = army.reduce((a, k) => a + CONFIG.pvp.raiders[k].cost, 0);
+  const cost = army.reduce((a, k) => a + raiderCost(k, level.hq), 0);
   let wins = 0, stars = 0, loot = 0, secs = 0;
   const defenderCoins = Math.round(vaultCapacity(level.hq) * VAULT_FILL);
   for (let s = 1; s <= runs; s++) {

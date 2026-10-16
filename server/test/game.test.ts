@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { CONFIG, PLOT, checkAnswer, decodeSnapshot, getWorld, lootable, postId, postUpgradeCost, starBonus, vaultCapacity, type CrateView, type Question } from '@siege/shared';
+import { CONFIG, PLOT, checkAnswer, decodeSnapshot, getWorld, lootable, raiderCost, postId, postUpgradeCost, starBonus, vaultCapacity, type CrateView, type Question } from '@siege/shared';
 import { GameServer, type Outbox } from '../src/game.ts';
 import { SqliteStore } from '../src/store.ts';
 
@@ -144,7 +144,7 @@ describe('zombie siege', () => {
     const credited = rec.bank;
     expect(credited).toBe(Math.min(CONFIG.offline.bankCap, vaultCapacity(1) - coins + rec.offline.coinsLost));
     const lost = rec.offline.coinsLost;
-    expect(lost).toBeLessThanOrEqual(rec.offline.breaches * CONFIG.siege.breach.maxLoss);
+    expect(lost).toBeLessThanOrEqual(rec.offline.breaches * CONFIG.siege.breach.maxLoss[0]!);
     const w = game.connect(p.id);
     expect(w.offline?.credited).toBe(credited);
     expect(w.player.coins).toBe(coins - lost + credited);
@@ -172,7 +172,7 @@ describe('zombie siege', () => {
     let guard = 0;
     while (!sent.some((s) => s.ev === 'siege' && (s.data as { type: string }).type === 'breach') && guard++ < 200 * CONFIG.tickRate) game.tick();
     const b = sent.find((s) => s.ev === 'siege' && (s.data as { type: string }).type === 'breach')!.data as { lost: number; total: number };
-    expect(b.lost).toBe(CONFIG.siege.breach.maxLoss);
+    expect(b.lost).toBe(CONFIG.siege.breach.maxLoss[3]); // capped at the Main Tower 4 amount
     expect(b.total).toBe(game.players.get(p.id)!.coins);
     // The countdown to the next surge starts.
     secs(game, 2);
@@ -256,7 +256,7 @@ describe('raids', () => {
     expect(() => game.deploy(a.id, 'r_tank', 0, 0)).toThrow(/Unknown raider/);
     const plot = getWorld().plots[d.plot]!;
     for (let i = 0; i < 12; i++) game.deploy(a.id, 'r_bat', plot.x + 0.5, plot.y + 0.5 + (i % 4) * 0.5);
-    expect(game.players.get(a.id)!.coins).toBe(2000 - 12 * CONFIG.pvp.raiders.r_bat.cost);
+    expect(game.players.get(a.id)!.coins).toBe(2000 - 12 * raiderCost("r_bat", 1));
     let guard = 0;
     while (!sent.some((s) => s.ev === 'raidEnd') && guard++ < 10_000) game.tick();
     const res = sent.find((s) => s.ev === 'raidEnd')!.data as { won: boolean; stars: number; reason: string; vault: boolean; loot: number; trophies: number };
@@ -328,7 +328,7 @@ describe('raids', () => {
     const { game, a, d, sent } = twoPlayers();
     game.attack(a.id, d.plot);
     const plot = getWorld().plots[d.plot]!;
-    game.players.get(a.id)!.coins = CONFIG.pvp.raiders.r_bat.cost;
+    game.players.get(a.id)!.coins = raiderCost('r_bat', 1);
     game.deploy(a.id, 'r_bat', plot.x + 0.5, plot.y + 0.5);
     let guard = 0;
     while (!sent.some((s) => s.ev === 'raidEnd') && guard++ < 10_000) game.tick();

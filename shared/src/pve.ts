@@ -2,6 +2,7 @@ import { COMMANDER_WEAPONS, CONFIG, UNIT_KINDS, postStats, type ZombieKind } fro
 import { Combat, mulberry32, type BuildingDef, type StepResult, type Unit, type UnitStats } from './engine.ts';
 import { HQ_RECT, PLOT, SLOTS, VAULT_RECT, WALLS } from './layout.ts';
 import type { BaseState } from './types.ts';
+import { basicBaseDone } from './economy.ts';
 import { getWorld, sideTile, type WorldPlot } from './world.ts';
 
 // Zombie defence (PvE): one siege per grinding base. Surges come on a regular, visible countdown that
@@ -47,12 +48,13 @@ export function baseBuildings(base: BaseState, plot: { x: number; y: number }, d
   return defs;
 }
 
-export function zombieStats(kind: ZombieKind, hq: number): UnitStats {
+/** A zombie's stats; `toughness` (from the ramp, 1 = as listed) multiplies its health and damage. */
+export function zombieStats(kind: ZombieKind, toughness = 1): UnitStats {
   const z = CONFIG.zombies[kind];
   return {
-    hp: Math.round(z.hp * CONFIG.siege.hpScale(hq)),
+    hp: Math.round(z.hp * toughness),
     speed: z.speed * CONFIG.pace.zombieSpeed,
-    damage: Math.round(z.damage * CONFIG.siege.damageScale(hq)),
+    damage: Math.round(z.damage * toughness),
     cooldown: z.cooldown * CONFIG.pace.zombieCooldown,
     range: z.range,
     wallMult: z.wallMult,
@@ -61,14 +63,33 @@ export function zombieStats(kind: ZombieKind, hq: number): UnitStats {
   };
 }
 
-export function killCoins(kind: ZombieKind, hq: number): number {
-  // Rounded down so a Small is always worth exactly 1: lots of little pops, not runaway income.
-  return Math.max(1, Math.floor(CONFIG.zombies[kind].coins * CONFIG.siege.coinScale(hq)));
+/** Coins for a kill: the zombie's power x its toughness x coins per power. */
+export function killCoins(kind: ZombieKind, toughness = 1): number {
+  return Math.max(1, Math.round(CONFIG.siege.power[kind] * toughness * CONFIG.siege.coinsPerPower));
+}
+
+/** The ramp's surge power (in Smalls) at ramp multiplier `ramp`, how many power units go to numbers, and the toughness on top. */
+export function surgePower(ramp: number): { power: number; count: number; toughness: number } {
+  const R = CONFIG.siege.ramp;
+  const r = Math.max(0.3, ramp);
+  const countMult = Math.min(r, R.countCap);
+  return { power: R.start * r, count: R.start * countMult, toughness: r / countMult };
+}
+
+/** How much stronger the next surge is than the last, after `surges` surges: tapering from `growth` to `growthLate`. */
+export function rampGrowth(surges: number): number {
+  const R = CONFIG.siege.ramp;
+  return R.growth + (R.growthLate - R.growth) * Math.min(1, surges / R.taperOver);
+}
+
+/** The threat meter's Defence: the posts' damage per second (with any defence boost) x CONFIG.siege.defencePerDps. */
+export function defenceRating(base: BaseState, defenceBoost = 0): number {
+  return Math.round(postDps(base, defenceBoost) * CONFIG.siege.defencePerDps);
 }
 
 /** Firepower: how many Smalls per second a base's posts can shoot down (splash counts as hitting a few). */
 export function firepower(base: BaseState, defenceBoost = 0): number {
-  const hp = zombieStats('z_small', base.hq).hp;
+  const hp = zombieStats('z_small').hp;
   let kills = 0;
   for (const p of base.posts) {
     if (!p) continue;
@@ -79,28 +100,29 @@ export function firepower(base: BaseState, defenceBoost = 0): number {
   return kills;
 }
 
-/** Coins lost to a breach: a capped share, never dropping the player below the protected floor. */
-export function breachLoss(coins: number): number {
+/** Coins lost to a breach: a capped share of the vault (cap by Main Tower level), never dropping the player below the protected floor. */
+export function breachLoss(coins: number, hq = 1): number {
   const b = CONFIG.siege.breach;
-  return Math.max(0, Math.min(coins - b.protectedFloor, Math.round(coins * b.lossPct), b.maxLoss));
+  const cap = b.maxLoss[Math.min(b.maxLoss.length, Math.max(1, hq)) - 1]!;
+  return Math.max(0, Math.min(coins - b.protectedFloor, Math.round(coins * b.lossPct), cap));
 }
 
-/** What the director remembers about a player between sessions (saved with the player). */
+/** What the siege remembers about a player between sessions (saved with the player). */
 export interface DirectorState {
-  /** Multiplies surge size; moves after every surge to keep the held share on target. */
-  pressure: number;
-  /** Seconds of siege played while online (surges grow with it). */
+  /** The difficulty ramp: the next surge's strength multiplier (1 = the first surges). Only ever grows. */
+  ramp: number;
+  /** Seconds of siege played while online. */
   played: number;
   surges: number;
   held: number;
 }
 
 export function newDirector(): DirectorState {
-  return { pressure: CONFIG.siege.difficulty.start, played: 0, surges: 0, held: 0 };
+  return { ramp: 1, played: 0, surges: 0, held: 0 };
 }
 
 export type SiegeEvent =
-  | { type: 'surge'; n: number; size: number; sides: number[]; pincer: boolean; tutorial: boolean; boss: boolean }
+  | { type: 'surge'; n: number; size: number; sides: number[]; pincer: boolean; tutorial: boolean; boss: boolean; horde: boolean }
   | { type: 'held'; n: number; kills: number; coins: number; bonus: number }
   | { type: 'breach'; n: number }
   /** An airstrike landed. */
@@ -215,6 +237,13 @@ export class Siege {
   incoming: number[] = [];
   /** The coming (or current) surge is the walkthrough. */
   tutorial: boolean;
+  /** Still building the basic base: gentler ramp, one side, prompts. */
+  guided: boolean;
+  /** The current surge's toughness (health, damage and coins per zombie). */
+  private toughness = 1;
+  /** The coming surge's power (picked with its sides, shown on the threat meter) and whether it's a horde. */
+  private nextPower = 0;
+  private nextHorde = false;
   private base: BaseState;
   private boost: number;
   private queue: Spawn[] = [];
@@ -223,9 +252,7 @@ export class Siege {
   private surgeAlive = 0;
   private surgeKills = 0;
   private surgeCoins = 0;
-  private eased = false;
-  /** Lowest Main Tower health share during the current surge. */
-  private surgeLow = 1;
+
   /** How far out the edge spawns may be on each side (street: further than an alley). */
   private readonly edgeOut: number[];
   private readonly manholes: ({ x: number; y: number } | null)[];
@@ -242,6 +269,8 @@ export class Siege {
     this.combat = new Combat(seed, baseBuildings(base, plot, opts.defenceBoost ?? 0, true), { crowd: true, coarse: opts.coarse });
     this.rng = mulberry32(seed ^ 0x9e3779b9);
     this.tutorial = (opts.ramp ?? true) && director.surges === 0;
+    this.guided = !basicBaseDone(base);
+    director.ramp ??= 1;
     this.until = this.ticks(opts.firstDelay ?? CONFIG.siege.firstSurge);
     const world = getWorld();
     this.edgeOut = [0, 1, 2, 3].map((side) => {
@@ -263,7 +292,7 @@ export class Siege {
   private account(kills: StepResult['kills']): number {
     let earned = 0;
     for (const k of kills) {
-      const coins = killCoins(UNIT_KINDS[k.kind] as ZombieKind, this.base.hq);
+      const coins = killCoins(UNIT_KINDS[k.kind] as ZombieKind, this.toughness);
       earned += coins;
       if (this.phase === 'surge' && k.tag === this.n) {
         this.surgeAlive--;
@@ -343,7 +372,8 @@ export class Siege {
     let victims: Unit[] = [];
     let tx = x;
     let ty = y;
-    const near = c.unitsNear(x, y, this.base.hq < CONFIG.siege.guidedBelow ? C.hitRadiusGuided : C.hitRadius);
+    // Aim assist in the walkthrough surge only.
+    const near = c.unitsNear(x, y, this.tutorial ? C.hitRadiusGuided : C.hitRadius);
     if (near.length) {
       const target = near[0]!;
       tx = target.x;
@@ -418,7 +448,7 @@ export class Siege {
     this.strikes = this.strikes.filter((s) => {
       if (s.at > t) return true;
       const kills: StepResult['kills'] = [];
-      const dmg = Math.round(A.damage * CONFIG.siege.hpScale(this.base.hq));
+      const dmg = Math.round(A.damage * this.toughness);
       for (const u of this.combat.unitsNear(s.x, s.y, A.radius)) this.combat.strike(u, dmg, kills);
       const coins = this.account(kills);
       earned += coins;
@@ -432,17 +462,17 @@ export class Siege {
   setBase(base: BaseState, defenceBoost = 0) {
     this.base = base;
     this.boost = defenceBoost;
+    // Guidance ends for good once the basic base is built.
+    if (this.guided && basicBaseDone(base)) {
+      this.guided = false;
+      if (this.phase !== 'surge') this.planIncoming();
+    }
     this.combat.setBuildings(baseBuildings(base, this.plot, defenceBoost, true));
   }
 
   /** Seconds until the next surge (0 while one is on). */
   nextIn(): number {
     return this.phase === 'surge' ? 0 : Math.max(0, (this.until - this.combat.tick) / this.combat.rate);
-  }
-
-  private target(): number {
-    const d = CONFIG.siege.difficulty;
-    return this.director.played / 60 < d.newMinutes ? d.targetNew : d.target;
   }
 
   /** Main Tower health share (0..1). */
@@ -460,7 +490,7 @@ export class Siege {
     const rise = this.ticks(S.riseTime);
     while (this.qi < this.queue.length && this.queue[this.qi]!.at <= c.tick && c.liveUnits < S.maxAlive) {
       const s = this.queue[this.qi++]!;
-      c.addUnit(UNIT_KINDS.indexOf(s.kind), zombieStats(s.kind, this.base.hq), s.x, s.y, s.rise ? rise : 0, this.n);
+      c.addUnit(UNIT_KINDS.indexOf(s.kind), zombieStats(s.kind, this.toughness), s.x, s.y, s.rise ? rise : 0, this.n);
       this.surgeAlive++;
     }
 
@@ -474,16 +504,6 @@ export class Siege {
       return earned;
     }
     if (this.phase === 'surge') {
-      this.surgeLow = Math.min(this.surgeLow, this.hqShare());
-      // Falling behind: thin out the rest of this surge.
-      if (!this.eased && this.hqShare() < S.difficulty.easeBelow) {
-        this.eased = true;
-        const rest = this.queue.slice(this.qi);
-        const keep = Math.round(rest.length * S.difficulty.easeKeep);
-        // Keep an even spread of what's left (so every side still feels it), drop the rest.
-        this.queue = rest.filter((_, i) => Math.floor(((i + 1) * keep) / rest.length) > Math.floor((i * keep) / rest.length));
-        this.qi = 0;
-      }
       const cleared = this.qi >= this.queue.length && this.surgeAlive <= 0;
       if (cleared || c.tick - this.surgeStart >= this.ticks(S.maxSurge)) this.endSurge();
     }
@@ -537,19 +557,30 @@ export class Siege {
       const j = Math.floor(this.rng() * (i + 1));
       [order[i], order[j]] = [order[j]!, order[i]!];
     }
-    const sides = order.slice(0, this.tutorial ? 1 : this.byLevel(S.sides));
-    if (!this.tutorial && this.base.hq >= S.graveyardFrom) sides.push(GRAVEYARD_SIDE);
+    // The coming surge's strength: the ramp (capped while guided), a little variety, and every so often a horde.
+    const R = S.ramp;
+    const ramp = this.guided ? Math.min(this.director.ramp, S.guided.maxRamp) : this.director.ramp;
+    this.nextHorde = !this.tutorial && !this.guided && (this.director.surges + 1) % S.hordeEvery === 0;
+    const vary = 1 + S.variance * (2 * this.rng() - 1);
+    this.nextPower = this.tutorial ? S.tutorial.size : R.start * Math.min(R.max, ramp) * vary * (this.nextHorde ? S.hordeMult : 1);
+    const sides = order.slice(0, this.tutorial ? 1 : Math.min(this.byLevel(S.sides), this.guided ? S.guided.maxSides : 4));
+    if (!this.tutorial && !this.guided && this.base.hq >= S.graveyardFrom) sides.push(GRAVEYARD_SIDE);
     this.incoming = sides.sort((x, y) => x - y);
   }
 
   /** What a screen shows about this siege: surge number, phase, countdown, incoming sides, walkthrough. */
+  /** The threat meter: the base's Defence and the next surge's power (x toughness), in the same units. */
+  threat(): { defence: number; next: number; horde: boolean } {
+    return { defence: defenceRating(this.base, this.boost), next: Math.round(this.nextPower), horde: this.nextHorde };
+  }
+
   info() {
     const E = CONFIG.siege.callEarly;
     const left = this.nextIn();
     // When "call early" opens (seconds from now; 0 = now) and what it would pay right now.
     const opensIn = this.phase === 'surge' ? -1 : Math.max(0, left - this.byLevel(CONFIG.siege.gap) * (1 - E.minWait));
     const early = this.phase !== 'surge' && opensIn === 0 && left >= E.minLeft ? Math.round(left * this.byLevel(E.perSecond)) : 0;
-    return { n: this.n, phase: this.phase, nextIn: Math.ceil(left), incoming: this.incoming, tutorial: this.tutorial, guided: this.base.hq < CONFIG.siege.guidedBelow, early, earlyOpensIn: Math.ceil(opensIn) };
+    return { n: this.n, phase: this.phase, nextIn: Math.ceil(left), incoming: this.incoming, tutorial: this.tutorial, guided: this.guided, early, earlyOpensIn: Math.ceil(opensIn), ...this.threat(), toughness: this.toughness, surges: this.director.surges };
   }
 
   /**
@@ -571,14 +602,31 @@ export class Siege {
     const d = this.director;
     this.n++;
     const tutorial = this.tutorial;
-    const size = tutorial ? S.tutorial.size : Math.max(3, Math.min(S.maxSize, Math.round((this.byLevel(S.size) + this.byLevel(S.perFire) * firepower(this.base, this.boost)) * d.pressure)));
+    // Spend the planned power: numbers first (up to the count cap), then toughness.
+    const ramp = surgePower(this.nextPower / S.ramp.start);
+    this.toughness = tutorial ? 1 : ramp.toughness;
     const window = tutorial ? S.tutorial.spawnWindow : this.byLevel(S.spawnWindow);
     const sides = this.incoming.filter((s) => s !== GRAVEYARD_SIDE);
     const graveyard = this.incoming.includes(GRAVEYARD_SIDE);
     const pincer = !tutorial && this.base.hq >= S.pincerFrom && sides.length >= 3;
     const mains = pincer ? sides.slice(0, this.rng() < 0.5 ? 2 : 3) : [];
 
-    // Share the surge out over its sides (the graveyard takes its share first; pincer sides most of the rest).
+    // Spend the surge's power on zombies (types unlocked by the Main Tower), then share them out over its sides.
+    const big = tutorial ? 0 : this.byLevel(S.mix.z_big);
+    const axe = tutorial ? 0 : this.byLevel(S.mix.z_axe);
+    const kindOf = (): ZombieKind => {
+      const r = this.rng();
+      return r < big ? 'z_big' : r < big + axe ? 'z_axe' : 'z_small';
+    };
+    const boss = !tutorial && this.rng() < this.byLevel(S.bossChance) && ramp.count > S.power.z_boss * 1.5;
+    let budget = tutorial ? S.tutorial.size : ramp.count - (boss ? S.power.z_boss : 0);
+    const kinds: ZombieKind[] = [];
+    while (budget > 0.5) {
+      const k = kindOf();
+      kinds.push(k);
+      budget -= S.power[k];
+    }
+    const size = kinds.length;
     const counts = [0, 0, 0, 0, 0];
     let rest = size;
     if (graveyard) {
@@ -595,12 +643,6 @@ export class Siege {
       for (let i = 0; i < rest; i++) counts[sides[i % sides.length]!]!++;
     }
 
-    const big = tutorial ? 0 : this.byLevel(S.mix.z_big);
-    const axe = tutorial ? 0 : this.byLevel(S.mix.z_axe);
-    const kindOf = (): ZombieKind => {
-      const r = this.rng();
-      return r < big ? 'z_big' : r < big + axe ? 'z_axe' : 'z_small';
-    };
     // The surge comes in pulses spread over its window: each pulse lands within a few seconds, from all the
     // surge's sides (a pincer's main sides take theirs in one go). The walkthrough just trickles in.
     const pulses = tutorial ? 1 : this.byLevel(S.pulses);
@@ -612,10 +654,9 @@ export class Siege {
         if (tutorial) t = i === 0 ? 0 : this.rng() * window;
         else if (mains.includes(side)) t = pulseAt(Math.floor(pulses / 2)) + this.rng() * S.pincerBurst;
         else t = pulseAt(i % pulses) + (i < pulses ? this.rng() * 0.3 : this.rng() * S.pulseSpread);
-        spawns.push(this.spawnAt(side, kindOf(), c.tick + this.ticks(t)));
+        spawns.push(this.spawnAt(side, kinds.pop() ?? 'z_small', c.tick + this.ticks(t)));
       }
     });
-    const boss = !tutorial && this.rng() < this.byLevel(S.bossChance);
     if (boss) spawns.push({ ...this.spawnAt(sides[Math.floor(this.rng() * sides.length)]!, 'z_boss', c.tick + this.ticks(window * 0.4)), rise: false });
     spawns.sort((a, b) => a.at - b.at);
     this.queue = spawns;
@@ -625,12 +666,10 @@ export class Siege {
     this.surgeAlive = 0;
     this.surgeKills = 0;
     this.surgeCoins = 0;
-    this.eased = false;
-    this.surgeLow = 1;
     // The walkthrough can't be lost.
     const hq = c.hq;
     if (hq) hq.floor = tutorial ? Math.round(hq.maxHp * S.tutorial.hqFloor) : undefined;
-    this.events.push({ type: 'surge', n: this.n, size: spawns.length, sides: counts, pincer, tutorial, boss });
+    this.events.push({ type: 'surge', n: this.n, size: spawns.length, sides: counts, pincer, tutorial, boss, horde: this.nextHorde });
   }
 
   /** Where a zombie on `side` appears: off the edge (runs in), a crack in the yard, the manhole, or a grave. */
@@ -668,18 +707,23 @@ export class Siege {
     this.planIncoming();
   }
 
-  private endSurge() {
-    const S = CONFIG.siege;
+  /** After every live surge the ramp grows (gently while guided), whatever happened in it. */
+  private advance() {
+    const R = CONFIG.siege.ramp;
     const d = this.director;
     d.surges++;
-    d.held++;
-    const t = this.target();
-    d.pressure = Math.min(S.difficulty.max, d.pressure + (S.difficulty.down * (1 - t)) / t);
-    // Holding a surge pays a bonus by level (the server credits it like kill coins, into the vault).
-    const bonus = this.byLevel(S.holdBonus);
+    if (this.counting && !this.tutorial) d.ramp = Math.min(R.max, d.ramp * rampGrowth(d.surges));
+  }
+
+  private endSurge() {
+    const S = CONFIG.siege;
+    this.director.held++;
+    // Holding a surge pays a bonus in proportion to its power.
+    const bonus = this.tutorial ? S.tutorial.bonus : Math.round(this.nextPower * S.holdPerPower);
     this.held += bonus;
     this.coins += bonus;
     this.events.push({ type: 'held', n: this.n, kills: this.surgeKills, coins: this.surgeCoins + bonus, bonus });
+    this.advance();
     this.countdown();
   }
 
@@ -687,14 +731,11 @@ export class Siege {
   private held = 0;
 
   private breach() {
-    const S = CONFIG.siege;
-    const d = this.director;
     this.breaches++;
-    d.surges++;
-    d.pressure = Math.max(S.difficulty.min, d.pressure - S.difficulty.down);
     this.events.push({ type: 'breach', n: this.n });
     this.combat.killAll();
     this.combat.repair(1);
+    this.advance();
     this.countdown();
   }
 }

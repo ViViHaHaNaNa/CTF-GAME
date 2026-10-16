@@ -1,6 +1,6 @@
 // PvP sanity check: win rate and cost for some raid compositions vs some bases.
 // Usage: npx tsx shared/scripts/pvp-balance.ts
-import { CONFIG, Raid, getWorld, newBase, type BaseState, type RaiderKind } from '../src/index.ts';
+import { CONFIG, Raid, raiderCost, getWorld, newBase, type BaseState, type RaiderKind } from '../src/index.ts';
 
 const plot = getWorld().plots[27]!;
 const b = (hq: number, walls: number, posts: [string, number][]): BaseState => ({
@@ -15,7 +15,7 @@ function raid(label: string, def: BaseState, atkHq: number, army: [RaiderKind, n
     let t = 0;
     for (const [kind, count] of army) for (let i = 0; i < count; i++) {
       r.deploy(kind, plot.x + 0.5 + (i % 3) * 0.6, plot.y + 0.5 + Math.floor(i / 3) * 0.4);
-      cost += CONFIG.pvp.raiders[kind].cost;
+      cost += raiderCost(kind, atkHq);
       for (let k = 0; k < 4; k++) r.step(true);
       t++;
     }

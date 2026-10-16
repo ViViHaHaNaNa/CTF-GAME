@@ -94,8 +94,8 @@ export const CONFIG = {
       gun: { build: 180, range: 7, damage: 11, damagePerLevel: 5, cooldown: 0.9, hp: 198, hpPerLevel: 66, splash: 0 },
       shotgun: { build: 300, range: 3.5, damage: 9, damagePerLevel: 4, cooldown: 1.3, hp: 242, hpPerLevel: 77, splash: 0.9 },
     } as Record<PostType, { build: number; range: number; damage: number; damagePerLevel: number; cooldown: number; hp: number; hpPerLevel: number; splash: number }>,
-    /** Upgrade cost from level L to L+1 = build cost * growth^L. */
-    upgradeGrowth: 1.55,
+    /** Upgrade cost from level L to L+1 = build cost * growth^L (1.4: late levels stay worth buying against the surge ramp). */
+    upgradeGrowth: 1.4,
   },
 
   walls: {
@@ -110,20 +110,21 @@ export const CONFIG = {
 
   zombies: {
     // Speeds/cooldowns are base values (x pace.zombieSpeed / pace.zombieCooldown). Smalls die to 1-2 shots;
-    // tougher kinds unlock with level (CONFIG.siege.mix, bossChance). Coins per kill x CONFIG.siege.coinScale.
-    z_small: { hp: 12, speed: 1.5, damage: 4, cooldown: 0.8, range: 0.55, wallMult: 1, coins: 2, radius: 0.28 },
-    z_axe: { hp: 40, speed: 1.0, damage: 9, cooldown: 1.0, range: 0.6, wallMult: 3, coins: 4, radius: 0.32 },
-    z_big: { hp: 100, speed: 0.6, damage: 16, cooldown: 1.4, range: 0.65, wallMult: 1, coins: 8, radius: 0.42 },
+    // tougher kinds unlock with level (CONFIG.siege.mix, bossChance). Health and damage x the surge's
+    // toughness (CONFIG.siege.ramp); kill coins from CONFIG.siege.power.
+    z_small: { hp: 12, speed: 1.5, damage: 4, cooldown: 0.8, range: 0.55, wallMult: 1, radius: 0.28 },
+    z_axe: { hp: 40, speed: 1.0, damage: 9, cooldown: 1.0, range: 0.6, wallMult: 3, radius: 0.32 },
+    z_big: { hp: 100, speed: 0.6, damage: 16, cooldown: 1.4, range: 0.65, wallMult: 1, radius: 0.42 },
     /** A hulking Big (drawn twice the size): slow, very tough, wrecks walls. */
-    z_boss: { hp: 900, speed: 0.45, damage: 35, cooldown: 1.6, range: 0.9, wallMult: 2, coins: 60, radius: 0.8 },
-  } as Record<ZombieKind, { hp: number; speed: number; damage: number; cooldown: number; range: number; wallMult: number; coins: number; radius: number }>,
+    z_boss: { hp: 900, speed: 0.45, damage: 35, cooldown: 1.6, range: 0.9, wallMult: 2, radius: 0.8 },
+  } as Record<ZombieKind, { hp: number; speed: number; damage: number; cooldown: number; range: number; wallMult: number; radius: number }>,
 
   /**
-   * Zombie defence: one siege per grinding base, in surges on a regular, visible countdown that grows
-   * with the Main Tower level. Early play is guided (one side, then two, small surges, aim assist,
-   * a walkthrough first surge); sides, zombie types, surge size and the gap all grow with level.
-   * Zombies come from the street/alley edges, manholes, cracks in the yard and (later) the graveyard.
-   * A director nudges surge size to keep a target share of surges held. Times in seconds.
+   * Zombie defence: one siege per grinding base, in surges on a regular, visible countdown (longer at
+   * higher Main Tower levels). Every surge is stronger than the last (the ramp), whatever happens, so
+   * upgrading is how you keep up; sides and zombie types unlock with the Main Tower. Guidance (gentler
+   * ramp, one side, prompts) lasts only until the basic base is built. Zombies come from the street/alley
+   * edges, manholes, cracks in the yard and (later) the graveyard. Times in seconds.
    */
   siege: {
     /** Seconds from a base coming alive to its first surge (a countdown shows). */
@@ -131,15 +132,21 @@ export const CONFIG = {
     /** Seconds a zombie spends climbing out of a grave, manhole or crack (harmless and untargetable). */
     riseTime: 0.6,
     /** The countdown between surges, by Main Tower level (index = level - 1): regular, always shown, no trickle in between. */
-    gap: [45, 60, 80, 100, 120, 150, 180, 210],
+    gap: [20, 30, 45, 60, 80, 100, 130, 160],
     /**
-     * Zombies in a surge: (size[level] + perFire[level] x firepower) x the director's pressure, at most
-     * `maxSize`. Firepower = Smalls per second the base's posts can kill, so from level 3 a surge keeps
-     * up with the defence; guided levels (perFire 0) stay small and fixed.
+     * The difficulty ramp. Every surge a player plays live is stronger than the last in total zombie power,
+     * whatever happens in it: by `growth` at first, tapering to `growthLate` over `taperOver` surges (later
+     * upgrades buy less, so the late ramp is gentler). Offline surges don't move it. Power is spent on zombies (`power` per kind): their number
+     * grows with the ramp up to `countCap` times the start, then each zombie gets tougher instead (health
+     * and damage). The ramp stops at `max` times the start.
      */
-    size: [10, 16, 20, 26, 32, 38, 44, 50],
-    perFire: [0, 0, 5, 6, 6, 6, 6, 6],
-    maxSize: 160,
+    ramp: { start: 25, growth: 1.14, growthLate: 1.07, taperOver: 40, max: 45, countCap: 8 },
+    /** Surge to surge, power varies by up to +/- `variance`; every `hordeEvery`th surge is a horde at `hordeMult` (announced on the threat meter). */
+    variance: 0.15,
+    hordeEvery: 5,
+    hordeMult: 1.5,
+    /** Zombie power per kind (a Small is 1); the surge's power budget is spent on these. */
+    power: { z_small: 1, z_axe: 3.5, z_big: 8, z_boss: 60 } as Record<ZombieKind, number>,
     /** Seconds a surge's zombies keep arriving, by level: with the fighting, a surge lasts about 30-50 s. */
     spawnWindow: [32, 33, 35, 37, 40, 43, 45, 47],
     /** A surge arrives in this many pulses spread over its window, by level (each pulse lands within `pulseSpread` s). */
@@ -166,46 +173,39 @@ export const CONFIG = {
     /** A boss joins a surge with this chance, by level (from level 6). */
     bossChance: [0, 0, 0, 0, 0, 0.5, 0.75, 1],
     /** A new player's very first surge: a walkthrough from one side, and the Main Tower can't drop below `hqFloor` of its health. */
-    tutorial: { size: 8, spawnWindow: 14, hqFloor: 0.5 },
-    /** Guided play below this Main Tower level: gentler taps (CONFIG.commander.hitRadiusGuided) and the incoming sides shown for the whole countdown. */
-    guidedBelow: 3,
-    /** From level `guidedBelow`, the incoming sides show this many seconds before a surge. */
-    warn: 15,
+    tutorial: { size: 8, spawnWindow: 14, hqFloor: 0.5, bonus: 20 },
+    /**
+     * Guidance runs until the player has a basic base (BASIC_BASE: a bought post, both starter slots
+     * filled, a post and the walls upgraded, Main Tower 2): prompts, incoming-side arrows, surges from at
+     * most `maxSides` sides, no hordes, and the ramp capped at `maxRamp`. It ends for good the moment the
+     * checklist is done. (The cap sits above where a starter base falls, so not upgrading still loses.)
+     */
+    guided: { maxSides: 1, maxRamp: 4 },
+    /** After guidance, the incoming sides show this many seconds before a surge. */
+    warn: 10,
+    /** The threat meter: Defence = the posts' damage per second x this; the next surge = its zombie power (x their toughness). */
+    // Calibrated on the bots: a surge about 2.5x the posts' DPS in power is where a built base starts losing,
+    // so Defence = DPS x 2.5 puts the break-even at "Defence = next surge".
+    defencePerDps: 2.5,
     /**
      * Call the next surge early: coins per second skipped, by level. Only once `minWait` of the countdown
      * has passed (so a gap shrinks by at most 60%) and with at least `minLeft` s to go. The bonus fills the vault like kills.
      */
     callEarly: { minWait: 0.4, minLeft: 3, perSecond: [0.4, 0.5, 0.6, 0.8, 1, 1.3, 1.6, 2] },
-    hpScale: (hq: number) => 1 + 0.25 * (hq - 1),
-    damageScale: (hq: number) => 1 + 0.25 * (hq - 1),
-    /** Kill coins don't grow with level (surges do); holding a surge pays this bonus on top, by level. */
-    coinScale: (_hq: number) => 1,
-    holdBonus: [20, 45, 60, 60, 40, 40, 40, 40],
+    /** Coins per point of zombie power killed (a kill pays its kind's power x toughness x this), and for holding a surge (x its power). */
+    coinsPerPower: 1.6,
+    holdPerPower: 0.53,
     /** Posts reach further in zombie defence (range x mult, at least min tiles), so any post covers every wall and the yard beyond. Raids use the plain ranges. */
     postRange: { mult: 1.4, min: 11 },
     /** After each surge everything is repaired by this share of max health (1 = fully; fallen walls and posts are rebuilt). */
     repair: 1,
     /** Most zombies alive on one base; spawns wait while it's full. */
     maxAlive: 120,
-    difficulty: {
-      /** Share of surges the director aims for players to hold: in their first `newMinutes` minutes, then after. */
-      targetNew: 0.8,
-      newMinutes: 5,
-      target: 0.85,
-      /** Pressure multiplies surge size (the level sets the base size). It drops `down` after a lost surge and creeps up after a held one. */
-      start: 1,
-      min: 0.7,
-      max: 2.5,
-      down: 0.15,
-      /** Falling behind: once the Main Tower is below this share of health, only `easeKeep` of the surge's remaining zombies still come. */
-      easeBelow: 0.45,
-      easeKeep: 0.4,
-    },
     breach: {
-      /** Share of coins lost when the Main Tower falls... */
-      lossPct: 0.05,
-      /** ...never more than this... */
-      maxLoss: 60,
+      /** Share of the vault lost when the Main Tower falls... */
+      lossPct: 0.08,
+      /** ...never more than this (by Main Tower level)... */
+      maxLoss: [40, 60, 90, 130, 180, 250, 330, 420],
       /** ...and never dropping the player below this. */
       protectedFloor: 100,
     },
@@ -220,7 +220,7 @@ export const CONFIG = {
   commander: {
     /** A tap hits the zombie closest to the tap point within this many tiles (generous, for thumbs). */
     hitRadius: 1.5,
-    /** Aim assist while guided (Main Tower below CONFIG.siege.guidedBelow): an even more generous radius. */
+    /** Aim assist in the walkthrough surge only (surge 1): an even more generous radius. */
     hitRadiusGuided: 2.2,
     /** Nothing that close: the shot still lands at the point and hits whatever is within this. */
     strayRadius: 0.45,
@@ -266,6 +266,8 @@ export const CONFIG = {
     maxDeploys: 40,
     /** Raider stats grow with the attacker's Main Tower level. */
     troopScale: (hq: number) => 1 + 0.15 * (hq - 1),
+    /** Raider prices x this by the attacker's Main Tower level, so an army costs about 2-3 surges of grinding at any level. */
+    costScale: [2, 2.4, 3, 3.6, 4.5, 5.5, 6.5, 8],
     /** Base raider stats: speed x pace.raiderSpeed, cooldown x pace.raiderCooldown. */
     raiders: {
       r_bat: { unlockHq: 1, cost: 12, hp: 55, speed: 1.6, damage: 10, cooldown: 0.7, range: 0.5, wallMult: 1 },
@@ -290,7 +292,7 @@ export const CONFIG = {
        * On top of what's stolen, every star pays this bonus (by the defender's Main Tower level, x the match
        * factor), so raiding beats grinding per minute without stripping defenders bare. New coins, not theirs.
        */
-      starBonus: [38, 45, 65, 100, 170, 225, 290, 370],
+      starBonus: [130, 200, 400, 800, 1700, 2500, 3400, 4400],
     },
     trophies: {
       /** For an even fight; x the match factor, kept within min..max. */
@@ -352,8 +354,6 @@ export const CONFIG = {
      * (CONFIG.siege.gap) before the next. The first comes within this many seconds of a server start.
      */
     firstWithin: 45,
-    /** Nobody taps while you're away: offline sieges use at most this pressure, whatever your tapping earned. */
-    pressureCap: 1,
   },
 
   account: {

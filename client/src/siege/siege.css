@@ -74,6 +74,20 @@ body.siege { overflow: hidden; display: flex; flex-direction: column; height: 10
 /* The walkthrough's coach: a big prompt above the ammo bar. */
 .coach { position: absolute; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 6; max-width: min(92vw, 420px); padding: 10px 14px; text-align: center; font-family: var(--font-display); font-size: var(--text-xs); letter-spacing: var(--display-tracking); line-height: 1.5; color: var(--coach-ink); background: var(--coach); border: var(--border) solid var(--coach-edge); border-radius: var(--radius); box-shadow: var(--shadow-float); pointer-events: none; animation: coach-in 0.25s ease-out; }
 @keyframes coach-in { from { opacity: 0; transform: translate(-50%, 8px); } }
+/* Threat meter: your defence vs the next surge. */
+.threat { position: absolute; bottom: calc(100% + 8px); right: 0; display: flex; align-items: center; gap: 6px; padding: 4px 10px; background: var(--overlay-strong); border: var(--border) solid var(--line-strong); border-radius: var(--radius); font-family: var(--font-mono); font-size: var(--text-md); color: var(--ink); white-space: nowrap; pointer-events: auto; }
+.threat .vs { color: var(--muted); }
+.threat small { font-family: var(--font-display); font-size: var(--text-2xs); letter-spacing: var(--display-tracking); }
+.threat.safe { border-color: var(--good); } .threat.safe small { color: var(--good); }
+.threat.close { border-color: var(--warn); } .threat.close small { color: var(--warn); }
+.threat.danger { border-color: var(--danger); animation: alarm 0.6s steps(2) infinite; } .threat.danger small { color: var(--danger-text); }
+/* The basic-base checklist (guidance). */
+.objectives { position: absolute; left: 8px; top: calc(var(--touch) * 2 + 24px); z-index: 4; max-width: 240px; padding: 8px 10px; background: var(--overlay-strong); border: var(--border) solid var(--accent); border-radius: var(--radius); box-shadow: var(--shadow-float); font-size: var(--text-xs); pointer-events: none; }
+.objectives b { display: block; margin-bottom: 4px; font-family: var(--font-display); font-size: var(--text-2xs); letter-spacing: var(--display-tracking); color: var(--accent); }
+.objectives ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; }
+.objectives li::before { content: '\2610  '; color: var(--muted); }
+.objectives li.done { color: var(--muted); text-decoration: line-through; }
+.objectives li.done::before { content: '\2611  '; color: var(--good); text-decoration: none; }
 .combo { position: absolute; bottom: calc(100% + 8px); left: 0; right: 0; text-align: center; font-family: var(--font-display); font-size: var(--text-md); letter-spacing: var(--display-tracking); color: var(--combo); text-shadow: 2px 2px 0 var(--combo-shadow); white-space: nowrap; pointer-events: none; }
 .combo.bump { animation: combo-bump 0.18s ease-out; }
 @keyframes combo-bump { from { transform: scale(1.35); } }

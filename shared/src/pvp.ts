@@ -14,6 +14,12 @@ export function raiderStats(kind: RaiderKind, attackerHq: number, attackBoost = 
   return { hp: Math.round(r.hp * k), speed: r.speed * pace.raiderSpeed, damage: Math.round(r.damage * k * (1 + attackBoost)), cooldown: r.cooldown * pace.raiderCooldown, range: r.range, wallMult: r.wallMult, target: 'nearest' };
 }
 
+/** What a raider costs an attacker at Main Tower level `hq`. */
+export function raiderCost(kind: RaiderKind, hq: number): number {
+  const s = CONFIG.pvp.costScale;
+  return Math.round(CONFIG.pvp.raiders[kind].cost * s[Math.min(s.length, Math.max(1, hq)) - 1]!);
+}
+
 export function raiderUnlocked(kind: RaiderKind, hq: number): boolean {
   return hq >= CONFIG.pvp.raiders[kind].unlockHq;
 }

@@ -8,10 +8,13 @@ import {
   getWorld,
   inOtherPlot,
   inTapReach,
+  BASIC_BASE,
+  basicBaseDone,
   liveBoosts,
   lootable,
   postStats,
   quote,
+  raiderCost,
   raiderUnlocked,
   slotsUnlocked,
   trophyStake,
@@ -67,7 +70,9 @@ let panelHtml = '';
 /** Organiser switches: game paused, leaderboard frozen. */
 let org = { paused: false, frozen: false };
 /** Your own base's siege, from the server's 'pressure' updates (twice a second). */
-let siege: { n: number; phase: string; nextIn: number; sides: number[]; hq: number; at: number; incoming: number[]; tutorial: boolean; guided: boolean; early: number; earlyOpensIn: number } | null = null;
+let siege: { n: number; phase: string; nextIn: number; sides: number[]; hq: number; at: number; incoming: number[]; tutorial: boolean; guided: boolean; early: number; earlyOpensIn: number; defence: number; next: number; horde: boolean } | null = null;
+/** Guidance is over (the basic base is built): show "Base ready!" once, the moment it happens. */
+let wasGuided: boolean | null = null;
 /** The walkthrough: which prompt is up (0 none), and since when. */
 let coachStep = 0;
 let coachAt = 0;
@@ -278,6 +283,10 @@ function bindNet() {
         flash = { text: `☠ Zombies from the ${from[0]}!`, cls: 'alarm', until: now + 2500 };
         coach(1);
         sfx.siren(false);
+      } else if (m.horde) {
+        flash = { text: '☠ HORDE! A much bigger surge is here!', cls: 'alarm', until: now + 3000 };
+        view.shake(S.first * view.dpr, 600);
+        sfx.siren(true);
       } else if (m.boss) {
         flash = { text: '☠ A BOSS is coming! Focus it down!', cls: 'alarm', until: now + 3200 };
         view.shake(S.first * view.dpr, 700);
@@ -309,7 +318,7 @@ function bindNet() {
       sfx.boom();
     }
   });
-  s.on('pressure', (m: { p: number; sides: number[]; hq: number; n: number; phase: string; nextIn: number; incoming: number[]; tutorial: boolean; guided: boolean; early: number; earlyOpensIn: number; ammo: { mag: number; reload: number; weapon: number; airIn: number; combo: number } }) => {
+  s.on('pressure', (m: { p: number; sides: number[]; hq: number; n: number; phase: string; nextIn: number; incoming: number[]; tutorial: boolean; guided: boolean; early: number; earlyOpensIn: number; defence: number; next: number; horde: boolean; toughness: number; ammo: { mag: number; reload: number; weapon: number; airIn: number; combo: number } }) => {
     if (!player || m.p !== player.plot) return;
     const now = performance.now();
     // Resync the gun unless a shot is in flight (the prediction is fresher for a moment).
@@ -320,10 +329,12 @@ function bindNet() {
       if (!m.ammo.combo) gun.combo = 0;
     }
     gun.airReadyAt = now + m.ammo.airIn * 1000;
-    siege = { n: m.n, phase: m.phase, nextIn: m.nextIn, sides: m.sides, hq: m.hq, at: now, incoming: m.incoming, tutorial: m.tutorial, guided: m.guided, early: m.early, earlyOpensIn: m.earlyOpensIn };
+    siege = { n: m.n, phase: m.phase, nextIn: m.nextIn, sides: m.sides, hq: m.hq, at: now, incoming: m.incoming, tutorial: m.tutorial, guided: m.guided, early: m.early, earlyOpensIn: m.earlyOpensIn, defence: m.defence, next: m.next, horde: m.horde };
     view.pressure = { sides: m.sides, at: now };
-    // The coming surge's sides: shown for the whole countdown while guided, else in its last seconds.
-    view.incoming = m.phase !== 'surge' && (m.guided || m.nextIn <= CONFIG.siege.warn) ? m.incoming : [];
+    view.myToughness = m.toughness;
+    // Incoming-side hints are part of guidance: shown for the whole countdown, and only while guided.
+    view.incoming = m.phase !== 'surge' && m.guided ? m.incoming : [];
+    renderThreat();
   });
   s.on('tap', (m: TapMessage) => {
     if (!player || m.p !== player.plot) return;
@@ -920,6 +931,7 @@ function setPlayer(p: PlayerView) {
   renderHud();
   renderChips();
   renderModeToggle();
+  renderObjectives();
   if (panel === 'mine' || panel === 'other') renderPanel();
   renderAttackBar();
 }
@@ -978,6 +990,40 @@ function renderModeToggle() {
   const left = Math.ceil((player.modeAt + CONFIG.modes.cooldown * 1000 - serverNow()) / 1000);
   const text = left > 0 ? `switch in ${left}s` : '';
   if ($('mode-cd').textContent !== text) $('mode-cd').textContent = text;
+}
+
+/** The threat meter: green while your defence covers the next surge, amber when it's close, red when it's ahead of you. */
+function renderThreat() {
+  if (!siege) return;
+  $('threat-def').textContent = String(siege.defence);
+  $('threat-next').textContent = String(siege.next);
+  const r = siege.next / Math.max(1, siege.defence);
+  const cls = r <= 1 ? 'safe' : r <= 1.25 ? 'close' : 'danger';
+  const el = $('threat');
+  if (!el.classList.contains(cls)) {
+    el.classList.remove('safe', 'close', 'danger');
+    el.classList.add(cls);
+  }
+  const word = (siege.horde && siege.phase !== 'surge' ? 'HORDE NEXT · ' : '') + (cls === 'safe' ? 'READY' : cls === 'close' ? 'UPGRADE SOON' : 'UPGRADE!');
+  if ($('threat-word').textContent !== word) $('threat-word').textContent = word;
+}
+
+/** The basic-base checklist, while guidance lasts; "Base ready!" the moment it's done. */
+function renderObjectives() {
+  if (!player) return;
+  const done = basicBaseDone(player.base);
+  if (wasGuided && done) {
+    flash = { text: '🏰 Base ready! No more training wheels: every surge gets tougher now.', cls: 'held', until: performance.now() + 4500 };
+    sfx.confirm();
+    view.shake(2 * view.dpr, 300);
+    coach(0);
+  }
+  wasGuided = !done;
+  const el = $('objectives');
+  if (el.hidden !== done) el.hidden = done;
+  if (done) return;
+  const html = BASIC_BASE.map((i) => `<li class="${i.done(player!.base) ? 'done' : ''}">${esc(i.label)}</li>`).join('');
+  if ($('objectives-list').innerHTML !== html) $('objectives-list').innerHTML = html;
 }
 
 function renderChips() {
@@ -1089,13 +1135,15 @@ function renderBanner(now: number) {
     if (l) for (const u of l.units.values()) if (u.state !== 2) zombies++;
     const from = siege.incoming.map((i) => SIDE_LABEL[i] ?? 'graveyard');
     const fromText = from.length >= 5 ? 'every side' : from.length > 1 ? `${from.slice(0, -1).join(', ')} and ${from.at(-1)}` : from[0];
+    // Where it comes from is a guidance hint; afterwards you find out when it hits.
+    const fromPart = siege.guided ? ` · from the ${fromText}` : '';
     if (siege.phase === 'surge') {
       text = `☠ Surge ${siege.n} is on: ${zombies} zombie${zombies === 1 ? '' : 's'} on the field`;
       cls = 'attack';
     } else {
       // A regular countdown to the next surge, and where it comes from.
       const left = Math.max(0, siege.nextIn - Math.floor((now - siege.at) / 1000));
-      text = `${siege.n === 0 && siege.tutorial ? 'First zombies' : `Surge ${siege.n + 1}`} in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} · from the ${fromText}`;
+      text = `${siege.n === 0 && siege.tutorial ? 'First zombies' : `Surge ${siege.n + 1}`} in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}${fromPart}`;
       cls = left <= 5 ? 'attack' : '';
     }
   }
@@ -1123,8 +1171,9 @@ function renderAttackBar() {
   const html = RAIDER_KINDS.map((k) => {
     const c = CONFIG.pvp.raiders[k];
     const locked = !raiderUnlocked(k, player!.base.hq);
-    const poor = player!.coins < c.cost;
-    const sub = locked ? `Main Tower Lv ${c.unlockHq}` : `${c.cost} coins`;
+    const cost = raiderCost(k, player!.base.hq);
+    const poor = player!.coins < cost;
+    const sub = locked ? `Main Tower Lv ${c.unlockHq}` : `${cost} coins`;
     return `<button class="troop ${k === troop ? 'on' : ''}" data-troop="${k}" ${locked || poor ? 'disabled' : ''}>${RAIDER_NAME[k]}<small>${sub}</small></button>`;
   }).join('');
   if ($('troops').innerHTML !== html) $('troops').innerHTML = html;

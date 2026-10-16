@@ -23,6 +23,7 @@ export interface SiegeMessage {
   pincer?: boolean;
   tutorial?: boolean;
   boss?: boolean;
+  horde?: boolean;
   bonus?: number;
   kills?: number;
   coins?: number;
