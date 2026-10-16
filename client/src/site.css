@@ -19,3 +19,6 @@ button, input { font-family: inherit; }
 .play:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--accent-shade); }
 .hint { color: var(--muted); font-size: var(--text-sm); }
 .site-footer { padding: 14px 20px; color: var(--muted); font-size: var(--text-xs); border-top: 1px solid var(--line); }
+
+/* Retro display face for the brand, the big title and the play button. */
+.brand, .hero h1, .eyebrow, .play { font-family: var(--font-display); letter-spacing: var(--display-tracking); }

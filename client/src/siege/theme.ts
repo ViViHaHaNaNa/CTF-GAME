@@ -17,6 +17,21 @@ const rgb = (name: string) => css(name).split(',').map((x) => Number(x.trim())) 
 /** Fonts for text drawn on the canvas (bundled via theme.css @font-face; no internet needed). */
 export const FONT = css('--font');
 export const FONT_MONO = css('--font-mono');
+export const FONT_DISPLAY = css('--font-display');
+
+/** Load the bundled fonts before drawing text on a canvas (canvas text doesn't wait for them). */
+export async function loadFonts(): Promise<void> {
+  try {
+    await Promise.all([
+      document.fonts.load(`16px 'Siege Display'`),
+      document.fonts.load(`16px 'Siege Sans'`),
+      document.fonts.load(`700 16px 'Siege Sans'`),
+      document.fonts.load(`16px 'Siege Mono'`),
+    ]);
+  } catch {
+    /* fall back to system fonts */
+  }
+}
 
 export const THEME = {
   /** Behind the map edges. */

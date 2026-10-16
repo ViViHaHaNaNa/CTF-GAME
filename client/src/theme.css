@@ -4,25 +4,43 @@
    the --map-* values below at start-up (client/src/siege/theme.ts). Change this file to restyle it all.
    ===================================================================================================== */
 
-/* Bundled fonts (no internet needed). Drop the files into client/public/fonts/; until they're there,
-   the fallbacks in --font / --font-mono are used. */
+/* Bundled retro fonts (no internet needed; SIL Open Font Licence, see client/public/fonts/OFL-*.txt).
+   Display: Press Start 2P (8-bit arcade). Text: Pixelify Sans. Numbers & code: VT323 (terminal).
+   size-adjust evens out their very different natural sizes, so the --text-* scale works for all three. */
+@font-face {
+  font-family: 'Siege Display';
+  src: url('/fonts/press-start-2p-latin-400-normal.woff2') format('woff2');
+  font-weight: 400 900;
+  font-display: swap;
+  size-adjust: 78%;
+}
 @font-face {
   font-family: 'Siege Sans';
-  src: url('/fonts/siege-sans.woff2') format('woff2');
-  font-weight: 400 900;
+  src: url('/fonts/pixelify-sans-latin-400-normal.woff2') format('woff2');
+  font-weight: 400 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Siege Sans';
+  src: url('/fonts/pixelify-sans-latin-700-normal.woff2') format('woff2');
+  font-weight: 700 900;
   font-display: swap;
 }
 @font-face {
   font-family: 'Siege Mono';
-  src: url('/fonts/siege-mono.woff2') format('woff2');
-  font-weight: 400 800;
+  src: url('/fonts/vt323-latin-400-normal.woff2') format('woff2');
+  font-weight: 400 900;
   font-display: swap;
+  size-adjust: 130%;
 }
 
 :root {
   /* ---- type ---- */
   --font: 'Siege Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'Siege Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  --font-display: 'Siege Display', 'Siege Sans', system-ui, sans-serif;
+  /* Letter spacing for the display face (it's already wide). */
+  --display-tracking: 0.02em;
   --text-2xs: 0.7rem;
   --text-xs: 0.78rem;
   --text-sm: 0.88rem;

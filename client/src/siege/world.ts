@@ -25,7 +25,7 @@ import {
   type WorldPlot,
 } from '@siege/shared';
 import { LAYER_OFFSET, drawFrame, type Sheet, type Sprites } from './sprites.ts';
-import { FONT, THEME, baseColor, groundRule, recolour, textOn } from './theme.ts';
+import { FONT, FONT_DISPLAY, THEME, baseColor, groundRule, recolour, textOn } from './theme.ts';
 
 // Renders the shared world: a camera over one big pixel map at integer zoom (no smoothing).
 // Ground + scenery are baked into chunks once (recoloured tiles, lane markings, soft shadows); distant
@@ -549,7 +549,7 @@ export class WorldView {
     const [sx, sy] = this.toScreen(CRATE_SPOT.x, CRATE_SPOT.y - 26);
     const fs = Math.round(THEME.tag.crateSize * d);
     const text = `${rarity.toUpperCase()} CRATE`;
-    g.font = `${THEME.tag.crateWeight} ${fs}px ${FONT}`;
+    g.font = `${THEME.tag.crateWeight} ${fs}px ${FONT_DISPLAY}`;
     const w = g.measureText(text).width + 10 * d;
     const h = fs + 6 * d;
     g.fillStyle = `rgba(${THEME.crate[rarity]}, 0.92)`;

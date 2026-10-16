@@ -41,3 +41,6 @@ td.acts .tool { min-height: 36px; font-size: var(--text-xs); box-shadow: none; }
 
 /* Toasts sit at the bottom here so they never cover the controls. */
 body.admin .toasts { position: fixed; top: auto; bottom: 16px; }
+
+/* Retro display face for titles. */
+.admin-head h1, .card h2, .big, th { font-family: var(--font-display); letter-spacing: var(--display-tracking); }

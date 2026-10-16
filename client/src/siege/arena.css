@@ -77,3 +77,6 @@ body.projector .arena-idle p { font-size: var(--proj-idle-text); }
 body.projector .big-ranks { width: min(720px, 100%); font-size: var(--proj-ranks); }
 body.projector .big-ranks li { min-height: var(--proj-rank-row); }
 body.projector .cycle { font-size: var(--proj-feed); }
+
+/* Retro display face for titles and the scoreboard. */
+.arena-title h1, .arena-side h2, .sb-names, .arena-result b, .arena-idle h2, .cycle { font-family: var(--font-display); letter-spacing: var(--display-tracking); }

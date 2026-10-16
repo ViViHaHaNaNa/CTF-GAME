@@ -25,7 +25,7 @@ import {
 import { Net, saveToken } from './net.ts';
 import { loadSprites } from './sprites.ts';
 import { bindLiveStream } from './stream.ts';
-import { THEME, baseColor } from './theme.ts';
+import { THEME, baseColor, loadFonts } from './theme.ts';
 import { CRATE_SPOT, WorldView } from './world.ts';
 
 // Game page controller: login, HUD, the shared map (pan / zoom / tap), base cards, raids, lists.
@@ -65,7 +65,7 @@ const serverNow = () => Date.now() + skew;
 
 async function boot() {
   try {
-    const sprites = await loadSprites((d, t) => ($('connecting').textContent = `Loading art ${Math.round((100 * d) / t)}%`));
+    const [sprites] = await Promise.all([loadSprites((d, t) => ($('connecting').textContent = `Loading art ${Math.round((100 * d) / t)}%`)), loadFonts()]);
     view = new WorldView($<HTMLCanvasElement>('board'), sprites);
     view.prebake();
   } catch (e) {

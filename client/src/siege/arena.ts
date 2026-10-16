@@ -2,6 +2,7 @@ import { type BaseSummary, type CrateView, type FeedItem, type RaidResult } from
 import { spectatorSocket } from './net.ts';
 import { loadSprites } from './sprites.ts';
 import { bindLiveStream } from './stream.ts';
+import { loadFonts } from './theme.ts';
 import { WorldView } from './world.ts';
 
 // Live Arena: read-only spectating for any device, no login. Shows the battle being watched with a
@@ -31,7 +32,8 @@ const serverNow = () => Date.now() + skew;
 
 async function boot() {
   try {
-    view = new WorldView($<HTMLCanvasElement>('board'), await loadSprites((d, t) => ($('connecting').textContent = `Loading art ${Math.round((100 * d) / t)}%`)));
+    const [sprites] = await Promise.all([loadSprites((d, t) => ($('connecting').textContent = `Loading art ${Math.round((100 * d) / t)}%`)), loadFonts()]);
+    view = new WorldView($<HTMLCanvasElement>('board'), sprites);
     view.prebake();
   } catch (e) {
     $('connecting').textContent = `Could not load the art: ${(e as Error).message}`;

@@ -150,3 +150,10 @@ body.siege { overflow: hidden; display: flex; flex-direction: column; height: 10
 .crate-msg.good { color: var(--good); }
 .crate-msg.bad { color: var(--danger-text); }
 .answer-reveal code { font-family: var(--font-mono); background: var(--code-bg); padding: 2px 8px; border-radius: var(--radius-sm); }
+
+/* ---- retro display face on headings, buttons and big labels ---- */
+.hud-who > span:first-child, .wave-banner, .tool, .btn, .troop, .panel h2, .panel h3, .menu button, .login h1, .login button, .attack-top > span:first-child, .rarity, .badge, .status {
+  font-family: var(--font-display);
+  letter-spacing: var(--display-tracking);
+}
+.btn small, .troop small { font-family: var(--font); letter-spacing: 0; }
