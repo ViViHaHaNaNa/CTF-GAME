@@ -160,8 +160,8 @@ function tick() {
 function frame(now: number) {
   if (current < 0) {
     // Nothing to watch: drift slowly over the wasteland.
-    const W = 180 * 16;
-    view.jumpTo(W / 2 + Math.sin(now / 45_000) * W * 0.3, W / 2 + Math.cos(now / 61_000) * W * 0.3, Math.max(1, view.baseZoom() - 1));
+    const W = view.worldPx;
+    view.jumpTo(W / 2 + Math.sin(now / 45_000) * W * 0.3, W / 2 + Math.cos(now / 61_000) * W * 0.3, view.overviewZoom());
   }
   view.update(now);
   view.draw(now);

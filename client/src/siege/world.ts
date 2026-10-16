@@ -8,6 +8,7 @@ import {
   SLOTS,
   UNIT_KINDS,
   WALLS,
+  ALLEY,
   getWorld,
   inDeployZone,
   postId,
@@ -35,7 +36,7 @@ const WPX = world.w * T;
 const HPX = world.h * T;
 
 /** Crossroads in the middle of the map, where global crates land (world px). */
-export const CRATE_SPOT = { x: 90 * T, y: 90 * T + 8 };
+export const CRATE_SPOT = { x: world.centre[0] * T, y: world.centre[1] * T + 8 };
 const CRATE_GLOW: Record<Rarity, string> = { rare: '143, 196, 107', epic: '110, 160, 230', legendary: '224, 87, 63' };
 
 export type BasePick = { kind: 'hq' } | { kind: 'walls' } | { kind: 'slot'; slot: number };
@@ -129,6 +130,9 @@ export class WorldView {
   private ruinCache = new Map<number, HTMLCanvasElement>();
   private composites = new Map<string, HTMLCanvasElement>();
 
+  /** World size in art pixels (it's square). */
+  readonly worldPx = WPX;
+
   constructor(readonly canvas: HTMLCanvasElement, readonly sprites: Sprites) {
     this.g = canvas.getContext('2d')!;
   }
@@ -156,6 +160,13 @@ export class WorldView {
   }
   get kMax() {
     return Math.max(4, Math.round(4 * this.dpr));
+  }
+
+  /** Default zoom: a neighbourhood, about 3-4 bases across on a landscape screen, 2 on a phone. */
+  overviewZoom(): number {
+    const period = (PLOT + ALLEY) * T;
+    const across = this.canvas.width >= this.canvas.height ? 3.6 : 2.2;
+    return Math.max(this.kMin, Math.min(this.kMax, Math.floor(this.canvas.width / (across * period))));
   }
 
   /** A zoom that shows one whole base comfortably. */
@@ -243,6 +254,13 @@ export class WorldView {
   centerOnPlot(plot: number, k?: number) {
     const p = world.plots[plot];
     if (p) this.jumpTo((p.x + PLOT / 2) * T, (p.y + PLOT / 2) * T, k);
+  }
+
+  /** The default view: the plot's city block (its 4 compounds around the graveyard) at overview zoom. */
+  centerOnBlock(plot: number) {
+    const p = world.plots[plot];
+    const g = p && world.graveyards[p.graveyard];
+    if (g) this.jumpTo((g.x + g.w / 2) * T, (g.y + g.h / 2) * T, this.overviewZoom());
   }
 
   /** Advance zoom easing and momentum; call once per animation frame before draw(). */
@@ -504,7 +522,7 @@ export class WorldView {
         const gk = world.ground[wy * world.w + wx];
         let src: [number, number];
         if (gk === 2) src = [15, 1];
-        else if (gk === 1) src = [1, 1];
+        else if (gk === 1 || gk === 3) src = [1, 1];
         else {
           const set = hash(wx, wy) < 0.04 ? decals : plain;
           src = set[Math.floor(hash(wx, wy, 1) * set.length)]!;

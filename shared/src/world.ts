@@ -4,16 +4,24 @@ import { HQ_RECT, PLOT } from './layout.ts';
 // The shared open world. Generated from a fixed seed with shared code, so the server and every client
 // build exactly the same map without shipping a layout file.
 //
-// 64 plots sit in a jittered 8x8 arrangement, grouped in 2x2 blocks. In the gap at the centre of each
-// block is a graveyard that sends zombies to the 4 bases around it (a short diagonal walk that never
-// crosses another compound). Dirt roads run between blocks; everything else is decorative scenery.
+// A dense little city: 64 compounds in a 4x4 grid of city blocks, each block 2x2 compounds. Inside a
+// block, compounds are 2 tiles apart (alleys); blocks are separated by 4-tile streets. Where a block's
+// alleys cross sits its graveyard, sending zombies to the 4 bases around it (a ~5 tile diagonal walk
+// that never crosses another compound). A belt of wasteland scenery surrounds the city.
 
 export const WORLD_SEED = 0x51e6e;
-const CELL = 21;
-const COLS = 8;
-const MARGIN = 6;
-export const WORLD_W = MARGIN * 2 + COLS * CELL;
+/** Gap between the two compounds of a block row/column. */
+export const ALLEY = 2;
+/** Width of the streets between blocks (and around the city). */
+export const STREET = 4;
+const BLOCKS = 4;
+/** Scenery belt around the city. */
+const MARGIN = 8;
+const BLOCK = PLOT * 2 + ALLEY;
+export const WORLD_W = MARGIN * 2 + STREET * (BLOCKS + 1) + BLOCK * BLOCKS;
 export const WORLD_H = WORLD_W;
+/** Left/top tile of block i (column or row). */
+const blockAt = (i: number) => MARGIN + STREET + i * (BLOCK + STREET);
 
 export interface WorldPlot {
   id: number;
@@ -51,14 +59,28 @@ export interface Prop {
   y: number;
 }
 
+export interface Street {
+  /** Tiles: the full street strip. */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** 'v' runs top to bottom, 'h' left to right. */
+  dir: 'h' | 'v';
+}
+
 export interface World {
   w: number;
   h: number;
   plots: WorldPlot[];
   graveyards: Graveyard[];
   props: Prop[];
-  /** Per tile: 0 ground, 1 road, 2 mud (graveyard). */
+  /** Per tile: 0 open ground, 1 street, 2 mud (graveyard), 3 alley. */
   ground: Uint8Array;
+  /** Streets between blocks (for lane markings). */
+  streets: Street[];
+  /** Tile at the middle of the map: the central crossroads, where crates land. */
+  centre: [number, number];
 }
 
 // ---- scenery catalogue ----------------------------------------------------------------------------
@@ -149,15 +171,13 @@ export function generateWorld(seed: number): World {
     return true;
   };
 
-  // Plots: jittered away from their block's centre so the graveyard always fits.
+  // Plots: 8x8, in 2x2 city blocks. Ids are row-major and graveyard = block index.
   const plots: WorldPlot[] = [];
-  for (let r = 0; r < COLS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      const cx = MARGIN + c * CELL;
-      const cy = MARGIN + r * CELL;
-      const x = c % 2 === 0 ? cx + 3 + ri(-2, 0) : cx + 4 + ri(0, 2);
-      const y = r % 2 === 0 ? cy + 3 + ri(-2, 0) : cy + 4 + ri(0, 2);
-      const graveyard = Math.floor(r / 2) * (COLS / 2) + Math.floor(c / 2);
+  for (let r = 0; r < BLOCKS * 2; r++) {
+    for (let c = 0; c < BLOCKS * 2; c++) {
+      const x = blockAt(Math.floor(c / 2)) + (c % 2) * (PLOT + ALLEY);
+      const y = blockAt(Math.floor(r / 2)) + (r % 2) * (PLOT + ALLEY);
+      const graveyard = Math.floor(r / 2) * BLOCKS + Math.floor(c / 2);
       plots.push({ id: plots.length, x, y, order: 0, graveyard });
       take(x, y, PLOT, PLOT);
     }
@@ -167,52 +187,109 @@ export function generateWorld(seed: number): World {
     .sort((a, b) => Math.hypot(a.x + PLOT / 2 - mid, a.y + PLOT / 2 - mid) - Math.hypot(b.x + PLOT / 2 - mid, b.y + PLOT / 2 - mid) || a.id - b.id)
     .forEach((p, i) => (p.order = i));
 
-  // Roads between 2x2 blocks (2 tiles wide).
-  for (let i = 0; i <= COLS / 2; i++) {
-    const line = MARGIN + i * 2 * CELL;
-    for (let t = MARGIN - 2; t < W - MARGIN + 2; t++) {
-      for (const d of [-1, 0]) {
-        const a = line + d;
-        if (a < 0 || a >= W || t < 0 || t >= H) continue;
-        if (!taken[t * W + a]) ground[t * W + a] = 1;
-        if (!taken[a * W + t]) ground[a * W + t] = 1;
+  // Streets around and between the blocks; alleys inside each block.
+  const streets: Street[] = [];
+  const cityLo = MARGIN;
+  const cityHi = W - MARGIN;
+  for (let i = 0; i <= BLOCKS; i++) {
+    const at = MARGIN + i * (BLOCK + STREET);
+    streets.push({ x: at, y: cityLo, w: STREET, h: cityHi - cityLo, dir: 'v' });
+    streets.push({ x: cityLo, y: at, w: cityHi - cityLo, h: STREET, dir: 'h' });
+    for (let t = cityLo; t < cityHi; t++)
+      for (let d = 0; d < STREET; d++) {
+        ground[t * W + at + d] = 1;
+        ground[(at + d) * W + t] = 1;
       }
-    }
   }
-  for (let i = 0; i < W * H; i++) if (ground[i] === 1) taken[i] = 1;
+  for (let br = 0; br < BLOCKS; br++)
+    for (let bc = 0; bc < BLOCKS; bc++) {
+      const bx = blockAt(bc);
+      const by = blockAt(br);
+      for (let t = 0; t < BLOCK; t++)
+        for (let d = 0; d < ALLEY; d++) {
+          ground[(by + t) * W + bx + PLOT + d] = 3;
+          ground[(by + PLOT + d) * W + bx + t] = 3;
+        }
+    }
+  for (let i = 0; i < W * H; i++) if (ground[i] === 1 || ground[i] === 3) taken[i] = 1;
 
-  // Graveyards at the centre of each block.
+  // Graveyards where each block's alleys cross. Graves stay on the alley (never inside a plot);
+  // the mud spills a little into the neighbouring yards' corners.
   const graveyards: Graveyard[] = [];
   const props: Prop[] = [];
   const put = (path: string, px: number, py: number) => props.push({ f: fileIndex(path), x: Math.round(px), y: Math.round(py) });
-  for (let br = 0; br < COLS / 2; br++) {
-    for (let bc = 0; bc < COLS / 2; bc++) {
-      const jx = MARGIN + (bc * 2 + 1) * CELL;
-      const jy = MARGIN + (br * 2 + 1) * CELL;
+  for (let br = 0; br < BLOCKS; br++) {
+    for (let bc = 0; bc < BLOCKS; bc++) {
+      const jx = blockAt(bc) + PLOT;
+      const jy = blockAt(br) + PLOT;
       const gx = jx - 2;
       const gy = jy - 2;
       const id = graveyards.length;
+      // Alley tiles around the crossing, minus the 2x2 crossing itself (kept as the zombies' gathering spot).
       const cells: [number, number][] = [];
-      for (let y = 0; y < 5; y++) for (let x = 0; x < 5; x++) if ((x + y) % 2 === 0 || rnd() < 0.3) cells.push([x, y]);
+      for (let y = gy - 1; y < gy + 7; y++)
+        for (let x = gx - 1; x < gx + 7; x++) {
+          const inCrossing = (x === jx || x === jx + 1) && (y === jy || y === jy + 1);
+          if (ground[y * W + x] === 3 && !inCrossing) cells.push([x, y]);
+        }
       for (let i = cells.length - 1; i > 0; i--) {
         const j = Math.floor(rnd() * (i + 1));
         [cells[i], cells[j]] = [cells[j]!, cells[i]!];
       }
-      const count = ri(6, 10);
-      const graves = cells.slice(0, count).map(([x, y]) => ({ x: gx + x, y: gy + y, kind: ri(0, 3) }));
+      const count = ri(6, Math.min(10, cells.length - 1));
+      const graves = cells.slice(0, count).map(([x, y]) => ({ x, y, kind: ri(0, 3) }));
       const serves = plots.filter((p) => p.graveyard === id).map((p) => p.id);
-      graveyards.push({ id, x: gx, y: gy, w: 5, h: 5, graves, serves });
-      for (let y = gy - 1; y < gy + 6; y++)
-        for (let x = gx - 1; x < gx + 6; x++) {
-          const edge = x === gx - 1 || y === gy - 1 || x === gx + 5 || y === gy + 5;
-          if (!edge || rnd() < 0.45) ground[y * W + x] = 2;
+      graveyards.push({ id, x: gx, y: gy, w: 6, h: 6, graves, serves });
+      for (let y = gy - 1; y < gy + 7; y++)
+        for (let x = gx - 1; x < gx + 7; x++) {
+          const edge = x === gx - 1 || y === gy - 1 || x === gx + 6 || y === gy + 6;
+          if (!edge || rnd() < 0.4) ground[y * W + x] = 2;
         }
-      take(gx - 1, gy - 1, 7, 7);
-      // Dead scenery and a broken fence around the patch.
-      put(SPECIAL.deadTree, (gx - 1) * 16 + 4, (gy - 1) * 16 + 14);
-      put(SPECIAL.stump, (gx + 6) * 16 + 2, (gy + 5) * 16 + 12);
-      for (let x = gx; x < gx + 5; x++) if (rnd() < 0.55) put(SPECIAL.fenceH, x * 16 + 8, (gy + 5) * 16 + 15);
-      for (let y = gy; y < gy + 5; y++) if (rnd() < 0.45) put(SPECIAL.fenceV, (gx - 1) * 16 + 8, y * 16 + 16);
+      // A dead tree on one of the free alley tiles.
+      const [tx, ty] = cells[count]!;
+      put(SPECIAL.deadTree, tx * 16 + 8, ty * 16 + 15);
+    }
+  }
+
+  // Wrecks, barrels and junk along the streets, against the kerb (the middle lanes stay clear).
+  const STREET_JUNK: { p: string; t: [number, number]; dir: 'h' | 'v' | 'any'; w: number }[] = [
+    { p: V + '/Rust/Car_1_Rust/Car_1_Rust_Red.png', t: [2, 3], dir: 'v', w: 2 },
+    { p: V + '/Rust/Car_2_Rust_Upsidedown/Car_2_Rust_Blue_Upsidedown.png', t: [2, 3], dir: 'v', w: 1 },
+    { p: V + '/Rust/Car_4_Rust/Car_4_Rust_Green.png', t: [3, 2], dir: 'h', w: 2 },
+    { p: V + '/Rust/Car_6_Rust_Scrap/Car_6_Rust_Orange_Scrap.png', t: [3, 2], dir: 'h', w: 1.5 },
+    { p: 'Objects/Barrel_rust_red_1.png', t: [1, 1], dir: 'any', w: 3 },
+    { p: 'Objects/Barrel_rust_blue_2.png', t: [1, 1], dir: 'any', w: 2 },
+    { p: 'Objects/Traffic-cone.png', t: [1, 1], dir: 'any', w: 2 },
+    { p: 'Objects/Tire_1.png', t: [1, 1], dir: 'any', w: 1.5 },
+    { p: 'Objects/Trash-bag_1.png', t: [1, 1], dir: 'any', w: 1.5 },
+  ];
+  const junkTotal = STREET_JUNK.reduce((a, d) => a + d.w, 0);
+  const junkUsed = new Uint8Array(W * H);
+  const clearStreet = (x: number, y: number, w: number, h: number) => {
+    for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) if (ground[yy * W + xx] !== 1 || junkUsed[yy * W + xx]) return false;
+    return true;
+  };
+  for (const st of streets) {
+    const len = st.dir === 'v' ? st.h : st.w;
+    for (let at = 2; at < len - 3; at += ri(3, 6)) {
+      if (rnd() < 0.45) continue;
+      let r = rnd() * junkTotal;
+      let d = STREET_JUNK[0]!;
+      for (const j of STREET_JUNK) {
+        r -= j.w;
+        if (r <= 0) {
+          d = j;
+          break;
+        }
+      }
+      if (d.dir !== 'any' && d.dir !== st.dir) continue;
+      const farKerb = rnd() < 0.5;
+      const [tw, th] = d.t;
+      const x = st.dir === 'v' ? (farKerb ? st.x + st.w - tw : st.x) : st.x + at;
+      const y = st.dir === 'v' ? st.y + at : farKerb ? st.y + st.h - th : st.y;
+      if (!clearStreet(x, y, tw, th)) continue;
+      for (let yy = y - 1; yy <= y + th; yy++) for (let xx = x - 1; xx <= x + tw; xx++) if (yy >= 0 && xx >= 0 && yy < H && xx < W) junkUsed[yy * W + xx] = 1;
+      put(d.p, x * 16 + (tw * 16) / 2, (y + th) * 16);
     }
   }
 
@@ -223,7 +300,7 @@ export function generateWorld(seed: number): World {
     for (const d of SCENERY) if ((r -= d.w) <= 0) return d;
     return SCENERY[0]!;
   };
-  for (let n = 0; n < 9000 && props.length < 900; n++) {
+  for (let n = 0; n < 12000 && props.length < 700; n++) {
     const d = pick();
     const tx = ri(0, W - d.t[0]);
     const ty = ri(1, H - d.t[1]);
@@ -232,7 +309,7 @@ export function generateWorld(seed: number): World {
     put(d.p, tx * 16 + (d.t[0] * 16) / 2, (ty + d.t[1]) * 16);
   }
   props.sort((a, b) => a.y - b.y || a.x - b.x);
-  return { w: W, h: H, plots, graveyards, props, ground };
+  return { w: W, h: H, plots, graveyards, props, ground, streets, centre: [W / 2, W / 2] };
 }
 
 /** World tile coordinates of a plot's Main Tower centre. */

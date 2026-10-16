@@ -134,7 +134,7 @@ function bindNet() {
     setPlayer(w.player);
     setCrate(w.crate, true);
     if (!centred) {
-      view.centerOnPlot(w.player.plot, view.baseZoom());
+      view.centerOnBlock(w.player.plot);
       centred = true;
     }
     $('feed').replaceChildren();
@@ -536,7 +536,7 @@ function drawMinimap(now: number) {
     miniBase.height = world.h;
     const b = miniBase.getContext('2d')!;
     const img = b.createImageData(world.w, world.h);
-    const colors = [[66, 58, 40], [104, 92, 70], [48, 38, 30]];
+    const colors = [[66, 58, 40], [104, 92, 70], [48, 38, 30], [84, 76, 60]];
     for (let i = 0; i < world.w * world.h; i++) {
       const c = colors[world.ground[i]!]!;
       img.data.set([c[0]!, c[1]!, c[2]!, 255], i * 4);

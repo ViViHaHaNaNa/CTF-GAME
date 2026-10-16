@@ -39,7 +39,7 @@ export const CONFIG = {
     /** Time between post shots. */
     postCooldown: 0.7,
     /** Zombie walking speed. */
-    zombieSpeed: 1.25,
+    zombieSpeed: 1,
     /** Time between zombie hits. */
     zombieCooldown: 1,
   },
