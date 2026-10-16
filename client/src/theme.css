@@ -1,0 +1,206 @@
+/* =====================================================================================================
+   Code Siege theme: EVERY colour, font and size in one place.
+   The page stylesheets (site, siege, arena, admin) use only these variables, and the game canvas reads
+   the --map-* values below at start-up (client/src/siege/theme.ts). Change this file to restyle it all.
+   ===================================================================================================== */
+
+/* Bundled fonts (no internet needed). Drop the files into client/public/fonts/; until they're there,
+   the fallbacks in --font / --font-mono are used. */
+@font-face {
+  font-family: 'Siege Sans';
+  src: url('/fonts/siege-sans.woff2') format('woff2');
+  font-weight: 400 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Siege Mono';
+  src: url('/fonts/siege-mono.woff2') format('woff2');
+  font-weight: 400 800;
+  font-display: swap;
+}
+
+:root {
+  /* ---- type ---- */
+  --font: 'Siege Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Siege Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  --text-2xs: 0.7rem;
+  --text-xs: 0.78rem;
+  --text-sm: 0.88rem;
+  --text-md: 1rem;
+  --text-lg: 1.15rem;
+  --text-xl: 1.4rem;
+  --text-hero: clamp(2.6rem, 9vw, 4.5rem);
+  --weight-body: 500;
+  --weight-bold: 700;
+  --weight-heavy: 800;
+
+  /* ---- surfaces ---- */
+  --bg: #0b1324;              /* page */
+  --surface: #14203a;         /* top bar, panels */
+  --surface-2: #1c2b4d;       /* cards, inputs, list rows */
+  --surface-3: #263a66;       /* hover / selected */
+  --overlay: rgba(11, 19, 36, 0.86);   /* things floating over the map */
+  --overlay-strong: rgba(11, 19, 36, 0.95);
+  --code-bg: #0a1020;
+  --line: #2e4374;
+  --line-strong: #4a63a3;
+
+  /* ---- text ---- */
+  --ink: #f5f8ff;
+  --muted: #a6b5da;
+  --code-ink: #e6ecff;
+
+  /* ---- accents (the bright stuff) ---- */
+  --accent: #ffd23f;          /* yellow, like the lane stripes */
+  --accent-ink: #1a1400;
+  --accent-shade: #c99a12;    /* pressed edge of yellow buttons */
+  --accent-soft: rgba(255, 210, 63, 0.18);
+  --danger: #ff4d3d;
+  --danger-ink: #ffffff;
+  --danger-soft: rgba(255, 77, 61, 0.18);
+  --danger-text: #ff9c8f;
+  --warn: #ff9a3c;
+  --good: #5fe08a;
+  --good-soft: rgba(95, 224, 138, 0.16);
+  --info: #5aa8ff;
+  --shield: #7fd8ff;
+  --shield-soft: rgba(127, 216, 255, 0.16);
+  --coin-light: #fff1a8;
+  --coin: #ffd23f;
+  --coin-dark: #b07d00;
+  --trophy: #ffcf5a;
+  --rarity-rare: #6ee07a;
+  --rarity-epic: #5aa8ff;
+  --rarity-legendary: #ff4d3d;
+
+  /* ---- shape & spacing ---- */
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+  --gap: 8px;
+  --pad: 12px;
+  --border: 2px;
+  --touch: 48px;              /* minimum touch target */
+  --touch-sm: 42px;
+  --shadow-press: 0 3px 0;    /* + colour: chunky button edge */
+  --shadow-float: 0 6px 18px rgba(0, 0, 0, 0.4);
+  --minimap: 128px;
+  --panel-width: 360px;
+  --panel-max-height: 46vh;
+  --login-width: 340px;
+  --vignette: radial-gradient(ellipse at center, rgba(5, 10, 25, 0) 58%, rgba(5, 10, 25, 0.42) 100%);
+  --login-glow: radial-gradient(ellipse at top, #24407a, var(--bg) 70%);
+
+  /* ---- projector (Live Arena big screen): readable from the back of the room ---- */
+  --proj-title: 2rem;
+  --proj-side: 1.2rem;
+  --proj-heading: 1.05rem;
+  --proj-feed: 1rem;
+  --proj-names: 2rem;
+  --proj-stats: 1.2rem;
+  --proj-result: 3rem;
+  --proj-result-sub: 1.3rem;
+  --proj-idle-title: 2.4rem;
+  --proj-idle-text: 1.3rem;
+  --proj-ranks: 1.5rem;
+  --proj-rank-row: 52px;
+  --proj-side-width: 420px;
+  --arena-side-width: 340px;
+
+  /* =====================================================================================
+     Map (canvas) palette, read by client/src/siege/theme.ts. Colours as CSS colours;
+     "r, g, b" triplets where the canvas mixes in its own alpha; plain numbers for rules.
+     ===================================================================================== */
+  --map-void: #0d1424;
+  /* Palette remap of the Green ground tileset (hue in degrees, others 0..1). */
+  --map-grass-hue: 112;
+  --map-grass-hue-spread: 0.25;
+  --map-grass-sat-scale: 1.8;
+  --map-grass-sat-max: 0.8;
+  --map-grass-light-scale: 1.1;
+  --map-grass-light-max: 0.78;
+  --map-grass-detail-hue: 128;
+  --map-grass-detail-sat: 0.55;
+  --map-grass-detail-light: 0.9;
+  --map-earth-hue-shift: 8;
+  --map-earth-sat-scale: 1.5;
+  --map-earth-sat-max: 0.72;
+  --map-earth-light-scale: 1.04;
+  --map-earth-grey-hue: 20;
+  --map-earth-grey-sat: 0.35;
+  --map-earth-grey-light: 0.9;
+  /* Streets */
+  --map-asphalt: #233670;
+  --map-asphalt-light: #2e4589;
+  --map-asphalt-dark: #1a2857;
+  --map-asphalt-speck: 0.07;
+  --map-alley-shade: rgba(0, 0, 0, 0.14);
+  --map-lane: #ffd23f;
+  --map-kerb: rgba(210, 225, 255, 0.55);
+  /* Light & atmosphere */
+  --map-shadow: rgba(8, 14, 30, 0.34);
+  --map-shadow-x: 3;
+  --map-shadow-y: 2;
+  --map-ember: 255, 140, 40;
+  --map-ember-hot: 255, 224, 120;
+  --map-fog: 150, 255, 190;
+  --map-grave-warn: 255, 196, 64;
+  --map-grave-wave: 255, 76, 60;
+  --map-rain: rgba(190, 215, 255, 0.55);
+  --map-rain-tint: rgba(30, 60, 140, 0.1);
+  --map-puddle: rgba(40, 70, 150, 0.55);
+  --map-puddle-shine: rgba(200, 225, 255, 0.55);
+  --map-rain-every: 360;      /* seconds between showers */
+  --map-rain-lasts: 75;
+  --map-rain-fade: 8;
+  --map-rain-drops: 90;
+  /* Bases */
+  --map-banner-sat: 82;
+  --map-banner-light: 56;
+  --map-flag-pole: #1c2233;
+  --map-mine: #ffd23f;
+  --map-ruin-fade: rgba(30, 40, 60, 0.42);
+  --map-raider-tint: rgba(230, 40, 40, 0.35);
+  --map-unit-shadow: rgba(0, 0, 0, 0.25);
+  /* Name tags */
+  --map-tag-weight: 700;
+  --map-tag-size: 12;
+  --map-tag-size-small: 10;
+  --map-tag-pad-x: 6;
+  --map-tag-pad-y: 3;
+  --map-tag-dark: #101624;
+  --map-tag-light: #ffffff;
+  --map-tag-raid: #ff4d3d;
+  --map-tag-shield: #7fd8ff;
+  --map-tag-outline: rgba(10, 14, 26, 0.85);
+  --map-crate-tag-size: 11;
+  --map-crate-tag-weight: 800;
+  /* Crates */
+  --map-crate-rare: 120, 220, 90;
+  --map-crate-epic: 90, 160, 255;
+  --map-crate-legendary: 255, 80, 60;
+  /* Combat */
+  --map-hp-good: #6ee07a;
+  --map-hp-low: #ff4d3d;
+  --map-hp-unit: #ff6b5a;
+  --map-hp-back: #101624;
+  --map-tracer: rgba(255, 240, 150, 0.95);
+  --map-dirt-puff: 150, 110, 70;
+  --map-deploy: 255, 77, 61;
+  --map-deploy-edge: rgba(255, 150, 130, 0.85);
+  --map-pick: 255, 233, 120;
+  --map-slot-open: rgba(255, 210, 63, 0.9);
+  --map-slot-locked: rgba(16, 22, 36, 0.6);
+  --map-pip-back: #101624;
+  --map-pip-on: #ffd23f;
+  /* Minimap */
+  --map-mini-ground: 70, 150, 70;
+  --map-mini-street: 40, 60, 120;
+  --map-mini-mud: 110, 70, 45;
+  --map-mini-alley: 55, 75, 125;
+  --map-mini-empty: #24324a;
+  --map-mini-view: #ffffff;
+  --map-mini-wave-dim: #5a1f14;
+  --map-mini-flash: #ffffff;
+}

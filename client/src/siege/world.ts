@@ -547,9 +547,9 @@ export class WorldView {
     const g = this.g;
     const d = this.dpr;
     const [sx, sy] = this.toScreen(CRATE_SPOT.x, CRATE_SPOT.y - 26);
-    const fs = Math.round(11 * d);
+    const fs = Math.round(THEME.tag.crateSize * d);
     const text = `${rarity.toUpperCase()} CRATE`;
-    g.font = `800 ${fs}px ${FONT}`;
+    g.font = `${THEME.tag.crateWeight} ${fs}px ${FONT}`;
     const w = g.measureText(text).width + 10 * d;
     const h = fs + 6 * d;
     g.fillStyle = `rgba(${THEME.crate[rarity]}, 0.92)`;
@@ -917,7 +917,7 @@ export class WorldView {
       sheet = s[sh.walk] as Sheet;
       frame = Math.floor(now / (120 / CONFIG.pace.zombieSpeed) + u.id); // legs keep up with the walking pace
     }
-    g.fillStyle = 'rgba(0, 0, 0, 0.25)';
+    g.fillStyle = THEME.unitShadow;
     g.fillRect(Math.round(x - 4), Math.round(y - 1), 8, 2);
     drawFrame(g, sheet, frame, x - sheet.fw / 2, y - sheet.fh + 1, u.facing < 0);
     if (u.state < 2 && u.hp < 100) this.hpBar(g, Math.round(x - 5), Math.round(y - sheet.fh - 2), 10, u.hp, THEME.hp.unit);
@@ -925,7 +925,7 @@ export class WorldView {
 
   private drawRaider(g: CanvasRenderingContext2D, u: UnitView, kind: string, x: number, y: number, now: number) {
     const look = RAIDER_LOOK[kind]!;
-    g.fillStyle = 'rgba(0, 0, 0, 0.25)';
+    g.fillStyle = THEME.unitShadow;
     g.fillRect(Math.round(x - 4), Math.round(y - 1), 8, 2);
     if (u.state === 2) {
       const d = this.sprites.bodyDeath;
@@ -1025,7 +1025,7 @@ export class WorldView {
       else g.rect(inset, inset, c.width - inset * 2, h - inset * 2);
     };
     // Outline (gold for your own base, red while raided, dark otherwise), then the banner colour.
-    g.fillStyle = mine ? THEME.mine : s.raid ? t.raid : 'rgba(10, 14, 26, 0.85)';
+    g.fillStyle = mine ? THEME.mine : s.raid ? t.raid : t.outline;
     box(0);
     g.fill();
     g.fillStyle = baseColor(s.id);

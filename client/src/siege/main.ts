@@ -567,11 +567,11 @@ function drawMinimap(now: number) {
   }
   for (const gy of world.graveyards) {
     const w = Math.max(0, ...gy.serves.map((id) => view.bases.get(id)?.wave ?? 0));
-    g.fillStyle = w === 2 ? (pulse ? `rgb(${THEME.graveWave.join(',')})` : '#5a1f14') : w === 1 ? `rgb(${THEME.graveWarn.join(',')})` : `rgb(${THEME.minimap.mud.join(',')})`;
+    g.fillStyle = w === 2 ? (pulse ? `rgb(${THEME.graveWave.join(',')})` : THEME.minimap.waveDim) : w === 1 ? `rgb(${THEME.graveWarn.join(',')})` : `rgb(${THEME.minimap.mud.join(',')})`;
     g.fillRect(gy.x, gy.y, gy.w, gy.h);
   }
   if (view.crate) {
-    g.fillStyle = pulse ? '#ffffff' : `rgb(${THEME.crate[view.crate.rarity]})`;
+    g.fillStyle = pulse ? THEME.minimap.flash : `rgb(${THEME.crate[view.crate.rarity]})`;
     g.fillRect(Math.round(CRATE_SPOT.x / 16) - 3, Math.round(CRATE_SPOT.y / 16) - 3, 6, 6);
   }
   const [x0, y0, x1, y1] = view.viewRect();

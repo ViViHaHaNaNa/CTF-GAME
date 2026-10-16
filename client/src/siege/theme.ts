@@ -1,13 +1,26 @@
-// The game's look in one place: every colour, font and size the canvas uses. (Page UI colours live in
-// theme.css as CSS variables.) Swap the whole style by editing these two files.
+// The canvas side of the theme. Every value comes from the CSS variables in client/src/theme.css
+// (the one file that defines the whole look); this module just reads them once at start-up and adds
+// the colour helpers the renderer needs.
 
-/** Bundled font (see theme.css @font-face); no internet needed. */
-export const FONT = "'Siege Sans', system-ui, sans-serif";
-export const FONT_MONO = "'Siege Mono', ui-monospace, monospace";
+const root = getComputedStyle(document.documentElement);
+
+/** A theme variable as text (a missing one is a mistake in theme.css: say so loudly). */
+function css(name: string): string {
+  const v = root.getPropertyValue(name).trim();
+  if (!v) console.error(`theme.css is missing ${name}`);
+  return v;
+}
+const num = (name: string) => Number(css(name));
+/** "r, g, b" triplet. */
+const rgb = (name: string) => css(name).split(',').map((x) => Number(x.trim())) as [number, number, number];
+
+/** Fonts for text drawn on the canvas (bundled via theme.css @font-face; no internet needed). */
+export const FONT = css('--font');
+export const FONT_MONO = css('--font-mono');
 
 export const THEME = {
   /** Behind the map edges. */
-  void: '#0d1424',
+  void: css('--map-void'),
 
   /**
    * Palette remap of the pack's Green ground tileset, applied at load time (the files are untouched).
@@ -15,78 +28,99 @@ export const THEME = {
    */
   remap: {
     /** Grass tiles: greens get vivid; grey detail pixels become deep green; flowers get brighter. */
-    grass: { hue: 112, hueSpread: 0.25, satScale: 1.8, satMax: 0.8, lightScale: 1.1, lightMax: 0.78, detailHue: 128, detailSat: 0.55, detailLight: 0.9 },
+    grass: {
+      hue: num('--map-grass-hue'),
+      hueSpread: num('--map-grass-hue-spread'),
+      satScale: num('--map-grass-sat-scale'),
+      satMax: num('--map-grass-sat-max'),
+      lightScale: num('--map-grass-light-scale'),
+      lightMax: num('--map-grass-light-max'),
+      detailHue: num('--map-grass-detail-hue'),
+      detailSat: num('--map-grass-detail-sat'),
+      detailLight: num('--map-grass-detail-light'),
+    },
     /** Dirt and paving: warmer and richer. */
-    earth: { hueShift: 8, satScale: 1.5, satMax: 0.72, lightScale: 1.04, greyHue: 20, greySat: 0.35, greyLight: 0.9 },
+    earth: {
+      hueShift: num('--map-earth-hue-shift'),
+      satScale: num('--map-earth-sat-scale'),
+      satMax: num('--map-earth-sat-max'),
+      lightScale: num('--map-earth-light-scale'),
+      greyHue: num('--map-earth-grey-hue'),
+      greySat: num('--map-earth-grey-sat'),
+      greyLight: num('--map-earth-grey-light'),
+    },
   },
 
-  /** Streets: deep blue asphalt (generated texture: base colour with light and dark specks). */
-  asphalt: { base: '#233670', light: '#2e4589', dark: '#1a2857', lightShare: 0.07, darkShare: 0.07 },
-  /** Alleys are a shade darker than streets. */
-  alleyShade: 'rgba(0, 0, 0, 0.14)',
-  /** Road markings. */
-  laneStripe: '#ffd23f',
-  kerb: 'rgba(210, 225, 255, 0.55)',
+  /** Streets: generated asphalt texture (base colour with light and dark specks). */
+  asphalt: { base: css('--map-asphalt'), light: css('--map-asphalt-light'), dark: css('--map-asphalt-dark'), lightShare: num('--map-asphalt-speck'), darkShare: num('--map-asphalt-speck') },
+  alleyShade: css('--map-alley-shade'),
+  laneStripe: css('--map-lane'),
+  kerb: css('--map-kerb'),
 
   /** Soft shadows (sun from the top left). */
-  shadow: 'rgba(8, 14, 30, 0.34)',
-  shadowOffset: { x: 3, y: 2 },
+  shadow: css('--map-shadow'),
+  shadowOffset: { x: num('--map-shadow-x'), y: num('--map-shadow-y') },
 
   /** Graveyard atmosphere. */
-  ember: [255, 140, 40] as [number, number, number],
-  emberHot: [255, 224, 120] as [number, number, number],
-  fog: [150, 255, 190] as [number, number, number],
-  graveWarn: [255, 196, 64] as [number, number, number],
-  graveWave: [255, 76, 60] as [number, number, number],
+  ember: rgb('--map-ember'),
+  emberHot: rgb('--map-ember-hot'),
+  fog: rgb('--map-fog'),
+  graveWarn: rgb('--map-grave-warn'),
+  graveWave: rgb('--map-grave-wave'),
 
-  /** Rain. */
-  rain: 'rgba(190, 215, 255, 0.55)',
-  rainTint: 'rgba(30, 60, 140, 0.10)',
-  puddle: 'rgba(40, 70, 150, 0.55)',
-  puddleShine: 'rgba(200, 225, 255, 0.55)',
-  /** Seconds: one shower every `every`, lasting `lasts`, fading over `fade`. */
-  weather: { every: 360, lasts: 75, fade: 8, drops: 90 },
+  /** Rain: one shower every `every` seconds, lasting `lasts`, fading in/out over `fade`. */
+  rain: css('--map-rain'),
+  rainTint: css('--map-rain-tint'),
+  puddle: css('--map-puddle'),
+  puddleShine: css('--map-puddle-shine'),
+  weather: { every: num('--map-rain-every'), lasts: num('--map-rain-lasts'), fade: num('--map-rain-fade'), drops: num('--map-rain-drops') },
 
   /** Base banners: each base gets its own hue from its player id. */
-  banner: { sat: 82, light: 56 },
-  /** Your own base's tag outline. */
-  mine: '#ffd23f',
+  banner: { sat: num('--map-banner-sat'), light: num('--map-banner-light') },
+  /** Your own base's tag outline (and minimap square). */
+  mine: css('--map-mine'),
 
   tag: {
-    font: 700,
-    size: 12,
-    sizeSmall: 10,
-    padX: 6,
-    padY: 3,
-    textDark: '#101624',
-    textLight: '#ffffff',
-    raid: '#ff4d3d',
-    shield: '#7fd8ff',
+    font: num('--map-tag-weight'),
+    size: num('--map-tag-size'),
+    sizeSmall: num('--map-tag-size-small'),
+    padX: num('--map-tag-pad-x'),
+    padY: num('--map-tag-pad-y'),
+    textDark: css('--map-tag-dark'),
+    textLight: css('--map-tag-light'),
+    raid: css('--map-tag-raid'),
+    shield: css('--map-tag-shield'),
+    outline: css('--map-tag-outline'),
+    crateSize: num('--map-crate-tag-size'),
+    crateWeight: num('--map-crate-tag-weight'),
   },
 
-  crate: { rare: '120, 220, 90', epic: '90, 160, 255', legendary: '255, 80, 60' },
+  crate: { rare: css('--map-crate-rare'), epic: css('--map-crate-epic'), legendary: css('--map-crate-legendary') },
 
-  hp: { good: '#6ee07a', low: '#ff4d3d', unit: '#ff6b5a', back: '#101624' },
-  tracer: 'rgba(255, 240, 150, 0.95)',
-  dirtPuff: [150, 110, 70] as [number, number, number],
-  deploy: { fill: [255, 77, 61] as [number, number, number], edge: 'rgba(255, 150, 130, 0.85)' },
-  pick: [255, 233, 120] as [number, number, number],
-  slotOpen: 'rgba(255, 210, 63, 0.9)',
-  slotLocked: 'rgba(16, 22, 36, 0.6)',
-  levelPip: { back: '#101624', on: '#ffd23f' },
-  flagPole: '#1c2233',
-  raiderTint: 'rgba(230, 40, 40, 0.35)',
-  ruinFade: 'rgba(30, 40, 60, 0.42)',
+  hp: { good: css('--map-hp-good'), low: css('--map-hp-low'), unit: css('--map-hp-unit'), back: css('--map-hp-back') },
+  tracer: css('--map-tracer'),
+  dirtPuff: rgb('--map-dirt-puff'),
+  deploy: { fill: rgb('--map-deploy'), edge: css('--map-deploy-edge') },
+  pick: rgb('--map-pick'),
+  slotOpen: css('--map-slot-open'),
+  slotLocked: css('--map-slot-locked'),
+  levelPip: { back: css('--map-pip-back'), on: css('--map-pip-on') },
+  flagPole: css('--map-flag-pole'),
+  raiderTint: css('--map-raider-tint'),
+  unitShadow: css('--map-unit-shadow'),
+  ruinFade: css('--map-ruin-fade'),
 
   minimap: {
-    ground: [70, 150, 70] as [number, number, number],
-    street: [40, 60, 120] as [number, number, number],
-    mud: [110, 70, 45] as [number, number, number],
-    alley: [55, 75, 125] as [number, number, number],
-    empty: '#24324a',
-    view: '#ffffff',
+    ground: rgb('--map-mini-ground'),
+    street: rgb('--map-mini-street'),
+    mud: rgb('--map-mini-mud'),
+    alley: rgb('--map-mini-alley'),
+    empty: css('--map-mini-empty'),
+    view: css('--map-mini-view'),
+    waveDim: css('--map-mini-wave-dim'),
+    flash: css('--map-mini-flash'),
   },
-} as const;
+};
 
 /** Each base's banner colour, the same on every screen (golden-angle hues by player id). */
 export function baseHue(id: number): number {
