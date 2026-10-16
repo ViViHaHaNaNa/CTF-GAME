@@ -5,7 +5,7 @@ import { ASSET_ROOT } from './config.ts';
 // name is the frame count, so frame width = sheet width / count.
 
 const FILES = {
-  ground: 'Tiles/Background_Bleak-Yellow_TileSet.png',
+  ground: 'Tiles/Background_Green_TileSet.png',
 
   // Survivors are layered: body (no hands) + weapon (with hands) + optional helmet.
   body: 'Character/Main/Idle/Character_side_idle_no-hands-Sheet6.png',
@@ -50,6 +50,11 @@ const FILES = {
   crateGreen: 'Objects/Pickable/Ammo-crate_Green.png',
   crateBlue: 'Objects/Pickable/Ammo-crate_Blue.png',
   crateRed: 'Objects/Pickable/Ammo-crate_Red.png',
+
+  // Weather
+  rainSplash: 'Objects/Nature/Flowers_Mashrooms_Other-nature-stuff/Puddles-And-Water-Anim/Animations/Rain-drop-splash_1_Small-Sheet5.png',
+  rainSplashBig: 'Objects/Nature/Flowers_Mashrooms_Other-nature-stuff/Puddles-And-Water-Anim/Animations/Rain-drop-splash_2_Big-Sheet5.png',
+  puddleSplash: 'Objects/Nature/Flowers_Mashrooms_Other-nature-stuff/Puddles-And-Water-Anim/Animations/Puddle-Splash_3_Normal-Sheet4.png',
 } as const;
 
 /** Grave sprites live in their own folder so they can be replaced without touching the pack. */

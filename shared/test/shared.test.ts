@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CONFIG,
   PLOT,
+  PROP_FILES,
   SLOTS,
   WALLS,
   Raid,
@@ -231,5 +232,14 @@ describe('crate rules', () => {
     const boosted = baseBuildings(base, { x: 0, y: 0 }, 0.4).find((b) => b.kind === 'post')!;
     expect(boosted.hp).toBe(Math.round(plain.hp * 1.4));
     expect(boosted.gun!.damage).toBe(Math.round(plain.gun!.damage * 1.4));
+  });
+});
+
+describe('scenery', () => {
+  it('every prop points at a registered image', () => {
+    for (const pr of world.props) {
+      expect(pr.f).toBeGreaterThanOrEqual(0);
+      expect(PROP_FILES[pr.f]).toBeTypeOf('string');
+    }
   });
 });

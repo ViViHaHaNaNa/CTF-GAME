@@ -139,3 +139,6 @@ body.siege { overflow: hidden; display: flex; flex-direction: column; height: 10
 .answer-reveal code { font-family: var(--mono); background: #15120e; padding: 2px 6px; border-radius: 3px; }
 .link { background: none; border: 0; padding: 4px 0; color: var(--accent); font: inherit; font-size: 0.85rem; text-decoration: underline; cursor: pointer; }
 .feed div.crate { border-left-color: #6ea0e6; color: var(--ink); }
+
+/* Soft darkening toward the map edges (a separate layer: costs the canvas nothing). */
+.vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, rgba(5, 10, 25, 0) 58%, rgba(5, 10, 25, 0.42) 100%); }

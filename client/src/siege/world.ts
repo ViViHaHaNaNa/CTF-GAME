@@ -9,7 +9,9 @@ import {
   UNIT_KINDS,
   WALLS,
   ALLEY,
+  PROP_FILES,
   getWorld,
+  isAnimatedProp,
   inDeployZone,
   postId,
   slotsUnlocked,
@@ -23,10 +25,13 @@ import {
   type WorldPlot,
 } from '@siege/shared';
 import { LAYER_OFFSET, drawFrame, type Sheet, type Sprites } from './sprites.ts';
+import { FONT, THEME, baseColor, groundRule, recolour, textOn } from './theme.ts';
 
 // Renders the shared world: a camera over one big pixel map at integer zoom (no smoothing).
-// Ground + scenery are baked into chunks once; distant bases are cached static sprites; only bases
-// with a live stream (the ones this screen watches) get full animation. Pure rendering.
+// Ground + scenery are baked into chunks once (recoloured tiles, lane markings, soft shadows); distant
+// bases are cached static sprites; only bases with a live stream (the ones this screen watches) get
+// full animation. Ambient life (swaying grass, graveyard embers and fog, flags, rain) is drawn per
+// frame for what's on screen only. Every colour comes from theme.ts. Pure rendering.
 
 const T = 16;
 const CHUNK = 32; // tiles per chunk side
@@ -37,7 +42,6 @@ const HPX = world.h * T;
 
 /** Crossroads in the middle of the map, where global crates land (world px). */
 export const CRATE_SPOT = { x: world.centre[0] * T, y: world.centre[1] * T + 8 };
-const CRATE_GLOW: Record<Rarity, string> = { rare: '143, 196, 107', epic: '110, 160, 230', legendary: '224, 87, 63' };
 
 export type BasePick = { kind: 'hq' } | { kind: 'walls' } | { kind: 'slot'; slot: number };
 
@@ -84,6 +88,14 @@ const RAIDER_LOOK: Record<string, { weapon: 'bat' | 'pistol' | 'shotgun'; helmet
   r_shotgun: { weapon: 'shotgun', helmet: false },
 };
 
+/** 0..1 how hard it's raining at wall-clock time `ms`: a short shower every few minutes, the same on every screen. */
+export function rainAmount(ms: number): number {
+  const w = THEME.weather;
+  const t = (ms / 1000) % w.every;
+  if (t > w.lasts) return 0;
+  return Math.max(0, Math.min(1, t / w.fade, (w.lasts - t) / w.fade));
+}
+
 function hash(x: number, y: number, s = 0) {
   let h = (x * 374761393 + y * 668265263 + s * 2246822519) | 0;
   h = Math.imul(h ^ (h >>> 13), 1274126177);
@@ -112,6 +124,14 @@ export class WorldView {
   private vy = 0;
   private lastUpdate = 0;
   private tagCache = new Map<number, { key: string; canvas: HTMLCanvasElement }>();
+  /** The ground tileset recoloured for each kind of ground (palette remap at load time). */
+  private tiles: Record<'grass' | 'earth', HTMLCanvasElement>;
+  /** Asphalt texture variants (generated, so streets never show a tiling pattern). */
+  private asphalt: HTMLCanvasElement[] = [];
+  /** Grass tufts that sway: drawn each frame (when on screen) instead of baked. */
+  private swayers: { img: HTMLImageElement; x: number; y: number; seed: number }[] = [];
+  /** Where puddles form when it rains (world px). */
+  private puddles: { x: number; y: number; r: number; seed: number }[] = [];
   bases = new Map<number, BaseSummary>();
   live = new Map<number, LiveState>();
   /** The viewer's own plot and base (fresher than the summary). */
@@ -135,6 +155,33 @@ export class WorldView {
 
   constructor(readonly canvas: HTMLCanvasElement, readonly sprites: Sprites) {
     this.g = canvas.getContext('2d')!;
+    const src = sprites.ground.img;
+    this.tiles = { grass: recolour(src, groundRule('grass')), earth: recolour(src, groundRule('earth')) };
+    const A = THEME.asphalt;
+    for (let v = 0; v < 4; v++) {
+      const c = document.createElement('canvas');
+      c.width = T;
+      c.height = T;
+      const g = c.getContext('2d')!;
+      g.fillStyle = A.base;
+      g.fillRect(0, 0, T, T);
+      for (let y = 0; y < T; y++)
+        for (let x = 0; x < T; x++) {
+          const r = hash(x, y, 40 + v);
+          if (r < A.lightShare) g.fillStyle = A.light;
+          else if (r < A.lightShare + A.darkShare) g.fillStyle = A.dark;
+          else continue;
+          g.fillRect(x, y, 1, 1);
+        }
+      this.asphalt.push(c);
+    }
+    for (const pr of world.props) if (isAnimatedProp(PROP_FILES[pr.f]!)) this.swayers.push({ img: sprites.props[pr.f]!, x: pr.x, y: pr.y, seed: hash(pr.x, pr.y, 5) });
+    for (let i = 0; i < 2000 && this.puddles.length < 160; i++) {
+      const tx = Math.floor(hash(i, 1, 77) * world.w);
+      const ty = Math.floor(hash(i, 2, 77) * world.h);
+      const gk = world.ground[ty * world.w + tx];
+      if (gk === 1 || gk === 3 || (gk === 0 && hash(i, 4, 77) < 0.3)) this.puddles.push({ x: (tx + hash(i, 3, 77)) * T, y: (ty + hash(i, 5, 77)) * T, r: 4 + hash(i, 6, 77) * 7, seed: hash(i, 7, 77) });
+    }
   }
 
   // ---- camera -----------------------------------------------------------------------------------
@@ -411,7 +458,7 @@ export class WorldView {
     const g = this.g;
     const c = this.cam;
     g.setTransform(1, 0, 0, 1, 0, 0);
-    g.fillStyle = '#15120e';
+    g.fillStyle = THEME.void;
     g.fillRect(0, 0, this.canvas.width, this.canvas.height);
     const ox = Math.round(this.canvas.width / 2 - c.x * c.k);
     const oy = Math.round(this.canvas.height / 2 - c.y * c.k);
@@ -427,6 +474,7 @@ export class WorldView {
         g.drawImage(this.chunk(cx, cy), dx, dy, Math.round(ox + (cx + 1) * cs * c.k) - dx, Math.round(oy + (cy + 1) * cs * c.k) - dy);
       }
     g.setTransform(c.k, 0, 0, c.k, ox, oy);
+    this.drawSwayingGrass(g, x0, y0, x1, y1, now);
 
     // 2. Bases and ruins in view.
     const visible = world.plots.filter((p) => (p.x + PLOT) * T > x0 - 16 && p.x * T < x1 && (p.y + PLOT) * T + 16 > y0 && p.y * T - 24 < y1);
@@ -442,19 +490,27 @@ export class WorldView {
       if (detailed) this.drawBaseLive(g, p, base, l!, now);
       else g.drawImage(this.staticBase(p.id, base), p.x * T, p.y * T - 16);
     }
+    for (const p of visible) {
+      const s = this.bases.get(p.id);
+      if (s) this.drawFlag(g, p, s.id, now);
+    }
+    const wet = rainAmount(Date.now() + this.clockSkew);
+    if (wet > 0) this.drawRainGround(g, x0, y0, x1, y1, wet, now);
 
     // 3. Graveyard warnings and deploy zone.
     for (const gy of world.graveyards) {
-      if ((gy.x + 6) * T < x0 || gy.x * T > x1 || (gy.y + 6) * T < y0 || gy.y * T > y1) continue;
+      if ((gy.x + 8) * T < x0 || (gy.x - 2) * T > x1 || (gy.y + 8) * T < y0 || (gy.y - 4) * T > y1) continue;
       const state = Math.max(0, ...gy.serves.map((id) => this.bases.get(id)?.wave ?? 0));
+      this.drawGraveyardFx(g, gy.id, (gy.x + gy.w / 2) * T, (gy.y + gy.h / 2) * T, state, now);
       if (state > 0) this.drawGraveWarning(g, gy.x, gy.y, state, now);
     }
     if (this.deployPlot >= 0) this.drawDeployZone(g, world.plots[this.deployPlot]!, now);
     if (this.selectedPlot >= 0 && this.selectedPick && this.selectedPlot === this.myPlot) this.drawPick(g, world.plots[this.myPlot]!, this.selectedPick, now);
     if (this.crate) this.drawCrate(g, this.crate.rarity, now);
 
-    // 4. Screen-space labels (crisp text at any zoom).
+    // 4. Screen space: rain, then labels (crisp text at any zoom).
     g.setTransform(1, 0, 0, 1, 0, 0);
+    if (wet > 0) this.drawRainAir(g, wet, now);
     for (const p of visible) {
       const s = this.bases.get(p.id);
       if (s) this.drawTag(g, p, s, now);
@@ -469,7 +525,7 @@ export class WorldView {
 
   private drawCrate(g: CanvasRenderingContext2D, rarity: Rarity, now: number) {
     const img = (rarity === 'legendary' ? this.sprites.crateRed : rarity === 'epic' ? this.sprites.crateBlue : this.sprites.crateGreen).img;
-    const color = CRATE_GLOW[rarity];
+    const color = THEME.crate[rarity];
     const { x, y } = CRATE_SPOT;
     const pulse = 0.5 + 0.5 * Math.sin(now / 300);
     // Beacon of light so it can be spotted from far away.
@@ -489,12 +545,12 @@ export class WorldView {
     const [sx, sy] = this.toScreen(CRATE_SPOT.x, CRATE_SPOT.y - 26);
     const fs = Math.round(11 * d);
     const text = `${rarity.toUpperCase()} CRATE`;
-    g.font = `800 ${fs}px system-ui, sans-serif`;
+    g.font = `800 ${fs}px ${FONT}`;
     const w = g.measureText(text).width + 10 * d;
     const h = fs + 6 * d;
-    g.fillStyle = `rgba(${CRATE_GLOW[rarity]}, 0.92)`;
+    g.fillStyle = `rgba(${THEME.crate[rarity]}, 0.92)`;
     g.fillRect(Math.round(sx - w / 2), Math.round(sy - h), w, h);
-    g.fillStyle = '#1b1712';
+    g.fillStyle = THEME.tag.textDark;
     g.textBaseline = 'middle';
     g.fillText(text, Math.round(sx - w / 2 + 5 * d), Math.round(sy - h / 2 + d));
   }
@@ -511,27 +567,79 @@ export class WorldView {
     c.height = size;
     const g = c.getContext('2d')!;
     g.imageSmoothingEnabled = false;
-    const tiles = this.sprites.ground.img;
-    const plain: [number, number][] = [[0, 0], [2, 0], [14, 0], [16, 0], [0, 2], [2, 2], [14, 2], [16, 2], [5, 0]];
-    const decals: [number, number][] = [[3, 1], [4, 0], [3, 2]];
+    const G = world.ground;
+    const W = world.w;
+    const isRoad = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < world.h && (G[y * W + x] === 1 || G[y * W + x] === 3);
+    const GRASS: [number, number][] = [[0, 0], [2, 0], [0, 2], [2, 2], [5, 0]];
+    const DECALS: [number, number][] = [[3, 0], [3, 1], [4, 1], [5, 1], [3, 2], [4, 2]];
+    // Only the tileset's plain tiles: the others carry borders that would tile into seams.
+    const DIRT: [number, number][] = [[15, 1]];
+    const pick = (set: [number, number][], wx: number, wy: number) => set[Math.floor(hash(wx, wy, 1) * set.length)]!;
     for (let ty = 0; ty < CHUNK; ty++)
       for (let tx = 0; tx < CHUNK; tx++) {
         const wx = cx * CHUNK + tx;
         const wy = cy * CHUNK + ty;
-        if (wx >= world.w || wy >= world.h) continue;
-        const gk = world.ground[wy * world.w + wx];
+        if (wx >= W || wy >= world.h) continue;
+        const gk = G[wy * W + wx];
+        let sheet = this.tiles.grass;
         let src: [number, number];
-        if (gk === 2) src = [15, 1];
-        else if (gk === 1 || gk === 3) src = [1, 1];
-        else {
-          const set = hash(wx, wy) < 0.04 ? decals : plain;
-          src = set[Math.floor(hash(wx, wy, 1) * set.length)]!;
-        }
-        g.drawImage(tiles, src[0] * T, src[1] * T, T, T, tx * T, ty * T, T, T);
+        if (gk === 1 || gk === 3) {
+          g.drawImage(this.asphalt[Math.floor(hash(wx, wy, 2) * this.asphalt.length)]!, tx * T, ty * T);
+          if (gk === 3) {
+            g.fillStyle = THEME.alleyShade;
+            g.fillRect(tx * T, ty * T, T, T);
+          }
+          continue;
+        } else if (gk === 2) {
+          sheet = this.tiles.earth;
+          src = pick(DIRT, wx, wy);
+        } else src = pick(hash(wx, wy) < 0.07 ? DECALS : GRASS, wx, wy);
+        g.drawImage(sheet, src[0] * T, src[1] * T, T, T, tx * T, ty * T, T, T);
       }
     const ox = cx * size;
     const oy = cy * size;
-    // Graves.
+    // Kerbs: a thin light edge wherever road meets something else.
+    g.fillStyle = THEME.kerb;
+    for (let ty = 0; ty < CHUNK; ty++)
+      for (let tx = 0; tx < CHUNK; tx++) {
+        const wx = cx * CHUNK + tx;
+        const wy = cy * CHUNK + ty;
+        if (!isRoad(wx, wy)) continue;
+        if (!isRoad(wx - 1, wy)) g.fillRect(tx * T, ty * T, 1, T);
+        if (!isRoad(wx + 1, wy)) g.fillRect(tx * T + T - 1, ty * T, 1, T);
+        if (!isRoad(wx, wy - 1)) g.fillRect(tx * T, ty * T, T, 1);
+        if (!isRoad(wx, wy + 1)) g.fillRect(tx * T, ty * T + T - 1, T, 1);
+      }
+    // Dashed yellow centre lines, broken at junctions.
+    g.fillStyle = THEME.laneStripe;
+    for (const st of world.streets) {
+      if (st.dir === 'v') {
+        const px = (st.x + st.w / 2) * T - 1 - ox;
+        if (px < -2 || px > size) continue;
+        for (let ty = st.y; ty < st.y + st.h; ty++) {
+          if (G[ty * W + st.x - 1] === 1 || G[ty * W + st.x + st.w] === 1) continue;
+          const py = ty * T - oy;
+          if (py > -T && py < size) g.fillRect(px, py + 4, 2, 8);
+        }
+      } else {
+        const py = (st.y + st.h / 2) * T - 1 - oy;
+        if (py < -2 || py > size) continue;
+        for (let tx = st.x; tx < st.x + st.w; tx++) {
+          if (G[(st.y - 1) * W + tx] === 1 || G[(st.y + st.h) * W + tx] === 1) continue;
+          const px = tx * T - ox;
+          if (px > -T && px < size) g.fillRect(px + 4, py, 8, 2);
+        }
+      }
+    }
+    // Soft shadows first, then graves and scenery on top.
+    const near = (x: number, y: number, m: number) => x > ox - m && y > oy - m && x < ox + size + m && y < oy + size + m;
+    for (const pr of world.props) {
+      if (isAnimatedProp(PROP_FILES[pr.f]!) || !near(pr.x, pr.y, 64)) continue;
+      const img = this.sprites.props[pr.f]!;
+      this.softShadow(g, pr.x - ox, pr.y - oy - 1, img.width * 0.42, Math.max(2.5, img.width * 0.15));
+    }
+    for (const gy of world.graveyards)
+      for (const gr of gy.graves) if (near(gr.x * T, gr.y * T, 32)) this.softShadow(g, gr.x * T + 8 - ox, gr.y * T + 14 - oy, 6, 2.5);
     for (const gy of world.graveyards) {
       for (const gr of gy.graves) {
         const px = gr.x * T - ox;
@@ -541,6 +649,7 @@ export class WorldView {
     }
     // Scenery, already sorted by y.
     for (const pr of world.props) {
+      if (isAnimatedProp(PROP_FILES[pr.f]!)) continue;
       const img = this.sprites.props[pr.f]!;
       const px = Math.round(pr.x - img.width / 2) - ox;
       const py = pr.y - img.height - oy;
@@ -577,7 +686,7 @@ export class WorldView {
     if (hash(plot, 9) > 0.4) g.drawImage(s.barrelRust.img, (RING.x0 + 2) * T, (RING.y1 - 2) * T);
     // Faded: nobody lives here.
     g.globalCompositeOperation = 'source-atop';
-    g.fillStyle = 'rgba(40, 32, 24, 0.45)';
+    g.fillStyle = THEME.ruinFade;
     g.fillRect(0, 0, c.width, c.height);
     g.globalCompositeOperation = 'source-over';
     this.ruinCache.set(plot, c);
@@ -586,9 +695,8 @@ export class WorldView {
 
   /** Packed-dirt yard inside a lived-in compound. */
   private drawYard(g: CanvasRenderingContext2D, ox: number, oy: number) {
-    const tiles = this.sprites.ground.img;
     for (let y = RING.y0 + 1; y < RING.y1; y++)
-      for (let x = RING.x0 + 1; x < RING.x1; x++) g.drawImage(tiles, 15 * T, 1 * T, T, T, ox + x * T, oy + y * T, T, T);
+      for (let x = RING.x0 + 1; x < RING.x1; x++) g.drawImage(this.tiles.earth, 15 * T, 1 * T, T, T, ox + x * T, oy + y * T, T, T);
   }
 
   // ---- bases ----------------------------------------------------------------------------------------
@@ -618,6 +726,13 @@ export class WorldView {
     const ox = p.x * T;
     const oy = p.y * T;
     this.drawYard(g, ox, oy);
+    // Shadows: the Main Tower, and a soft band along the walls' sunny side.
+    this.softShadow(g, ox + (HQ_RECT.x + HQ_RECT.w / 2) * T, oy + (HQ_RECT.y + HQ_RECT.h) * T - 1, HQ_RECT.w * T * 0.55, 6);
+    g.fillStyle = THEME.shadow;
+    g.globalAlpha = 0.45;
+    g.fillRect(ox + RING.x0 * T + 2, oy + (RING.y1 + 1) * T, (RING.x1 - RING.x0 + 1) * T, 2);
+    g.fillRect(ox + (RING.x1 + 1) * T, oy + RING.y0 * T + 3, 2, (RING.y1 - RING.y0 + 1) * T);
+    g.globalAlpha = 1;
     const items: { y: number; draw: () => void }[] = [];
     const reinforced = base.walls >= CONFIG.walls.reinforcedFromLevel;
     for (const w of WALLS) {
@@ -648,7 +763,7 @@ export class WorldView {
 
   private drawEffects(g: CanvasRenderingContext2D, l: LiveState, now: number) {
     l.tracers = l.tracers.filter((t) => now - t.at < 90);
-    g.strokeStyle = 'rgba(255, 230, 140, 0.9)';
+    g.strokeStyle = THEME.tracer;
     g.lineWidth = 1;
     for (const t of l.tracers) {
       g.beginPath();
@@ -660,7 +775,7 @@ export class WorldView {
     l.puffs = l.puffs.filter((p) => now - p.at < 600);
     for (const p of l.puffs) {
       const k = (now - p.at) / 600;
-      g.fillStyle = `rgba(120, 96, 72, ${0.75 * (1 - k)})`;
+      g.fillStyle = `rgba(${THEME.dirtPuff.join(', ')}, ${0.75 * (1 - k)})`;
       for (let i = 0; i < 6; i++) {
         const a = (i / 6) * Math.PI * 2;
         const r = 2 + k * 7;
@@ -693,9 +808,9 @@ export class WorldView {
     if (level >= 7) g.drawImage(s.antenna2.img, x + 30, y - 10);
     if (hp < 100) this.hpBar(g, x + 4, y - 4, 40, hp);
     for (let i = 0; i < level; i++) {
-      g.fillStyle = '#1b1712';
+      g.fillStyle = THEME.levelPip.back;
       g.fillRect(x + 6 + i * 5, y + 31, 4, 3);
-      g.fillStyle = '#e3b341';
+      g.fillStyle = THEME.levelPip.on;
       g.fillRect(x + 7 + i * 5, y + 31, 2, 2);
     }
   }
@@ -749,15 +864,15 @@ export class WorldView {
       }
     }
     g.drawImage(this.sprites.wallWoodH.img, x, y + 6);
-    g.fillStyle = '#1b1712';
+    g.fillStyle = THEME.levelPip.back;
     g.fillRect(x + 11, y + 11, 6, 6);
-    g.fillStyle = '#e3b341';
+    g.fillStyle = THEME.levelPip.on;
     this.tinyDigit(g, level, x + 12, y + 12);
     if (hp < 100) this.hpBar(g, x + 1, y - 10, 14, hp);
   }
 
   private drawSlot(g: CanvasRenderingContext2D, x: number, y: number, unlocked: boolean) {
-    g.fillStyle = unlocked ? 'rgba(227, 179, 65, 0.85)' : 'rgba(40, 34, 26, 0.6)';
+    g.fillStyle = unlocked ? THEME.slotOpen : THEME.slotLocked;
     for (let i = 1; i < 15; i += 3) {
       g.fillRect(x + i, y + 1, 2, 1);
       g.fillRect(x + i, y + 14, 2, 1);
@@ -768,7 +883,7 @@ export class WorldView {
       g.fillRect(x + 7, y + 5, 2, 6);
       g.fillRect(x + 5, y + 7, 6, 2);
     } else {
-      g.fillStyle = 'rgba(30, 26, 20, 0.85)';
+      g.fillStyle = THEME.levelPip.back;
       g.fillRect(x + 5, y + 7, 6, 5);
       g.fillRect(x + 6, y + 4, 1, 3);
       g.fillRect(x + 9, y + 4, 1, 3);
@@ -801,7 +916,7 @@ export class WorldView {
     g.fillStyle = 'rgba(0, 0, 0, 0.25)';
     g.fillRect(Math.round(x - 4), Math.round(y - 1), 8, 2);
     drawFrame(g, sheet, frame, x - sheet.fw / 2, y - sheet.fh + 1, u.facing < 0);
-    if (u.state < 2 && u.hp < 100) this.hpBar(g, Math.round(x - 5), Math.round(y - sheet.fh - 2), 10, u.hp, '#e0573f');
+    if (u.state < 2 && u.hp < 100) this.hpBar(g, Math.round(x - 5), Math.round(y - sheet.fh - 2), 10, u.hp, THEME.hp.unit);
   }
 
   private drawRaider(g: CanvasRenderingContext2D, u: UnitView, kind: string, x: number, y: number, now: number) {
@@ -816,7 +931,7 @@ export class WorldView {
       return;
     }
     const frame = Math.floor(now / (u.state === 0 ? 100 / CONFIG.pace.raiderSpeed : 100) + u.id) % 6;
-    const img = this.survivor(look.weapon, look.helmet, frame, u.state === 0, 'rgba(200, 40, 40, 0.35)');
+    const img = this.survivor(look.weapon, look.helmet, frame, u.state === 0, THEME.raiderTint);
     const ox = Math.round(x - 14);
     const oy = Math.round(y - 19);
     if (u.facing < 0) {
@@ -826,27 +941,27 @@ export class WorldView {
       g.drawImage(img, 0, 0);
       g.restore();
     } else g.drawImage(img, ox, oy);
-    if (u.hp < 100) this.hpBar(g, Math.round(x - 5), Math.round(y - 20), 10, u.hp, '#e0573f');
+    if (u.hp < 100) this.hpBar(g, Math.round(x - 5), Math.round(y - 20), 10, u.hp, THEME.hp.unit);
   }
 
   private drawGraveWarning(g: CanvasRenderingContext2D, gx: number, gy: number, state: number, now: number) {
-    const cx = (gx + 2.5) * T;
-    const cy = gy * T - 6;
+    const cx = (gx + 3) * T;
+    const cy = gy * T - 8;
     const pulse = 0.6 + 0.4 * Math.sin(now / 150);
-    g.fillStyle = state === 2 ? `rgba(224, 87, 63, ${pulse})` : `rgba(227, 179, 65, ${pulse})`;
+    g.fillStyle = `rgba(${(state === 2 ? THEME.graveWave : THEME.graveWarn).join(', ')}, ${pulse})`;
     // A small skull-ish marker: rounded block with two eye holes.
     g.fillRect(cx - 4, cy - 6, 8, 6);
     g.fillRect(cx - 3, cy, 6, 2);
-    g.fillStyle = '#1b1712';
+    g.fillStyle = THEME.levelPip.back;
     g.fillRect(cx - 3, cy - 4, 2, 2);
     g.fillRect(cx + 1, cy - 4, 2, 2);
   }
 
   private drawDeployZone(g: CanvasRenderingContext2D, p: WorldPlot, now: number) {
     const a = 0.18 + 0.08 * Math.sin(now / 250);
-    g.fillStyle = `rgba(224, 87, 63, ${a})`;
+    g.fillStyle = `rgba(${THEME.deploy.fill.join(', ')}, ${a})`;
     for (let y = 0; y < PLOT; y++) for (let x = 0; x < PLOT; x++) if (inDeployZone(x, y)) g.fillRect((p.x + x) * T, (p.y + y) * T, T, T);
-    g.strokeStyle = 'rgba(255, 140, 120, 0.8)';
+    g.strokeStyle = THEME.deploy.edge;
     g.lineWidth = 1;
     g.strokeRect(p.x * T + 0.5, p.y * T + 0.5, PLOT * T - 1, PLOT * T - 1);
     g.strokeRect((p.x + RING.x0) * T + 0.5, (p.y + RING.y0) * T + 0.5, (RING.x1 - RING.x0 + 1) * T - 1, (RING.y1 - RING.y0 + 1) * T - 1);
@@ -854,7 +969,7 @@ export class WorldView {
 
   private drawPick(g: CanvasRenderingContext2D, p: WorldPlot, pick: BasePick, now: number) {
     const pulse = 0.55 + 0.35 * Math.sin(now / 180);
-    g.strokeStyle = `rgba(255, 233, 150, ${pulse})`;
+    g.strokeStyle = `rgba(${THEME.pick.join(', ')}, ${pulse})`;
     g.lineWidth = 1;
     const ox = p.x * T;
     const oy = p.y * T;
@@ -876,59 +991,75 @@ export class WorldView {
     g.globalAlpha = 1;
   }
 
-  /** The tag as a small cached image: text is only rendered again when what it says changes. */
+  /** The tag as a small cached image in the base's banner colour; text is only re-rendered when it changes. */
   private tagImage(p: WorldPlot, s: BaseSummary): HTMLCanvasElement {
     const d = this.dpr;
     const small = this.zoom < 2;
     const mine = p.id === this.myPlot;
     const shielded = Math.max(s.shield, s.immune) > Date.now() + this.clockSkew;
-    const text = small ? s.name : `${s.name}  Lv${s.hq}  ♛${s.trophies}`;
-    const key = `${text}|${mine}|${shielded}|${s.raid ? 1 : 0}|${small}|${d}`;
+    const text = `${mine ? '★ ' : ''}${small ? s.name : `${s.name}  Lv${s.hq}  ♛${s.trophies}`}`;
+    const key = `${text}|${s.id}|${mine}|${shielded}|${s.raid ? 1 : 0}|${small}|${d}`;
     const hit = this.tagCache.get(p.id);
     if (hit && hit.key === key) return hit.canvas;
-    const fs = Math.round((small ? 10 : 12) * d);
-    const font = `700 ${fs}px system-ui, sans-serif`;
+    const t = THEME.tag;
+    const fs = Math.round((small ? t.sizeSmall : t.size) * d);
+    const font = `${t.font} ${fs}px ${FONT}`;
     const c = document.createElement('canvas');
     const g = c.getContext('2d')!;
     g.font = font;
     const tw = Math.ceil(g.measureText(text).width);
-    const padX = Math.round(5 * d);
+    const padX = Math.round(t.padX * d);
+    const border = Math.max(1, Math.round((mine || s.raid ? 2 : 1) * d));
     const extra = (shielded ? fs + 3 * d : 0) + (s.raid ? fs + 3 * d : 0);
-    c.width = Math.ceil(tw + padX * 2 + extra);
-    c.height = Math.ceil(fs + 6 * d);
+    c.width = Math.ceil(tw + padX * 2 + extra + border * 2);
+    c.height = Math.ceil(fs + t.padY * 2 * d + border * 2);
     const h = c.height;
-    g.fillStyle = mine ? 'rgba(227, 179, 65, 0.92)' : s.raid ? 'rgba(120, 30, 20, 0.9)' : 'rgba(27, 23, 18, 0.82)';
-    g.fillRect(0, 0, c.width, h);
-    g.font = font;
-    g.fillStyle = mine ? '#1b1712' : '#f1e6cf';
-    g.textBaseline = 'middle';
-    g.fillText(text, padX, h / 2 + d);
-    let ix = padX + tw + 3 * d;
-    if (shielded) {
-      const r = fs / 2;
-      g.fillStyle = '#7fb2e5';
+    const r = Math.round(4 * d);
+    const box = (inset: number) => {
       g.beginPath();
-      g.moveTo(ix, h / 2 - r);
-      g.lineTo(ix + r * 2, h / 2 - r);
-      g.lineTo(ix + r * 2, h / 2);
-      g.quadraticCurveTo(ix + r * 2, h / 2 + r, ix + r, h / 2 + r * 1.2);
-      g.quadraticCurveTo(ix, h / 2 + r, ix, h / 2);
+      if (g.roundRect) g.roundRect(inset, inset, c.width - inset * 2, h - inset * 2, Math.max(0, r - inset));
+      else g.rect(inset, inset, c.width - inset * 2, h - inset * 2);
+    };
+    // Outline (gold for your own base, red while raided, dark otherwise), then the banner colour.
+    g.fillStyle = mine ? THEME.mine : s.raid ? t.raid : 'rgba(10, 14, 26, 0.85)';
+    box(0);
+    g.fill();
+    g.fillStyle = baseColor(s.id);
+    box(border);
+    g.fill();
+    g.font = font;
+    g.fillStyle = textOn(s.id);
+    g.textBaseline = 'middle';
+    g.fillText(text, border + padX, h / 2 + d);
+    let ix = border + padX + tw + 3 * d;
+    if (shielded) {
+      const rr = fs / 2;
+      g.fillStyle = t.shield;
+      g.strokeStyle = THEME.tag.textDark;
+      g.lineWidth = Math.max(1, d);
+      g.beginPath();
+      g.moveTo(ix, h / 2 - rr);
+      g.lineTo(ix + rr * 2, h / 2 - rr);
+      g.lineTo(ix + rr * 2, h / 2);
+      g.quadraticCurveTo(ix + rr * 2, h / 2 + rr, ix + rr, h / 2 + rr * 1.2);
+      g.quadraticCurveTo(ix, h / 2 + rr, ix, h / 2);
       g.closePath();
       g.fill();
+      g.stroke();
       ix += fs + 3 * d;
     }
     if (s.raid) {
-      g.fillStyle = '#ff785a';
+      g.fillStyle = t.raid;
       g.fillText('⚔', ix, h / 2 + d);
     }
     this.tagCache.set(p.id, { key, canvas: c });
     return c;
   }
 
-  private hpBar(g: CanvasRenderingContext2D, x: number, y: number, w: number, pct: number, color = '#8fc46b') {
-    g.fillStyle = '#1b1712';
+  private hpBar(g: CanvasRenderingContext2D, x: number, y: number, w: number, pct: number, color: string = THEME.hp.good) {
+    g.fillStyle = THEME.hp.back;
     g.fillRect(x - 1, y - 1, w + 2, 3);
-    g.fillStyle = pct > 35 ? color : '#e0573f';
+    g.fillStyle = pct > 35 ? color : THEME.hp.low;
     g.fillRect(x, y, Math.max(1, Math.round((w * pct) / 100)), 1);
   }
 
@@ -937,4 +1068,144 @@ export class WorldView {
     const bits = D[n] ?? D[8]!;
     for (let i = 0; i < 12; i++) if (bits[i] === '1') g.fillRect(x + (i % 3), y + Math.floor(i / 3), 1, 1);
   }
+
+  // ---- ambient life ---------------------------------------------------------------------------------
+
+  /** A soft, blurred ellipse shadow, nudged away from the sun (top left). */
+  private softShadow(g: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number) {
+    g.save();
+    g.translate(x + THEME.shadowOffset.x, y + THEME.shadowOffset.y);
+    g.scale(rx, ry);
+    const grad = g.createRadialGradient(0, 0, 0, 0, 0, 1);
+    grad.addColorStop(0, THEME.shadow);
+    grad.addColorStop(0.55, THEME.shadow);
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    g.fillStyle = grad;
+    g.beginPath();
+    g.arc(0, 0, 1, 0, Math.PI * 2);
+    g.fill();
+    g.restore();
+  }
+
+  /** Grass tufts on screen lean back and forth (the pack's 2-frame grass sheets), each on its own beat. */
+  private drawSwayingGrass(g: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, now: number) {
+    for (const s of this.swayers) {
+      if (s.x < x0 - 16 || s.x > x1 + 16 || s.y < y0 || s.y - 16 > y1) continue;
+      const fw = s.img.width / 2;
+      const frame = Math.floor(now / (700 + s.seed * 500) + s.seed * 7) % 2;
+      g.drawImage(s.img, frame * fw, 0, fw, s.img.height, Math.round(s.x - fw / 2), s.y - s.img.height, fw, s.img.height);
+    }
+  }
+
+  /** Each base's banner, in its own colour, waving above the compound's corner. */
+  private drawFlag(g: CanvasRenderingContext2D, p: WorldPlot, id: number, now: number) {
+    const x = (p.x + RING.x0) * T + 7;
+    const y = (p.y + RING.y0) * T - 16;
+    g.fillStyle = THEME.flagPole;
+    g.fillRect(x, y, 1, 22);
+    g.fillRect(x - 1, y + 21, 3, 1);
+    const beat = Math.floor(now / 240 + hash(id, 3) * 4) % 2;
+    const main = baseColor(id);
+    const dark = baseColor(id, THEME.banner.light - 16);
+    for (let i = 0; i < 9; i++) {
+      const dy = (Math.floor(i / 3) + beat) % 2;
+      g.fillStyle = main;
+      g.fillRect(x + 1 + i, y + 1 + dy, 1, 5);
+      g.fillStyle = dark;
+      g.fillRect(x + 1 + i, y + 5 + dy, 1, 1);
+    }
+  }
+
+  /** Drifting green fog and rising embers at a graveyard; brighter while its zombies are rising. */
+  private drawGraveyardFx(g: CanvasRenderingContext2D, id: number, cx: number, cy: number, state: number, now: number) {
+    const boost = state === 2 ? 1.8 : state === 1 ? 1.4 : 1;
+    const [fr, fg, fb] = THEME.fog;
+    for (let i = 0; i < 3; i++) {
+      const t = (now / 1000) * 0.12 + i * 2.1 + id;
+      const fx = cx + Math.sin(t) * 22;
+      const fy = cy + 8 + Math.cos(t * 0.8) * 8;
+      g.save();
+      g.translate(fx, fy);
+      g.scale(36, 13);
+      const grad = g.createRadialGradient(0, 0, 0, 0, 0, 1);
+      grad.addColorStop(0, `rgba(${fr}, ${fg}, ${fb}, ${0.1 * boost})`);
+      grad.addColorStop(1, `rgba(${fr}, ${fg}, ${fb}, 0)`);
+      g.fillStyle = grad;
+      g.beginPath();
+      g.arc(0, 0, 1, 0, Math.PI * 2);
+      g.fill();
+      g.restore();
+    }
+    const [er, eg, eb] = THEME.ember;
+    const [hr, hg, hb] = THEME.emberHot;
+    const count = Math.round(12 * boost);
+    for (let i = 0; i < count; i++) {
+      const seed = hash(id, i, 9);
+      const life = 2400 + seed * 1800;
+      const ph = ((now + seed * 10000) % life) / life;
+      const ex = cx + (hash(id, i, 10) - 0.5) * 72 + Math.sin(ph * 6 + i) * 4;
+      const ey = cy + 18 - ph * 46;
+      const a = Math.sin(ph * Math.PI);
+      g.fillStyle = `rgba(${er}, ${eg}, ${eb}, ${0.35 * a})`;
+      g.fillRect(Math.round(ex) - 1, Math.round(ey) - 1, 3, 3);
+      g.fillStyle = `rgba(${hr}, ${hg}, ${hb}, ${0.9 * a})`;
+      g.fillRect(Math.round(ex), Math.round(ey), 1, 1);
+    }
+  }
+
+  /** Rain on the ground (world space): puddles with the pack's splash animations, and drop splashes. */
+  private drawRainGround(g: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, wet: number, now: number) {
+    const s = this.sprites;
+    for (const p of this.puddles) {
+      if (p.x < x0 - 20 || p.x > x1 + 20 || p.y < y0 - 10 || p.y > y1 + 10) continue;
+      const grow = Math.min(1, wet * 1.4) * p.r;
+      if (grow < 2) continue;
+      g.fillStyle = THEME.puddle;
+      g.beginPath();
+      g.ellipse(p.x, p.y, grow, grow * 0.45, 0, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = THEME.puddleShine;
+      g.fillRect(Math.round(p.x - grow * 0.4), Math.round(p.y - grow * 0.2), Math.max(1, Math.round(grow * 0.5)), 1);
+      // Now and then a drop lands in it.
+      const period = 900 + p.seed * 1400;
+      const ph = ((now + p.seed * 5000) % period) / period;
+      if (ph < 0.45) drawFrame(g, s.puddleSplash, Math.floor((ph / 0.45) * s.puddleSplash.frames), p.x - s.puddleSplash.fw / 2, p.y - s.puddleSplash.fh + 3);
+    }
+    const n = Math.round(26 * wet);
+    const w = x1 - x0;
+    const h = y1 - y0;
+    for (let i = 0; i < n; i++) {
+      const period = 420 + (i % 5) * 60;
+      const cycle = Math.floor((now + i * 97) / period);
+      const ph = ((now + i * 97) % period) / period;
+      const sheet = i % 4 === 0 ? s.rainSplashBig : s.rainSplash;
+      const x = x0 + hash(i, cycle, 31) * w;
+      const y = y0 + hash(i, cycle, 32) * h;
+      drawFrame(g, sheet, Math.floor(ph * sheet.frames), x - sheet.fw / 2, y - sheet.fh);
+    }
+  }
+
+  /** Rain in the air (screen space): falling streaks and a cool tint. */
+  private drawRainAir(g: CanvasRenderingContext2D, wet: number, now: number) {
+    const W = this.canvas.width;
+    const H = this.canvas.height;
+    const d = this.dpr;
+    g.fillStyle = THEME.rainTint;
+    g.globalAlpha = wet;
+    g.fillRect(0, 0, W, H);
+    g.globalAlpha = 1;
+    g.strokeStyle = THEME.rain;
+    g.lineWidth = Math.max(1, d);
+    g.beginPath();
+    const n = Math.round(THEME.weather.drops * wet * Math.max(1, (W * H) / (1920 * 1080)));
+    for (let i = 0; i < n; i++) {
+      const speed = (0.8 + hash(i, 4, 21) * 0.5) * d;
+      const x = (hash(i, 1, 21) * (W + 80) - ((now * speed * 0.25) % (W + 80)) + W + 80) % (W + 80);
+      const y = (hash(i, 2, 21) * (H + 60) + now * speed) % (H + 60) - 30;
+      g.moveTo(x, y);
+      g.lineTo(x - 3 * d, y + 11 * d);
+    }
+    g.stroke();
+  }
+
 }

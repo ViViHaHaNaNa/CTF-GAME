@@ -92,46 +92,53 @@ interface PropDef { p: string; t: [number, number]; w: number }
 const def = (p: string, t: [number, number], w: number): PropDef => ({ p, t, w });
 
 export const SCENERY: PropDef[] = [
-  ...['Bleak-Yellow', 'Orange', 'Red', 'Dark-Green'].flatMap((c) => [
-    def(`${NAT}/${c}/Tree_1_Spruce_${c}.png`, [1, 1], 5),
-    def(`${NAT}/${c}/Tree_3_Normal_${c}.png`, [1, 1], 6),
-    def(`${NAT}/${c}/Tree_5_Big_${c}.png`, [2, 2], 4),
-    def(`${NAT}/${c}/Tree_7_Birch_${c}.png`, [1, 1], 3),
-    def(`${NAT}/${c}/Tree_9_Small-oak_${c}.png`, [1, 1], 4),
-    def(`${NAT}/${c}/Bush_1_${c}.png`, [1, 1], 5),
-    def(`${NAT}/${c}/Bush_2_${c}.png`, [1, 1], 4),
-  ]),
-  def(`${NAT}/Bleak-Yellow/Grass_1_Bleak-Yellow.png`, [1, 1], 10),
-  def(`${NAT}/Bleak-Yellow/Grass_2_Bleak-Yellow.png`, [1, 1], 10),
-  def(`${NAT}/Bleak-Yellow/Grass_3_Bleak-Yellow.png`, [1, 1], 8),
-  def(`${NAT}/Bleak-Yellow/Rocks/Rock-grass_Bleak-Yellow.png`, [1, 1], 5),
-  ...[1, 2, 3, 4, 5, 6, 7].map((n) => def(`${NAT}/Flowers_Mashrooms_Other-nature-stuff/Rocks/Rock_${n}.png`, [1, 1], 2)),
-  def(`${NAT}/Flowers_Mashrooms_Other-nature-stuff/Stump_1.png`, [1, 1], 3),
-  def(`${NAT}/Flowers_Mashrooms_Other-nature-stuff/Tree_4_Dry_Green.png`, [1, 1], 3),
-  def(`${V}/Rust/Car_1_Rust/Car_1_Rust_Red.png`, [2, 3], 1),
-  def(`${V}/Rust/Car_2_Rust_Upsidedown/Car_2_Rust_Blue_Upsidedown.png`, [2, 3], 1),
-  def(`${V}/Rust/Car_4_Rust/Car_4_Rust_Green.png`, [3, 2], 1),
-  def(`${V}/Rust/Car_6_Rust_Scrap/Car_6_Rust_Orange_Scrap.png`, [3, 2], 1),
-  def(`${V}/Overgrown/Car_4_Overgrown/Bleak-Yellow/Car_4_Overgrown_Bleak-Yellow_Yellow.png`, [3, 2], 1),
-  def(`${V}/Overgrown/Car_3_Overgrown_Van/Bleak-Yellow/Car_3_Overgrown_Bleak-Yellow_Blue_Van.png`, [3, 2], 1),
-  def(`${V}/Overgrown/Car_8_Overgrown_Bus/Bleak-Yellow/Car_8_Overgrown_Bleak-Yellow_Red_Bus.png`, [4, 2], 0.5),
-  def(`${V}/Rust/Car_7_Rust_Truck/Car_7_Rust_Red_Truck_.png`, [4, 4], 0.4),
-  def('Objects/Container/Container_4_Gray_Horizontal_Overgrown_Bleak-Yellow.png', [3, 2], 0.7),
-  def('Objects/Container/Container_2_Gray_Vertical_Overgrown_Bleak-Yellow.png', [2, 3], 0.7),
-  def('Objects/Buildings/Destroyed-wall_corner.png', [1, 1], 2),
-  def('Objects/Buildings/Destroyed-wall_not-corner.png', [1, 1], 2),
-  def('Objects/Buildings/Brick-wall_1_Lying.png', [1, 1], 2),
-  def('Objects/Gray-brick_Debris.png', [1, 1], 2),
-  def('Objects/2-Tires_Grass_Bleak-Yellow.png', [1, 1], 2),
-  def('Objects/Tire_1.png', [1, 1], 1.5),
+  // Trees and bushes in lively colours: mostly green, with orange/red/yellow autumn accents.
+  ...(['Green', 'Green', 'Orange', 'Red', 'Yellow'] as const).flatMap((c, i) => {
+    const w = i < 2 ? 1 : 0.45;
+    const pine = c === 'Green' ? 'Tree_6_Pine_Big' : 'Tree_6_Big-pine';
+    return [
+      def(`${NAT}/${c}/Tree_1_Spruce_${c}.png`, [1, 1], 4 * w),
+      def(`${NAT}/${c}/Tree_3_Normal_${c}.png`, [1, 1], 5 * w),
+      def(`${NAT}/${c}/Tree_5_Big_${c}.png`, [2, 2], 3 * w),
+      def(`${NAT}/${c}/${pine}_${c}.png`, [2, 2], 2 * w),
+      def(`${NAT}/${c}/Tree_7_Birch_${c}.png`, [1, 1], 3 * w),
+      def(`${NAT}/${c}/Tree_9_Small-oak_${c}.png`, [1, 1], 4 * w),
+      def(`${NAT}/${c}/Bush_1_${c}.png`, [1, 1], 5 * w),
+      def(`${NAT}/${c}/Bush_2_${c}.png`, [1, 1], 4 * w),
+    ];
+  }),
+  // Grass tufts; the "Stepping-On-Animation" sheets sway in the wind (2 frames, animated by the client).
+  def(`${NAT}/Green/Grass_1_Green.png`, [1, 1], 6),
+  def(`${NAT}/Green/Grass_2_Green.png`, [1, 1], 6),
+  def(`${NAT}/Green/Grass_3_Stepping-On-Animation_Green-Sheet2.png`, [1, 1], 8),
+  def(`${NAT}/Green/Grass_4_Stepping-On-Animation_Green-Sheet2.png`, [1, 1], 8),
+  def(`${NAT}/Green/Grass_5_Stepping-On-Animation_Green-Sheet2.png`, [1, 1], 8),
+  def(`${NAT}/Green/Rocks/Rock-grass.png`, [1, 1], 4),
+  ...[1, 2, 3, 4, 5, 6, 7].map((n) => def(`${NAT}/Flowers_Mashrooms_Other-nature-stuff/Rocks/Rock_${n}.png`, [1, 1], 1.5)),
+  def(`${NAT}/Flowers_Mashrooms_Other-nature-stuff/Stump_1.png`, [1, 1], 2),
+  def(`${V}/Overgrown/Car_1_Overgrown/Green/Car_1_Overgrown_Green_Red.png`, [2, 3], 0.8),
+  def(`${V}/Overgrown/Car_1_Overgrown/Green/Car_1_Overgrown_Green_Yellow.png`, [2, 3], 0.6),
+  def(`${V}/Overgrown/Car_2_Overgrown_Upsidedown/Green/Car_2_Overgrown_Green_Blue_Upsidedown.png`, [2, 3], 0.6),
+  def(`${V}/Overgrown/Car_4_Overgrown/Green/Car_4_Overgrown_Green_Orange.png`, [3, 2], 0.8),
+  def(`${V}/Overgrown/Car_6_Overgrown_Scrap/Green/Car_6_Overgrown_Green_Red_Scrap.png`, [3, 2], 0.6),
+  def(`${V}/Overgrown/Car_3_Overgrown_Van/Green/Car_3_Overgrown_Green_Blue_Van.png`, [3, 2], 0.6),
+  def(`${V}/Overgrown/Car_8_Overgrown_Bus/Green/Car_8_Overgrown_Green_Yellow_Bus.png`, [4, 2], 0.35),
+  def(`${V}/Overgrown/Car_7_Overgrown_Truck/Green/Car_7_Overgrown_Green_Red_Truck.png`, [4, 4], 0.3),
+  def('Objects/Container/Container_8_Red_Horizontal_Overgrown_Green.png', [3, 2], 0.5),
+  def('Objects/Container/Container_10_Green_Vertical_Overgrown_Green.png', [2, 3], 0.5),
+  def('Objects/2-Tires_Grass_Green.png', [1, 1], 1.5),
+  def('Objects/Tire_2_Grass_Green.png', [1, 1], 1),
   def('Objects/Barrel_rust_red_1.png', [1, 1], 1.5),
-  def('Objects/Barrel_rust_blue_2.png', [1, 1], 1),
-  def('Objects/Trash-bag_1.png', [1, 1], 1),
-  def('Objects/Traffic-cone.png', [1, 1], 1),
-  def('Objects/Shopping-cart.png', [1, 1], 0.6),
-  def('Objects/Stop-sign_Side_4_Overgrown_Bleak-Yellow.png', [1, 1], 0.6),
-  def('Objects/Vending-machine_Red_Overgrown_Bleak-Yellow.png', [1, 1], 0.5),
+  def('Objects/Barrel_blue_1.png', [1, 1], 1),
+  def('Objects/Bench_4_side_Overgrown_Green.png', [2, 1], 0.6),
+  def('Objects/Vending-machine_Red_Overgrown_Green.png', [1, 1], 0.4),
+  def('Objects/Vending-machine_Blue_Overgrown_Green.png', [1, 1], 0.4),
+  def('Objects/Street-Light_5_Up_Overgrown_Green.png', [1, 1], 0.5),
+  def('Objects/Stop-sign_Side_4_Overgrown_Green.png', [1, 1], 0.4),
 ];
+
+/** Scenery the client animates instead of baking (grass sways): a sheet of 2 frames side by side. */
+export const isAnimatedProp = (path: string) => path.includes('Stepping-On-Animation');
 
 /** Props used inside graveyards and ruined plots (indexes into PROP_FILES). */
 export const SPECIAL = {
@@ -143,9 +150,26 @@ export const SPECIAL = {
   bricks: 'Objects/Buildings/Brick-wall_2_Lying.png',
 };
 
+/** Wrecks, barrels and junk placed along the streets, against the kerb. */
+export const STREET_JUNK: { p: string; t: [number, number]; dir: 'h' | 'v' | 'any'; w: number }[] = [
+  { p: V + '/Rust/Car_1_Rust/Car_1_Rust_Red.png', t: [2, 3], dir: 'v', w: 2 },
+  { p: V + '/Rust/Car_2_Rust_Upsidedown/Car_2_Rust_Blue_Upsidedown.png', t: [2, 3], dir: 'v', w: 1 },
+  { p: V + '/Rust/Car_4_Rust/Car_4_Rust_Green.png', t: [3, 2], dir: 'h', w: 2 },
+  { p: V + '/Rust/Car_6_Rust_Scrap/Car_6_Rust_Orange_Scrap.png', t: [3, 2], dir: 'h', w: 1.5 },
+  { p: 'Objects/Barrel_rust_red_1.png', t: [1, 1], dir: 'any', w: 3 },
+  { p: 'Objects/Barrel_rust_blue_2.png', t: [1, 1], dir: 'any', w: 2 },
+  { p: 'Objects/Traffic-cone.png', t: [1, 1], dir: 'any', w: 2 },
+  { p: 'Objects/Tire_1.png', t: [1, 1], dir: 'any', w: 1.5 },
+  { p: 'Objects/Trash-bag_1.png', t: [1, 1], dir: 'any', w: 1.5 },
+];
+
 /** Every image the world references, in a stable order (Prop.f indexes into this). */
-export const PROP_FILES: string[] = [...new Set([...SCENERY.map((d) => d.p), ...Object.values(SPECIAL)])];
-const fileIndex = (p: string) => PROP_FILES.indexOf(p);
+export const PROP_FILES: string[] = [...new Set([...SCENERY.map((d) => d.p), ...Object.values(SPECIAL), ...STREET_JUNK.map((d) => d.p)])];
+const fileIndex = (p: string) => {
+  const i = PROP_FILES.indexOf(p);
+  if (i < 0) throw new Error(`Scenery file not registered in PROP_FILES: ${p}`);
+  return i;
+};
 
 // ---- generation -----------------------------------------------------------------------------------
 
@@ -252,17 +276,6 @@ export function generateWorld(seed: number): World {
   }
 
   // Wrecks, barrels and junk along the streets, against the kerb (the middle lanes stay clear).
-  const STREET_JUNK: { p: string; t: [number, number]; dir: 'h' | 'v' | 'any'; w: number }[] = [
-    { p: V + '/Rust/Car_1_Rust/Car_1_Rust_Red.png', t: [2, 3], dir: 'v', w: 2 },
-    { p: V + '/Rust/Car_2_Rust_Upsidedown/Car_2_Rust_Blue_Upsidedown.png', t: [2, 3], dir: 'v', w: 1 },
-    { p: V + '/Rust/Car_4_Rust/Car_4_Rust_Green.png', t: [3, 2], dir: 'h', w: 2 },
-    { p: V + '/Rust/Car_6_Rust_Scrap/Car_6_Rust_Orange_Scrap.png', t: [3, 2], dir: 'h', w: 1.5 },
-    { p: 'Objects/Barrel_rust_red_1.png', t: [1, 1], dir: 'any', w: 3 },
-    { p: 'Objects/Barrel_rust_blue_2.png', t: [1, 1], dir: 'any', w: 2 },
-    { p: 'Objects/Traffic-cone.png', t: [1, 1], dir: 'any', w: 2 },
-    { p: 'Objects/Tire_1.png', t: [1, 1], dir: 'any', w: 1.5 },
-    { p: 'Objects/Trash-bag_1.png', t: [1, 1], dir: 'any', w: 1.5 },
-  ];
   const junkTotal = STREET_JUNK.reduce((a, d) => a + d.w, 0);
   const junkUsed = new Uint8Array(W * H);
   const clearStreet = (x: number, y: number, w: number, h: number) => {

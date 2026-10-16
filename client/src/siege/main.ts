@@ -25,6 +25,7 @@ import {
 import { Net, saveToken } from './net.ts';
 import { loadSprites } from './sprites.ts';
 import { bindLiveStream } from './stream.ts';
+import { THEME, baseColor } from './theme.ts';
 import { CRATE_SPOT, WorldView } from './world.ts';
 
 // Game page controller: login, HUD, the shared map (pan / zoom / tap), base cards, raids, lists.
@@ -512,6 +513,9 @@ let miniBase: HTMLCanvasElement | null = null;
 
 function bindMinimap() {
   const mini = $<HTMLCanvasElement>('minimap');
+  // One canvas pixel per world tile.
+  mini.width = world.w;
+  mini.height = world.h;
   let down = false;
   const go = (e: PointerEvent) => {
     const r = mini.getBoundingClientRect();
@@ -536,7 +540,8 @@ function drawMinimap(now: number) {
     miniBase.height = world.h;
     const b = miniBase.getContext('2d')!;
     const img = b.createImageData(world.w, world.h);
-    const colors = [[66, 58, 40], [104, 92, 70], [48, 38, 30], [84, 76, 60]];
+    const M = THEME.minimap;
+    const colors = [M.ground, M.street, M.mud, M.alley];
     for (let i = 0; i < world.w * world.h; i++) {
       const c = colors[world.ground[i]!]!;
       img.data.set([c[0]!, c[1]!, c[2]!, 255], i * 4);
@@ -548,24 +553,29 @@ function drawMinimap(now: number) {
   for (const p of world.plots) {
     const s = view.bases.get(p.id);
     if (!s) {
-      g.fillStyle = '#2a241c';
+      g.fillStyle = THEME.minimap.empty;
       g.fillRect(p.x + 2, p.y + 2, PLOT - 4, PLOT - 4);
       continue;
     }
-    g.fillStyle = player && p.id === player.plot ? '#e3b341' : s.raid ? (pulse ? '#e0573f' : '#7a3424') : '#a89878';
+    g.fillStyle = s.raid && pulse ? THEME.tag.raid : baseColor(s.id);
+    if (player && p.id === player.plot) {
+      g.fillStyle = THEME.mine;
+      g.fillRect(p.x + 1, p.y + 1, PLOT - 2, PLOT - 2);
+      g.fillStyle = baseColor(s.id);
+    }
     g.fillRect(p.x + 2, p.y + 2, PLOT - 4, PLOT - 4);
   }
   for (const gy of world.graveyards) {
     const w = Math.max(0, ...gy.serves.map((id) => view.bases.get(id)?.wave ?? 0));
-    g.fillStyle = w === 2 ? (pulse ? '#e0573f' : '#5a1f14') : w === 1 ? '#e38b41' : '#4a3b2c';
-    g.fillRect(gy.x, gy.y, 5, 5);
+    g.fillStyle = w === 2 ? (pulse ? `rgb(${THEME.graveWave.join(',')})` : '#5a1f14') : w === 1 ? `rgb(${THEME.graveWarn.join(',')})` : `rgb(${THEME.minimap.mud.join(',')})`;
+    g.fillRect(gy.x, gy.y, gy.w, gy.h);
   }
   if (view.crate) {
-    g.fillStyle = pulse ? '#fff3b0' : view.crate.rarity === 'legendary' ? '#e0573f' : view.crate.rarity === 'epic' ? '#6ea0e6' : '#8fc46b';
+    g.fillStyle = pulse ? '#ffffff' : `rgb(${THEME.crate[view.crate.rarity]})`;
     g.fillRect(Math.round(CRATE_SPOT.x / 16) - 3, Math.round(CRATE_SPOT.y / 16) - 3, 6, 6);
   }
   const [x0, y0, x1, y1] = view.viewRect();
-  g.strokeStyle = '#f1e6cf';
+  g.strokeStyle = THEME.minimap.view;
   g.lineWidth = 1;
   g.strokeRect(Math.round(x0 / 16) + 0.5, Math.round(y0 / 16) + 0.5, Math.round((x1 - x0) / 16) - 1, Math.round((y1 - y0) / 16) - 1);
 }
