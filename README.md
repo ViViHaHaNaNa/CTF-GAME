@@ -52,14 +52,14 @@ In `server/.env` or as environment variables (real environment variables win):
 | `SIEGE_BACKUPS` | `server/data/backups` | where backups go |
 | `SIEGE_QUESTIONS` | `server/data/questions.json` | crate questions |
 
-Game balance (costs, damage, wave sizes, crate timing, boosts...) is all in `shared/src/config.ts`.
+Game balance (costs, damage, zombie surge sizes and rhythm, crate timing, boosts...) is all in `shared/src/config.ts`.
 To host the game server somewhere else later, see the cloud note in NOTES.md.
 
 ## Admin page
 
 `/siege/admin/`, with the passphrase. Five wrong passphrases in a minute lock that device out for a minute.
 
-- **Pause / resume** the game: no waves, raids or crates, and players can't act (they see a banner). Shields,
+- **Pause / resume** the game: no zombie sieges, raids or crates, and players can't act (they see a banner). Shields,
   immunity and the crate timer are pushed back by the length of the pause.
 - **Freeze / unfreeze the leaderboard**: everyone keeps seeing the standings from the moment you froze it
   (handy before announcing winners). Raids still count and appear when you unfreeze.

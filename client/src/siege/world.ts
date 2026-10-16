@@ -13,6 +13,7 @@ import {
   getWorld,
   isAnimatedProp,
   inDeployZone,
+  killCoins,
   postId,
   slotsUnlocked,
   wallId,
@@ -23,7 +24,9 @@ import {
   type Snapshot,
   type Rarity,
   type WorldPlot,
+  type ZombieKind,
 } from '@siege/shared';
+import { tinyText, tinyWidth } from './retro.ts';
 import { LAYER_OFFSET, drawFrame, type Sheet, type Sprites } from './sprites.ts';
 import { FONT, FONT_DISPLAY, THEME, baseColor, groundRule, recolour, textOn } from './theme.ts';
 
@@ -32,6 +35,10 @@ import { FONT, FONT_DISPLAY, THEME, baseColor, groundRule, recolour, textOn } fr
 // bases are cached static sprites; only bases with a live stream (the ones this screen watches) get
 // full animation. Ambient life (swaying grass, graveyard embers and fog, flags, rain) is drawn per
 // frame for what's on screen only. Every colour comes from theme.ts. Pure rendering.
+//
+// Sieges put 100+ zombies on one base, so the unit path allocates nothing per frame: unit views are
+// pooled, depth sorting uses one reused list, left-facing zombies use the pack's left sheets (no canvas
+// transforms), and zoomed out they drop to a still frame with no shadow or health bar.
 
 const T = 16;
 const CHUNK = 32; // tiles per chunk side
@@ -57,28 +64,53 @@ interface UnitView {
   facing: number;
   diedAt: number;
   bornAt: number;
+  /** Ran in off the street (fades in) rather than climbing out of the ground. */
+  walkIn: boolean;
 }
 
 /** Live action on one watched plot. */
 export interface LiveState {
-  phase: 'calm' | 'warning' | 'wave' | 'raid';
-  /** Local ms when zombies rise (calm / warning). */
-  riseAt: number;
+  /** 'wave' = a zombie siege is running there. */
+  phase: 'calm' | 'wave' | 'raid';
+  /** Siege state from the server: surge number, 'start' / 'surge' / 'breather'. */
+  siege: { n: number; phase: string } | null;
   units: Map<number, UnitView>;
   hp: Map<number, number>;
   tracers: { x0: number; y0: number; x1: number; y1: number; at: number }[];
   puffs: { x: number; y: number; at: number }[];
+  /** Cracks in the ground that zombies climbed out of. */
+  cracks: { x: number; y: number; at: number; v: number }[];
+  /** Manholes (index into world.manholes) with their lids pushed aside, until this local ms. */
+  manholes: Map<number, number>;
+  /** "+1" coin pops over kills (own base only). */
+  pops: { x: number; y: number; at: number; img: HTMLCanvasElement }[];
   postFacing: Map<number, number>;
   lastShot: Map<number, number>;
   lastSnapAt: number;
   raid: RaidStatus | null;
 }
 
-const ZOMBIE_SHEETS: Record<string, { walk: keyof Sprites; attack: keyof Sprites; death: keyof Sprites }> = {
-  z_small: { walk: 'zSmallWalk', attack: 'zSmallAttack', death: 'zSmallDeath' },
-  z_big: { walk: 'zBigWalk', attack: 'zBigAttack', death: 'zBigDeath' },
-  z_axe: { walk: 'zAxeWalk', attack: 'zAxeAttack', death: 'zAxeDeath' },
+type ZombieSheets = { walk: keyof Sprites; attack: keyof Sprites; death: keyof Sprites };
+/** Right-facing and left-facing sheets per zombie kind. */
+const ZOMBIE_SHEETS: Record<string, [ZombieSheets, ZombieSheets]> = {
+  z_small: [{ walk: 'zSmallWalk', attack: 'zSmallAttack', death: 'zSmallDeath' }, { walk: 'zSmallWalkL', attack: 'zSmallAttackL', death: 'zSmallDeathL' }],
+  z_big: [{ walk: 'zBigWalk', attack: 'zBigAttack', death: 'zBigDeath' }, { walk: 'zBigWalkL', attack: 'zBigAttackL', death: 'zBigDeathL' }],
+  z_axe: [{ walk: 'zAxeWalk', attack: 'zAxeAttack', death: 'zAxeDeath' }, { walk: 'zAxeWalkL', attack: 'zAxeAttackL', death: 'zAxeDeathL' }],
 };
+/** Zoomed out further than this (device px per art px), units drop to a still frame without shadow or health bar. */
+const LOD_K = 1.75;
+const CRACK_MS = 3500;
+const POP_MS = 750;
+const MANHOLE_MS = 1400;
+
+/** One depth-sorted thing to draw on a base (records are reused frame to frame). */
+interface DrawItem {
+  y: number;
+  /** 0 wall, 1 Main Tower, 2 post, 3 empty slot, 4 unit */
+  kind: number;
+  i: number;
+  unit: UnitView | null;
+}
 
 /** Raider looks: body + weapon (+ helmet), tinted red so they never read as defenders. */
 const RAIDER_LOOK: Record<string, { weapon: 'bat' | 'pistol' | 'shotgun'; helmet: boolean }> = {
@@ -136,6 +168,21 @@ export class WorldView {
   private emberStyle = { glow: '', core: '' };
   /** Where puddles form when it rains (world px). */
   private puddles: { x: number; y: number; r: number; seed: number }[] = [];
+  /** Unit views and draw records, reused so busy sieges allocate nothing per frame. */
+  private unitPool: UnitView[] = [];
+  private drawList: DrawItem[] = [];
+  private seenUnits = new Set<number>();
+  private popCache = new Map<number, HTMLCanvasElement>();
+  private crackCache: HTMLCanvasElement[] = [];
+  private yard: HTMLCanvasElement | null = null;
+  /** Screen shake: strength in device px, decaying until `shakeUntil`. */
+  private shakeAmp = 0;
+  private shakeFrom = 0;
+  private shakeUntil = 0;
+  /** Where the zombies are pressing hardest on your own base (north, east, south, west), from the server. */
+  pressure: { sides: number[]; at: number } | null = null;
+  /** Told when your own Main Tower loses health (for the red vignette). */
+  onHqHurt: ((hp: number, drop: number) => void) | null = null;
   bases = new Map<number, BaseSummary>();
   live = new Map<number, LiveState>();
   /** The viewer's own plot and base (fresher than the summary). */
@@ -402,7 +449,7 @@ export class WorldView {
   liveFor(plot: number): LiveState {
     let l = this.live.get(plot);
     if (!l) {
-      l = { phase: 'calm', riseAt: 0, units: new Map(), hp: new Map(), tracers: [], puffs: [], postFacing: new Map(), lastShot: new Map(), lastSnapAt: 0, raid: null };
+      l = { phase: 'calm', siege: null, units: new Map(), hp: new Map(), tracers: [], puffs: [], cracks: [], manholes: new Map(), pops: [], postFacing: new Map(), lastShot: new Map(), lastSnapAt: 0, raid: null };
       this.live.set(plot, l);
     }
     return l;
@@ -410,15 +457,39 @@ export class WorldView {
 
   resetCombat(plot: number) {
     const l = this.liveFor(plot);
+    for (const u of l.units.values()) this.unitPool.push(u);
     l.units.clear();
     l.hp.clear();
     l.tracers = [];
     l.puffs = [];
+    l.cracks = [];
+    l.manholes.clear();
+    l.pops = [];
+  }
+
+  /** Stop drawing a plot's live action (it scrolled out of view). */
+  dropLive(plot: number) {
+    const l = this.live.get(plot);
+    if (!l) return;
+    for (const u of l.units.values()) this.unitPool.push(u);
+    this.live.delete(plot);
+  }
+
+  /** Shake the screen for `ms` with `amp` device pixels at the start. */
+  shake(amp: number, ms: number) {
+    const now = performance.now();
+    if (amp * Math.max(0, 1 - (now - this.shakeFrom) / Math.max(1, this.shakeUntil - this.shakeFrom)) > amp) return;
+    this.shakeAmp = amp;
+    this.shakeFrom = now;
+    this.shakeUntil = now + ms;
   }
 
   applySnapshot(plot: number, s: Snapshot, now: number) {
     const l = this.liveFor(plot);
-    const seen = new Set<number>();
+    const seen = this.seenUnits;
+    seen.clear();
+    const mine = plot === this.myPlot;
+    const p = world.plots[plot]!;
     for (const [id, kind, x, y, hp, state, facing] of s.u) {
       seen.add(id);
       const u = l.units.get(id);
@@ -428,17 +499,43 @@ export class WorldView {
         u.x = x;
         u.y = y;
         u.hp = hp;
-        if (state === 2 && u.state !== 2) u.diedAt = now;
+        if (state === 2 && u.state !== 2) {
+          u.diedAt = now;
+          // Every kill on your own base pops its coins right where it fell.
+          const k = UNIT_KINDS[kind];
+          if (mine && this.myBase && k?.startsWith('z_')) l.pops.push({ x, y: y - 14, at: now, img: this.popImage(killCoins(k as ZombieKind, this.myBase.hq)) });
+        }
         u.state = state;
         u.facing = facing;
       } else {
-        l.units.set(id, { id, kind, px: x, py: y, x, y, hp, state, facing, diedAt: state === 2 ? now : 0, bornAt: now });
-        if (state === 3) l.puffs.push({ x, y, at: now });
+        const v = this.unitPool.pop() ?? ({} as UnitView);
+        v.id = id;
+        v.kind = kind;
+        v.px = v.x = x;
+        v.py = v.y = y;
+        v.hp = hp;
+        v.state = state;
+        v.facing = facing;
+        v.diedAt = state === 2 ? now : 0;
+        v.bornAt = now;
+        // Appearing outside the plot without climbing out = ran in off the street.
+        v.walkIn = state !== 3 && (x < p.x * T || y < p.y * T || x >= (p.x + PLOT) * T || y >= (p.y + PLOT) * T);
+        l.units.set(id, v);
+        if (state === 3) this.risingFx(l, plot, x, y, now);
       }
     }
-    for (const id of l.units.keys()) if (!seen.has(id)) l.units.delete(id);
-    for (const [id, hp] of s.b) l.hp.set(id, hp);
-    const p = world.plots[plot]!;
+    for (const [id, u] of l.units) {
+      if (seen.has(id)) continue;
+      this.unitPool.push(u);
+      l.units.delete(id);
+    }
+    for (const [id, hp] of s.b) {
+      if (mine && id === HQ_ID && this.onHqHurt) {
+        const before = l.hp.get(id) ?? 100;
+        if (hp < before) this.onHqHurt(hp, before - hp);
+      }
+      l.hp.set(id, hp);
+    }
     for (const [sid, tx, ty] of s.s) {
       if (sid >= 200 && sid < 300) {
         const sl = SLOTS[sid - 200];
@@ -456,6 +553,62 @@ export class WorldView {
     l.lastSnapAt = now;
   }
 
+  /** A zombie starts climbing out: from a grave (dirt puff), its manhole (lid pushed aside) or a fresh crack. */
+  private risingFx(l: LiveState, plot: number, x: number, y: number, now: number) {
+    l.puffs.push({ x, y, at: now });
+    const tx = x / T;
+    const ty = y / T;
+    const gy = world.graveyards[world.plots[plot]!.graveyard]!;
+    if (gy.graves.some((g) => Math.abs(g.x + 0.5 - tx) < 0.6 && Math.abs(g.y + 0.85 - ty) < 0.6)) return;
+    const m = world.manholes.findIndex((h) => h.plot === plot && Math.abs(h.x + 0.5 - tx) < 0.6 && Math.abs(h.y + 0.6 - ty) < 0.6);
+    if (m >= 0) l.manholes.set(m, now + MANHOLE_MS);
+    else l.cracks.push({ x, y, at: now, v: Math.floor(hash(x, y, 3) * 3) });
+  }
+
+  /** "+N" in the 3x5 pixel font with a dark outline, cached per value. */
+  private popImage(n: number): HTMLCanvasElement {
+    let c = this.popCache.get(n);
+    if (c) return c;
+    const text = `+${n}`;
+    c = document.createElement('canvas');
+    c.width = tinyWidth(text) + 2;
+    c.height = 7;
+    const g = c.getContext('2d')!;
+    for (const [dx, dy] of [[0, 1], [2, 1], [1, 0], [1, 2], [2, 2]]) tinyText(g, text, dx!, dy!, THEME.siege.coinOutline);
+    tinyText(g, text, 1, 1, THEME.siege.coin);
+    this.popCache.set(n, c);
+    return c;
+  }
+
+  /** A jagged crack in the ground (3 variants, drawn once). */
+  private crackImage(v: number): HTMLCanvasElement {
+    if (this.crackCache[v]) return this.crackCache[v]!;
+    const c = document.createElement('canvas');
+    c.width = 20;
+    c.height = 10;
+    const g = c.getContext('2d')!;
+    const glow = `rgb(${THEME.siege.crackGlow.join(', ')})`;
+    // A dark hole in the middle with a few branching fissures; a hint of glow inside.
+    g.fillStyle = THEME.siege.crack;
+    g.fillRect(7, 4, 6, 3);
+    g.fillRect(8, 3, 4, 5);
+    for (let arm = 0; arm < 4; arm++) {
+      let x = 10;
+      let y = 5;
+      const dx = arm % 2 ? 1 : -1;
+      for (let i = 0; i < 6; i++) {
+        x += dx;
+        y += hash(v, arm * 10 + i, 21) < 0.33 ? -1 : hash(v, arm * 10 + i, 22) < 0.5 ? 1 : 0;
+        if (x < 0 || x >= 20 || y < 0 || y >= 10) break;
+        g.fillRect(x, y, 1, 1);
+      }
+    }
+    g.fillStyle = glow;
+    g.fillRect(9, 5, 2, 1);
+    this.crackCache[v] = c;
+    return c;
+  }
+
   // ---- drawing ------------------------------------------------------------------------------------
 
   draw(now: number) {
@@ -464,8 +617,13 @@ export class WorldView {
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.fillStyle = THEME.void;
     g.fillRect(0, 0, this.canvas.width, this.canvas.height);
-    const ox = Math.round(this.canvas.width / 2 - c.x * c.k);
-    const oy = Math.round(this.canvas.height / 2 - c.y * c.k);
+    let ox = Math.round(this.canvas.width / 2 - c.x * c.k);
+    let oy = Math.round(this.canvas.height / 2 - c.y * c.k);
+    if (now < this.shakeUntil) {
+      const a = this.shakeAmp * ((this.shakeUntil - now) / (this.shakeUntil - this.shakeFrom));
+      ox += Math.round(Math.sin(now * 0.091) * a);
+      oy += Math.round(Math.cos(now * 0.077) * a);
+    }
     g.imageSmoothingEnabled = false;
     const [x0, y0, x1, y1] = this.viewRect();
 
@@ -489,7 +647,7 @@ export class WorldView {
         continue;
       }
       const l = this.live.get(p.id);
-      const detailed = !!l && (l.phase === 'wave' || l.phase === 'raid' || l.units.size > 0 || p.id === this.myPlot);
+      const detailed = !!l && (l.phase !== 'calm' || l.units.size > 0 || p.id === this.myPlot);
       const base = p.id === this.myPlot && this.myBase ? this.myBase : baseOf(s);
       if (detailed) this.drawBaseLive(g, p, base, l!, now);
       else g.drawImage(this.staticBase(p.id, base), p.x * T, p.y * T - 16);
@@ -506,7 +664,8 @@ export class WorldView {
       if ((gy.x + 8) * T < x0 || (gy.x - 2) * T > x1 || (gy.y + 8) * T < y0 || (gy.y - 4) * T > y1) continue;
       const state = Math.max(0, ...gy.serves.map((id) => this.bases.get(id)?.wave ?? 0));
       this.drawGraveyardFx(g, gy.id, (gy.x + gy.w / 2) * T, (gy.y + gy.h / 2) * T, state, now);
-      if (state > 0) this.drawGraveWarning(g, gy.x, gy.y, state, now);
+      // The skull marker only flags a siege about to start: once it's on, the zombies speak for themselves.
+      if (state === 1) this.drawGraveWarning(g, gy.x, gy.y, state, now);
     }
     if (this.deployPlot >= 0) this.drawDeployZone(g, world.plots[this.deployPlot]!, now);
     if (this.selectedPlot >= 0 && this.selectedPick && this.selectedPlot === this.myPlot) this.drawPick(g, world.plots[this.myPlot]!, this.selectedPick, now);
@@ -520,6 +679,47 @@ export class WorldView {
       if (s) this.drawTag(g, p, s, now);
     }
     if (this.crate) this.drawCrateTag(this.crate.rarity);
+    this.drawPressureArrow(g, now);
+  }
+
+  /** A pulsing arrow at the screen edge on the side of your base where the zombies press hardest. */
+  private drawPressureArrow(g: CanvasRenderingContext2D, now: number) {
+    const pr = this.pressure;
+    if (!pr || this.myPlot < 0 || now - pr.at > 3000) return;
+    const total = pr.sides.reduce((a, b) => a + b, 0);
+    let side = 0;
+    for (let i = 1; i < 4; i++) if (pr.sides[i]! > pr.sides[side]!) side = i;
+    const share = total ? pr.sides[side]! / total : 0;
+    if (pr.sides[side]! < 4 || share < 0.3) return;
+    const d = this.dpr;
+    const p = world.plots[this.myPlot]!;
+    const [bx, by] = this.toScreen((p.x + PLOT / 2) * T, (p.y + PLOT / 2) * T);
+    const W = this.canvas.width;
+    const H = this.canvas.height;
+    const m = 34 * d;
+    const top = 64 * d; // clear of the map buttons and minimap
+    const x = side === 1 ? W - m : side === 3 ? m : Math.max(m, Math.min(W - m, bx));
+    const y = side === 0 ? top : side === 2 ? H - m : Math.max(top, Math.min(H - m, by));
+    const pulse = 0.5 + 0.5 * Math.sin(now / 140);
+    const size = (12 + 4 * pulse + 6 * Math.min(1, share)) * d;
+    const ang = [-Math.PI / 2, 0, Math.PI / 2, Math.PI][side]!;
+    g.save();
+    g.translate(Math.round(x), Math.round(y));
+    g.rotate(ang);
+    g.globalAlpha = 0.55 + 0.45 * pulse;
+    g.fillStyle = `rgb(${THEME.siege.arrow.join(', ')})`;
+    g.strokeStyle = THEME.siege.arrowOutline;
+    g.lineWidth = 2 * d;
+    g.beginPath();
+    g.moveTo(size, 0);
+    g.lineTo(-size * 0.4, -size * 0.85);
+    g.lineTo(-size * 0.1, 0);
+    g.lineTo(-size * 0.4, size * 0.85);
+    g.closePath();
+    g.stroke();
+    g.fill();
+    g.restore();
+    g.globalAlpha = 1;
   }
 
   /** Is a world point on (or near) the crate? Generous, so it's easy to tap on a phone. */
@@ -642,6 +842,12 @@ export class WorldView {
       const img = this.sprites.props[pr.f]!;
       this.softShadow(g, pr.x - ox, pr.y - oy - 1, img.width * 0.42, Math.max(2.5, img.width * 0.15));
     }
+    // Manholes on the kerbs around every plot (zombies climb out of them).
+    for (const m of world.manholes) {
+      const px = m.x * T - ox;
+      const py = m.y * T - oy;
+      if (px > -T && py > -T && px < size && py < size) g.drawImage(this.sprites.manhole.img, px, py);
+    }
     for (const gy of world.graveyards)
       for (const gr of gy.graves) if (near(gr.x * T, gr.y * T, 32)) this.softShadow(g, gr.x * T + 8 - ox, gr.y * T + 14 - oy, 6, 2.5);
     for (const gy of world.graveyards) {
@@ -697,10 +903,17 @@ export class WorldView {
     return c;
   }
 
-  /** Packed-dirt yard inside a lived-in compound. */
+  /** Packed-dirt yard inside a lived-in compound (the same for every base: drawn once, then one image). */
   private drawYard(g: CanvasRenderingContext2D, ox: number, oy: number) {
-    for (let y = RING.y0 + 1; y < RING.y1; y++)
-      for (let x = RING.x0 + 1; x < RING.x1; x++) g.drawImage(this.tiles.earth, 15 * T, 1 * T, T, T, ox + x * T, oy + y * T, T, T);
+    if (!this.yard) {
+      const c = document.createElement('canvas');
+      c.width = (RING.x1 - RING.x0 - 1) * T;
+      c.height = (RING.y1 - RING.y0 - 1) * T;
+      const yg = c.getContext('2d')!;
+      for (let y = 0; y < c.height; y += T) for (let x = 0; x < c.width; x += T) yg.drawImage(this.tiles.earth, 15 * T, 1 * T, T, T, x, y, T, T);
+      this.yard = c;
+    }
+    g.drawImage(this.yard, ox + (RING.x0 + 1) * T, oy + (RING.y0 + 1) * T);
   }
 
   // ---- bases ----------------------------------------------------------------------------------------
@@ -737,32 +950,97 @@ export class WorldView {
     g.fillRect(ox + RING.x0 * T + 2, oy + (RING.y1 + 1) * T, (RING.x1 - RING.x0 + 1) * T, 2);
     g.fillRect(ox + (RING.x1 + 1) * T, oy + RING.y0 * T + 3, 2, (RING.y1 - RING.y0 + 1) * T);
     g.globalAlpha = 1;
-    const items: { y: number; draw: () => void }[] = [];
+    if (l) this.drawGroundFx(g, l, now);
+    const list = this.drawList;
+    let n = 0;
+    const put = (y: number, kind: number, i: number, unit: UnitView | null) => {
+      const it = (list[n] ??= { y: 0, kind: 0, i: 0, unit: null });
+      it.y = y;
+      it.kind = kind;
+      it.i = i;
+      it.unit = unit;
+      n++;
+    };
     const reinforced = base.walls >= CONFIG.walls.reinforcedFromLevel;
-    for (const w of WALLS) {
-      const hp = l?.hp.get(wallId(w.i)) ?? 100;
-      items.push({ y: oy + w.y * T + 14, draw: () => this.drawWall(g, ox + w.x * T, oy + w.y * T, w.dir, reinforced, hp) });
-    }
-    items.push({ y: oy + (HQ_RECT.y + HQ_RECT.h) * T, draw: () => this.drawHq(g, ox + HQ_RECT.x * T, oy + HQ_RECT.y * T, base.hq, l?.hp.get(HQ_ID) ?? 100) });
+    WALLS.forEach((w, i) => put(oy + w.y * T + 14, 0, i, null));
+    put(oy + (HQ_RECT.y + HQ_RECT.h) * T, 1, 0, null);
     const mine = plot === this.myPlot;
     const unlocked = slotsUnlocked(base.hq);
     SLOTS.forEach((s, i) => {
-      const post = base.posts[i];
-      if (post) items.push({ y: oy + s.y * T + 15, draw: () => this.drawPost(g, ox + s.x * T, oy + s.y * T, i, post.type, post.level, l, now) });
-      else if (mine) items.push({ y: oy + s.y * T, draw: () => this.drawSlot(g, ox + s.x * T, oy + s.y * T, i < unlocked) });
+      if (base.posts[i]) put(oy + s.y * T + 15, 2, i, null);
+      else if (mine) put(oy + s.y * T, 3, i, null);
     });
-    if (l) for (const u of l.units.values()) {
-      const [x, y] = this.unitPos(l, u, now);
-      items.push({ y, draw: () => this.drawUnit(g, u, x, y, now) });
+    const a = l ? Math.min(1, (now - l.lastSnapAt) / SNAP_MS) : 0;
+    if (l) for (const u of l.units.values()) put(u.py + (u.y - u.py) * a, 4, 0, u);
+    // Sort just the used part of the reused list (insertion sort: it's nearly sorted frame to frame).
+    for (let i = 1; i < n; i++) {
+      const it = list[i]!;
+      let j = i - 1;
+      while (j >= 0 && list[j]!.y > it.y) {
+        list[j + 1] = list[j]!;
+        j--;
+      }
+      list[j + 1] = it;
     }
-    items.sort((a, b) => a.y - b.y);
-    for (const it of items) it.draw();
+    const lod = this.cam.k < LOD_K;
+    for (let i = 0; i < n; i++) {
+      const it = list[i]!;
+      switch (it.kind) {
+        case 0: {
+          const w = WALLS[it.i]!;
+          this.drawWall(g, ox + w.x * T, oy + w.y * T, w.dir, reinforced, l?.hp.get(wallId(w.i)) ?? 100);
+          break;
+        }
+        case 1:
+          this.drawHq(g, ox + HQ_RECT.x * T, oy + HQ_RECT.y * T, base.hq, l?.hp.get(HQ_ID) ?? 100);
+          break;
+        case 2: {
+          const s = SLOTS[it.i]!;
+          const post = base.posts[it.i]!;
+          this.drawPost(g, ox + s.x * T, oy + s.y * T, it.i, post.type, post.level, l, now);
+          break;
+        }
+        case 3: {
+          const s = SLOTS[it.i]!;
+          this.drawSlot(g, ox + s.x * T, oy + s.y * T, it.i < unlocked);
+          break;
+        }
+        default: {
+          const u = it.unit!;
+          this.drawUnit(g, u, u.px + (u.x - u.px) * a, it.y, now, lod);
+          it.unit = null;
+        }
+      }
+    }
     if (l) this.drawEffects(g, l, now);
   }
 
-  private unitPos(l: LiveState, u: UnitView, now: number): [number, number] {
-    const a = Math.min(1, (now - l.lastSnapAt) / SNAP_MS);
-    return [u.px + (u.x - u.px) * a, u.py + (u.y - u.py) * a];
+  /** Under the units: cracks zombies climb out of, and manholes with their lids pushed aside. */
+  private drawGroundFx(g: CanvasRenderingContext2D, l: LiveState, now: number) {
+    if (l.cracks.length) {
+      let keep = 0;
+      for (const c of l.cracks) {
+        const age = now - c.at;
+        if (age >= CRACK_MS) continue;
+        l.cracks[keep++] = c;
+        // Opens fast, then slowly fades back into the ground.
+        g.globalAlpha = Math.min(1, age / 120) * Math.min(1, (CRACK_MS - age) / 1200);
+        g.drawImage(this.crackImage(c.v), Math.round(c.x - 10), Math.round(c.y - 6));
+      }
+      l.cracks.length = keep;
+      g.globalAlpha = 1;
+    }
+    for (const [i, until] of l.manholes) {
+      if (now >= until) {
+        l.manholes.delete(i);
+        continue;
+      }
+      const m = world.manholes[i]!;
+      g.fillStyle = THEME.siege.manholeHole;
+      g.fillRect(m.x * T + 3, m.y * T + 4, 10, 8);
+      g.fillRect(m.x * T + 4, m.y * T + 3, 8, 10);
+      g.drawImage(this.sprites.manhole.img, m.x * T + 9, m.y * T + 5);
+    }
   }
 
   private drawEffects(g: CanvasRenderingContext2D, l: LiveState, now: number) {
@@ -774,6 +1052,19 @@ export class WorldView {
       g.moveTo(t.x0 + 0.5, t.y0 + 0.5);
       g.lineTo(t.x1 + 0.5, t.y1 + 0.5);
       g.stroke();
+    }
+    // Coins popping over kills: rise and fade.
+    if (l.pops.length) {
+      let keep = 0;
+      for (const p of l.pops) {
+        const k = (now - p.at) / POP_MS;
+        if (k >= 1) continue;
+        l.pops[keep++] = p;
+        g.globalAlpha = k < 0.6 ? 1 : (1 - k) / 0.4;
+        g.drawImage(p.img, Math.round(p.x - p.img.width / 2), Math.round(p.y - 10 * Math.sqrt(k)));
+      }
+      l.pops.length = keep;
+      g.globalAlpha = 1;
     }
     // Dirt puffs where zombies claw out of the ground.
     l.puffs = l.puffs.filter((p) => now - p.at < 600);
@@ -895,32 +1186,38 @@ export class WorldView {
     }
   }
 
-  private drawUnit(g: CanvasRenderingContext2D, u: UnitView, x: number, y: number, now: number) {
+  private drawUnit(g: CanvasRenderingContext2D, u: UnitView, x: number, y: number, now: number, lod: boolean) {
     const kind = UNIT_KINDS[u.kind] ?? 'z_small';
     if (kind.startsWith('r_')) return this.drawRaider(g, u, kind, x, y, now);
-    const sh = ZOMBIE_SHEETS[kind]!;
+    const sh = ZOMBIE_SHEETS[kind]![u.facing < 0 ? 1 : 0];
     const s = this.sprites;
     let sheet: Sheet;
     let frame: number;
     if (u.state === 3) {
-      // Rising: the death animation played backwards, climbing out of the grave.
+      // Rising: the death animation played backwards, climbing out of the ground.
       sheet = s[sh.death] as Sheet;
-      const k = Math.min(1, (now - u.bornAt) / (CONFIG.waves.riseTime * 1000));
+      const k = Math.min(1, (now - u.bornAt) / (CONFIG.siege.riseTime * 1000));
       frame = Math.max(0, sheet.frames - 1 - Math.floor(k * sheet.frames));
     } else if (u.state === 2) {
       sheet = s[sh.death] as Sheet;
       frame = Math.min(sheet.frames - 1, Math.floor((now - u.diedAt) / 90));
     } else if (u.state === 1) {
       sheet = s[sh.attack] as Sheet;
-      frame = Math.floor(now / 110 + u.id);
+      frame = lod ? 0 : Math.floor(now / 110 + u.id);
     } else {
       sheet = s[sh.walk] as Sheet;
-      frame = Math.floor(now / (120 / CONFIG.pace.zombieSpeed) + u.id); // legs keep up with the walking pace
+      frame = lod ? 0 : Math.floor(now / (120 / CONFIG.pace.zombieSpeed) + u.id); // legs keep up with the walking pace
     }
-    g.fillStyle = THEME.unitShadow;
-    g.fillRect(Math.round(x - 4), Math.round(y - 1), 8, 2);
-    drawFrame(g, sheet, frame, x - sheet.fw / 2, y - sheet.fh + 1, u.facing < 0);
-    if (u.state < 2 && u.hp < 100) this.hpBar(g, Math.round(x - 5), Math.round(y - sheet.fh - 2), 10, u.hp, THEME.hp.unit);
+    const f = ((frame % sheet.frames) + sheet.frames) % sheet.frames;
+    const fade = u.walkIn && now - u.bornAt < 250;
+    if (fade) g.globalAlpha = (now - u.bornAt) / 250;
+    if (!lod) {
+      g.fillStyle = THEME.unitShadow;
+      g.fillRect(Math.round(x - 4), Math.round(y - 1), 8, 2);
+    }
+    g.drawImage(sheet.img, f * sheet.fw, 0, sheet.fw, sheet.fh, Math.round(x - sheet.fw / 2), Math.round(y - sheet.fh + 1), sheet.fw, sheet.fh);
+    if (fade) g.globalAlpha = 1;
+    if (!lod && u.state < 2 && u.hp < 100) this.hpBar(g, Math.round(x - 5), Math.round(y - sheet.fh - 2), 10, u.hp, THEME.hp.unit);
   }
 
   private drawRaider(g: CanvasRenderingContext2D, u: UnitView, kind: string, x: number, y: number, now: number) {

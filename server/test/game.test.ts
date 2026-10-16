@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { CONFIG, PLOT, checkAnswer, getWorld, postUpgradeCost, type CrateView, type Question } from '@siege/shared';
+import { CONFIG, PLOT, checkAnswer, decodeSnapshot, getWorld, postId, postUpgradeCost, type CrateView, type Question } from '@siege/shared';
 import { GameServer, type Outbox } from '../src/game.ts';
 import { SqliteStore } from '../src/store.ts';
 
@@ -77,60 +77,101 @@ describe('actions', () => {
   });
 });
 
-describe('zombie waves', () => {
-  it('watched bases get live waves: warning, then zombies, snapshots, kill coins', () => {
+describe('zombie siege', () => {
+  const secs = (game: GameServer, n: number) => {
+    for (let i = 0; i < n * CONFIG.tickRate; i++) game.tick();
+  };
+
+  it('a player who logs in is under siege within seconds: every side, packed snapshots, batched kill coins', () => {
     const { game, sent } = setup();
     const p = game.login('Meera', 'M2002');
     game.connect(p.id);
     game.watch(p.plot, 1);
     const start = p.coins;
-    let guard = 0;
-    while (!sent.some((s) => s.ev === 'waveEnd') && guard++ < 100_000) game.tick();
-    const phases = sent.filter((s) => s.ev === 'wave').map((s) => (s.data as { phase: string }).phase);
-    expect(phases.slice(0, 2)).toEqual(['warning', 'wave']);
-    expect(sent.filter((s) => s.ev === 'snap' && s.to === `base:${p.plot}`).length).toBeGreaterThan(20);
-    const end = sent.find((s) => s.ev === 'waveEnd')!.data as { coins: number; lost: number; total: number };
-    expect(end.total).toBe(start + end.coins - end.lost);
-    expect(sent.some((s) => s.ev === 'coins')).toBe(true);
+    secs(game, CONFIG.siege.firstSurge + 0.2);
+    const surge = sent.find((s) => s.ev === 'siege')?.data as { type: string; n: number; sides: number[] };
+    expect(surge).toMatchObject({ type: 'surge', n: 1 });
+    for (const n of surge.sides) expect(n).toBeGreaterThan(0);
+    secs(game, 20);
+    const snaps = sent.filter((s) => s.ev === 'snap' && s.to === `base:${p.plot}`);
+    expect(snaps.length).toBeGreaterThan(50);
+    const last = decodeSnapshot(snaps.at(-1)!.data as Uint8Array);
+    expect(last.p).toBe(p.plot);
+    expect(sent.some((s) => s.ev === 'siege' && (s.data as { type: string }).type === 'held')).toBe(true);
+    game.flushCoins();
+    const coins = sent.filter((s) => s.ev === 'coins');
+    expect(coins.length).toBeGreaterThan(0);
+    // Batched: far fewer messages than kills, and they add up.
+    const total = coins.reduce((a, s) => a + (s.data as { delta: number }).delta, 0);
+    expect(game.players.get(p.id)!.coins).toBe(start + total);
+    expect(sent.some((s) => s.ev === 'pressure' && s.to === `p:${p.id}`)).toBe(true);
+  });
+
+  it('upgrades join the running siege at once', () => {
+    const { game } = setup();
+    const p = game.login('Ishan', 'I5005');
+    game.connect(p.id);
+    game.watch(p.plot, 1);
+    secs(game, 3);
+    game.act(p.id, { kind: 'build', slot: 1, type: 'pistol' });
+    const snap = decodeSnapshot(game.baseLive(p.plot).snapshot!);
+    expect(snap.b.some(([id]) => id === postId(1))).toBe(true);
   });
 
   it("someone else watching an offline player's base: coins go to the owner's bank", () => {
     const { game, sent } = setup();
     const owner = game.login('Owner', 'O1111');
     game.watch(owner.plot, 1); // a spectator, owner offline
-    let guard = 0;
-    while (!sent.some((s) => s.ev === 'waveEnd') && guard++ < 100_000) game.tick();
+    secs(game, 30);
     const rec = game.players.get(owner.id)!;
     expect(rec.bank).toBeGreaterThan(0);
-    expect(rec.offline.waves).toBe(1);
+    expect(rec.offline.waves).toBeGreaterThan(0);
     expect(sent.some((s) => s.ev === 'coins')).toBe(false);
   });
 
-  it('unwatched offline bases resolve waves headlessly into a capped bank, credited at login', () => {
+  it('unwatched offline bases resolve sieges headlessly into a capped bank, credited at login', () => {
     const { game, advance } = setup();
     const p = game.login('Dev', 'D3003');
     const coins = p.coins;
-    for (let i = 0; i < 200; i++) {
-      advance(CONFIG.offline.waveEvery * 1000 + 1);
+    for (let i = 0; i < 60; i++) {
+      advance(CONFIG.offline.every * 1000 + 1);
       game.tickOffline(10);
     }
     const rec = game.players.get(p.id)!;
-    expect(rec.offline.waves).toBe(200);
+    expect(rec.offline.waves).toBeGreaterThan(60);
     expect(rec.bank).toBe(CONFIG.offline.bankCap);
     const lost = rec.offline.coinsLost;
+    expect(lost).toBeLessThanOrEqual(rec.offline.breaches * CONFIG.siege.breach.maxLoss);
     const w = game.connect(p.id);
     expect(w.offline?.credited).toBe(CONFIG.offline.bankCap);
     expect(w.player.coins).toBe(coins - lost + CONFIG.offline.bankCap);
   });
 
-  it('when nobody watches any more, a running wave finishes headlessly', () => {
+  it('when nobody watches any more, the base goes back to headless sieges', () => {
     const { game } = setup();
     const p = game.login('Zoya', 'Z4004');
     game.watch(p.plot, 1);
-    for (let i = 0; i < 4 * CONFIG.tickRate; i++) game.tick();
+    secs(game, 4);
     expect(game.baseLive(p.plot).phase).toBe('wave');
     game.watch(p.plot, -1);
     expect(game.baseLive(p.plot).phase).toBe('calm');
+  });
+
+  it('a breach costs a small capped amount and the siege goes on', () => {
+    const { game, sent } = setup();
+    const p = game.login('Tara', 'T6006');
+    const rec = game.players.get(p.id)!;
+    rec.coins = 5000;
+    rec.base = { hq: 4, walls: 1, posts: rec.base.posts.map(() => null) };
+    game.connect(p.id);
+    game.watch(p.plot, 1);
+    let guard = 0;
+    while (!sent.some((s) => s.ev === 'siege' && (s.data as { type: string }).type === 'breach') && guard++ < 200 * CONFIG.tickRate) game.tick();
+    const b = sent.find((s) => s.ev === 'siege' && (s.data as { type: string }).type === 'breach')!.data as { lost: number; total: number };
+    expect(b.lost).toBe(CONFIG.siege.breach.maxLoss);
+    expect(b.total).toBe(game.players.get(p.id)!.coins);
+    secs(game, CONFIG.siege.breach.breather + 2);
+    expect(game.baseLive(p.plot).phase).toBe('wave');
   });
 });
 

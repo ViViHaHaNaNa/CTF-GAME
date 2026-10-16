@@ -59,6 +59,16 @@ export interface Prop {
   y: number;
 }
 
+/** A manhole zombies climb out of: one on the kerb beside each side of every plot. */
+export interface Manhole {
+  /** World tile. */
+  x: number;
+  y: number;
+  plot: number;
+  /** Which side of the plot it's on: 0 north, 1 east, 2 south, 3 west. */
+  side: number;
+}
+
 export interface Street {
   /** Tiles: the full street strip. */
   x: number;
@@ -79,6 +89,7 @@ export interface World {
   ground: Uint8Array;
   /** Streets between blocks (for lane markings). */
   streets: Street[];
+  manholes: Manhole[];
   /** Tile at the middle of the map: the central crossroads, where crates land. */
   centre: [number, number];
 }
@@ -275,9 +286,29 @@ export function generateWorld(seed: number): World {
     }
   }
 
+  // A manhole on the kerb beside each side of every plot (on the street or alley, never in the mud).
+  const manholes: Manhole[] = [];
+  const muddy = (x: number, y: number) => {
+    for (let yy = y - 2; yy <= y + 2; yy++) for (let xx = x - 2; xx <= x + 2; xx++) if (ground[yy * W + xx] === 2) return true;
+    return false;
+  };
+  for (const p of plots)
+    for (let side = 0; side < 4; side++) {
+      const spots: [number, number][] = [];
+      for (let t = 3; t <= PLOT - 4; t++) {
+        const [x, y] = sideTile(p, side, t, 1);
+        const g = ground[y * W + x];
+        if ((g === 1 || g === 3) && !muddy(x, y)) spots.push([x, y]);
+      }
+      if (!spots.length) continue;
+      const [x, y] = spots[Math.floor(rnd() * spots.length)]!;
+      manholes.push({ x, y, plot: p.id, side });
+    }
+
   // Wrecks, barrels and junk along the streets, against the kerb (the middle lanes stay clear).
   const junkTotal = STREET_JUNK.reduce((a, d) => a + d.w, 0);
   const junkUsed = new Uint8Array(W * H);
+  for (const m of manholes) for (let yy = m.y - 1; yy <= m.y + 1; yy++) for (let xx = m.x - 1; xx <= m.x + 1; xx++) junkUsed[yy * W + xx] = 1;
   const clearStreet = (x: number, y: number, w: number, h: number) => {
     for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) if (ground[yy * W + xx] !== 1 || junkUsed[yy * W + xx]) return false;
     return true;
@@ -322,7 +353,18 @@ export function generateWorld(seed: number): World {
     put(d.p, tx * 16 + (d.t[0] * 16) / 2, (ty + d.t[1]) * 16);
   }
   props.sort((a, b) => a.y - b.y || a.x - b.x);
-  return { w: W, h: H, plots, graveyards, props, ground, streets, centre: [W / 2, W / 2] };
+  return { w: W, h: H, plots, graveyards, props, ground, streets, manholes, centre: [W / 2, W / 2] };
+}
+
+/**
+ * A world tile beside a plot: `side` 0 north, 1 east, 2 south, 3 west; `along` 0..PLOT-1 runs along
+ * that side (left to right / top to bottom); `out` tiles away from the plot's edge (1 = touching it).
+ */
+export function sideTile(p: { x: number; y: number }, side: number, along: number, out: number): [number, number] {
+  if (side === 0) return [p.x + along, p.y - out];
+  if (side === 1) return [p.x + PLOT - 1 + out, p.y + along];
+  if (side === 2) return [p.x + along, p.y + PLOT - 1 + out];
+  return [p.x - out, p.y + along];
 }
 
 /** World tile coordinates of a plot's Main Tower centre. */

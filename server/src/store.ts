@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { BaseState, Boosts, OfflineSummary } from '@siege/shared';
+import type { BaseState, Boosts, DirectorState, OfflineSummary } from '@siege/shared';
 
 // Storage behind a thin interface. Today: one SQLite file. Swapping to another backend only means
 // implementing Store again. Every change is written immediately (synchronous, a few µs per row).
@@ -33,8 +33,10 @@ export interface PlayerRecord {
   bank: number;
   /** What happened while the player was away (reset at login). */
   offline: OfflineSummary;
-  /** Increments every wave, so each wave gets a fresh deterministic seed. */
+  /** Increments every siege session, so each gets a fresh deterministic seed. */
   waveNo: number;
+  /** The zombie director's memory of this player (difficulty pressure, minutes played). Older records lack it. */
+  siege?: DirectorState;
   createdAt: number;
   lastSeen: number;
 }

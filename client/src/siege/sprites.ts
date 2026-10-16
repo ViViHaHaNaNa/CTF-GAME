@@ -27,6 +27,16 @@ const FILES = {
   zAxeWalk: 'Enemies/Zombie_Axe/Zombie_Axe_Side_Walk-Sheet8.png',
   zAxeAttack: 'Enemies/Zombie_Axe/Zombie_Axe_Side_First-Attack-Sheet7.png',
   zAxeDeath: 'Enemies/Zombie_Axe/Zombie_Axe_Side_First-Death-Sheet6.png',
+  // The pack's left-facing sheets: drawn as-is instead of mirroring (no canvas transforms per zombie).
+  zSmallWalkL: 'Enemies/Zombie_Small/Zombie_Small_Side-left_Walk-Sheet6.png',
+  zSmallAttackL: 'Enemies/Zombie_Small/Zombie_Small_Side-left_First-Attack-Sheet4.png',
+  zSmallDeathL: 'Enemies/Zombie_Small/Zombie_Small_Side-left_First-Death-Sheet6.png',
+  zBigWalkL: 'Enemies/Zombie_Big/Zombie_Big_Side-left_Walk-Sheet8.png',
+  zBigAttackL: 'Enemies/Zombie_Big/Zombie_Big_Side-left_First-Attack-Sheet8.png',
+  zBigDeathL: 'Enemies/Zombie_Big/Zombie_Big_Side-left_First-Death-Sheet7.png',
+  zAxeWalkL: 'Enemies/Zombie_Axe/Zombie_Axe_Side-left_Walk-Sheet8.png',
+  zAxeAttackL: 'Enemies/Zombie_Axe/Zombie_Axe_Side-left_First-Attack-Sheet7.png',
+  zAxeDeathL: 'Enemies/Zombie_Axe/Zombie_Axe_Side-left_First-Death-Sheet6.png',
 
   wallWoodH: 'Objects/Buildable/Wooden/Wooden-wall_Horizontal.png',
   wallWoodV: 'Objects/Buildable/Wooden/Wooden-wall_Vertical.png',
@@ -35,6 +45,7 @@ const FILES = {
   debris: 'Objects/Gray-brick_Debris.png',
   bricks: 'Objects/Buildings/Brick-wall_1_Lying.png',
   crate: 'Objects/Pallet_1.png',
+  manhole: 'Objects/Manhole.png',
 
   containerGray: 'Objects/Container/Container_3_Gray_Horizontal.png',
   containerRed: 'Objects/Container/Container_7_Red_Horizontal.png',

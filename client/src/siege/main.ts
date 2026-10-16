@@ -24,8 +24,9 @@ import {
 } from '@siege/shared';
 import { SERVER_URL } from './config.ts';
 import { Net, saveToken, savedToken } from './net.ts';
+import { sfx } from './retro.ts';
 import { loadSprites } from './sprites.ts';
-import { bindLiveStream } from './stream.ts';
+import { bindLiveStream, type SiegeMessage } from './stream.ts';
 import { THEME, baseColor, loadFonts } from './theme.ts';
 import { TitleScreen } from './title.ts';
 import { CRATE_SPOT, WorldView } from './world.ts';
@@ -60,6 +61,12 @@ let crate: CrateView | null = null;
 let panelHtml = '';
 /** Organiser switches: game paused, leaderboard frozen. */
 let org = { paused: false, frozen: false };
+/** Your own base's siege, from the server's 'pressure' updates (twice a second). */
+let siege: { n: number; phase: string; nextIn: number; sides: number[]; hq: number; at: number } | null = null;
+/** A message that takes over the banner for a moment (surge held, breach, the first surge). */
+let flash: { text: string; cls: string; until: number } | null = null;
+/** Next time a growl may play (ms). */
+let nextGrowl = 0;
 /** The arcade title screen (shown to anyone not logged in). */
 const title = new TitleScreen($('title'), {
   login: (name, roll) => net.login(name, roll),
@@ -100,6 +107,30 @@ async function boot() {
   requestAnimationFrame(frame);
 }
 
+/** Your own Main Tower took damage: pulse the red vignette (stronger when it's low). */
+function hurt(hp: number, drop: number) {
+  const el = $('hurt');
+  el.style.setProperty('--hurt', String(Math.min(1, 0.35 + drop / 12 + (100 - hp) / 140)));
+  el.classList.remove('pulse');
+  void el.offsetWidth; // restart the animation
+  el.classList.add('pulse');
+}
+
+/** Growls layered with the pressure on your base, panned toward the side it's coming from. */
+function growls(now: number) {
+  if (!siege || now < nextGrowl || now - siege.at > 3000) return;
+  const [n, e, so, w] = siege.sides as [number, number, number, number];
+  const total = n + e + so + w;
+  if (total < 3) {
+    nextGrowl = now + 800;
+    return;
+  }
+  // The busier it gets, the more often they growl (from every ~1.6 s to several a second).
+  nextGrowl = now + Math.max(220, 1600 - total * 22) * (0.6 + Math.random() * 0.8);
+  const pan = (e - w) / Math.max(1, e + w) * 0.8 + (Math.random() - 0.5) * 0.3;
+  sfx.growl(pan, Math.min(1, 0.35 + total / 60));
+}
+
 function showTitle() {
   $('connecting').hidden = true;
   title.show();
@@ -110,6 +141,7 @@ function frame(now: number) {
   view.draw(now);
   drawMinimap(now);
   renderBanner(now);
+  growls(now);
   requestAnimationFrame(frame);
 }
 
@@ -136,7 +168,10 @@ function bindNet() {
     view.myPlot = -1;
     view.myBase = null;
     view.deployPlot = -1;
-    view.live.clear();
+    view.pressure = null;
+    siege = null;
+    flash = null;
+    for (const plot of [...view.live.keys()]) view.dropLive(plot);
     for (const id of ['hud', 'panel', 'wave-banner', 'map-tools', 'attack-bar']) $(id).hidden = true;
     showTitle();
   });
@@ -150,14 +185,15 @@ function bindNet() {
     setPlayer(w.player);
     setCrate(w.crate, true);
     if (!centred) {
-      view.centerOnBlock(w.player.plot);
+      // Land right on your own base: the zombies are about to come at it from every side.
+      view.centerOnPlot(w.player.plot, view.overviewZoom());
       centred = true;
     }
     $('feed').replaceChildren();
     for (const f of w.feed.slice(-3)) addFeed(f, true);
     if (w.offline) {
       const o = w.offline;
-      const parts = [`While you were away: ${o.waves} wave${o.waves === 1 ? '' : 's'}`];
+      const parts = [`While you were away: ${o.waves} zombie surge${o.waves === 1 ? '' : 's'}`];
       if (o.breaches) parts.push(`${o.breaches} breach${o.breaches === 1 ? '' : 'es'} (-${o.coinsLost} coins)`);
       if (o.raids) parts.push(`raided ${o.raids} time${o.raids === 1 ? '' : 's'} (-${o.raidLosses ?? 0} coins)`);
       parts.push(`+${o.credited} coins banked${o.capped ? ' (bank was full)' : ''}`);
@@ -207,13 +243,39 @@ function bindNet() {
     renderAttackBar();
   });
   s.on('player', (p: PlayerView) => setPlayer(p));
-  s.on('waveEnd', (r: { p: number; breached: boolean; kills: number; coins: number; lost: number; total: number }) => {
-    if (!player || r.p !== player.plot) return;
-    player.coins = r.total;
-    renderHud();
-    if (panel === 'mine') renderPanel();
-    if (r.breached) toast(`Breach! The Main Tower fell. Lost ${r.lost} coins.`, 'bad');
-    else toast(`Wave held: ${r.kills} zombies down, +${r.coins} coins`, 'good', 2500);
+  s.on('siege', (m: SiegeMessage) => {
+    if (!player || m.p !== player.plot) return;
+    const now = performance.now();
+    const S = THEME.siege.shake;
+    if (m.type === 'surge') {
+      if (m.n === 1) {
+        flash = { text: "⚠ They're coming from everywhere!", cls: 'alarm', until: now + 3200 };
+        view.shake(S.first * view.dpr, 700);
+        sfx.siren(true);
+      } else if (m.pincer) {
+        const from = (m.sides ?? []).map((n, i) => [n, i] as const).filter(([n, i]) => i < 4 && n >= Math.max(3, (m.size ?? 0) * 0.2)).map(([, i]) => SIDE_LABEL[i]);
+        flash = { text: `⚔ Pincer from the ${from.join(' and ')}!`, cls: 'alarm', until: now + 2200 };
+        view.shake(S.pincer * view.dpr, 300);
+        sfx.siren(false);
+      }
+    } else if (m.type === 'held') {
+      if (!flash || flash.until < now + 500) flash = { text: `Surge ${m.n} held! ${m.kills} down, +${m.coins} coins`, cls: 'held', until: now + 1600 };
+      sfx.held();
+    } else if (m.type === 'breach') {
+      if (m.total !== undefined) player.coins = m.total;
+      renderHud();
+      if (panel === 'mine') renderPanel();
+      flash = { text: `💥 Breach! The Main Tower fell: -${m.lost ?? 0} coins. Regroup!`, cls: 'alarm', until: now + 3500 };
+      view.shake(S.breach * view.dpr, 600);
+      hurt(0, 40);
+      sfx.boom();
+    }
+  });
+  s.on('pressure', (m: { p: number; sides: number[]; hq: number; n: number; phase: string; nextIn: number }) => {
+    if (!player || m.p !== player.plot) return;
+    const now = performance.now();
+    siege = { n: m.n, phase: m.phase, nextIn: m.nextIn, sides: m.sides, hq: m.hq, at: now };
+    view.pressure = { sides: m.sides, at: now };
   });
   s.on('feed', (f: FeedItem) => addFeed(f));
   s.on('status', (st: { paused: boolean; frozen: boolean }) => {
@@ -236,7 +298,7 @@ function updateWatch() {
   if (key === watchKey) return;
   watchKey = key;
   net.watch(list);
-  for (const plot of [...view.live.keys()]) if (plot !== player.plot && !list.includes(plot)) view.live.delete(plot);
+  for (const plot of [...view.live.keys()]) if (plot !== player.plot && !list.includes(plot)) view.dropLive(plot);
 }
 
 // ---- input --------------------------------------------------------------------------------------
@@ -377,6 +439,18 @@ function bindInput() {
   });
 
   $('menu-btn').addEventListener('click', () => ($('menu').hidden = !$('menu').hidden));
+  // Sound: the same switch as the title screen's. Browsers only allow audio after a tap or key press.
+  const soundIcon = () => {
+    $('sound-btn').textContent = sfx.muted ? '🔇' : '🔊';
+    $('sound-btn').setAttribute('aria-label', sfx.muted ? 'Sound off' : 'Sound on');
+  };
+  soundIcon();
+  $('sound-btn').addEventListener('click', () => {
+    sfx.unlock();
+    sfx.toggle();
+    soundIcon();
+  });
+  for (const ev of ['pointerdown', 'keydown'] as const) window.addEventListener(ev, () => sfx.unlock(), { passive: true });
   $('close-menu').addEventListener('click', () => ($('menu').hidden = true));
   $('logout-btn').addEventListener('click', () => {
     $('menu').hidden = true;
@@ -591,6 +665,7 @@ function setPlayer(p: PlayerView) {
   player = p;
   view.myPlot = p.plot;
   view.myBase = p.base;
+  view.onHqHurt = hurt;
   renderHud();
   renderChips();
   if (panel === 'mine' || panel === 'other') renderPanel();
@@ -683,29 +758,40 @@ function renderHud(delta = 0) {
   }
 }
 
+const SIDE_LABEL = ['north', 'east', 'south', 'west'];
+
 function renderBanner(now: number) {
   if (!player) return;
   const l = view.live.get(player.plot);
   const b = $('wave-banner');
   let text = 'All quiet.';
-  let attack = false;
+  let cls = '';
   if (org.paused) {
     text = '⏸ Game paused by the organisers';
   } else if (l?.phase === 'raid') {
     text = `⚔ ${l.raid?.attacker ?? 'Someone'} is raiding your base! (${l.raid?.destruction ?? 0}% destroyed)`;
-    attack = true;
-  } else if (l?.phase === 'wave') {
-    text = 'Zombies rising from the graveyard!';
-    attack = true;
-  } else if (l) {
-    const s = Math.max(0, Math.ceil((l.riseAt - now) / 1000));
-    if (l.phase === 'warning' || (s > 0 && s <= CONFIG.waves.warning)) {
-      text = `Zombies rising from the graveyard in ${s}s!`;
-      attack = true;
-    } else text = s > 0 ? `All quiet. Next wave in ${s}s` : 'The ground is moving...';
+    cls = 'attack';
+  } else if (flash && now < flash.until) {
+    text = flash.text;
+    cls = flash.cls;
+  } else if (siege && now - siege.at < 3000) {
+    let zombies = 0;
+    if (l) for (const u of l.units.values()) if (u.state !== 2) zombies++;
+    if (siege.phase === 'start') {
+      text = '⚠ The ground is moving...';
+      cls = 'attack';
+    } else if (siege.phase === 'surge') {
+      text = `☠ Surge ${siege.n}: ${zombies} zombies at your walls!`;
+      cls = 'attack';
+    } else text = `Breather... next surge in ${siege.nextIn}s${zombies ? ` (${zombies} stragglers)` : ''}`;
   }
   if (b.textContent !== text) b.textContent = text;
-  b.classList.toggle('attack', attack);
+  if (b.dataset.cls !== cls) {
+    b.dataset.cls = cls;
+    b.classList.toggle('attack', cls === 'attack');
+    b.classList.toggle('alarm', cls === 'alarm');
+    b.classList.toggle('held', cls === 'held');
+  }
 }
 
 function renderAttackBar() {
@@ -843,7 +929,7 @@ function minePanel(): string {
   const base = player!.base;
   const sel = view.selectedPick;
   const l = view.live.get(player!.plot);
-  const waveNote = l?.phase === 'wave' || l?.phase === 'raid' ? '<p class="note">A fight is on: changes join the next one.</p>' : '';
+  const waveNote = l?.phase === 'raid' ? '<p class="note">A raid is on: changes join the next fight.</p>' : '';
   if (!sel) {
     const posts = base.posts.filter(Boolean).length;
     const now = serverNow();

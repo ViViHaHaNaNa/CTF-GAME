@@ -85,6 +85,7 @@
   --danger-text: #ff9c8f;
   --warn: #ff9a3c;
   --good: #5fe08a;
+  --good-ink: #0b1a10;
   --good-soft: rgba(95, 224, 138, 0.16);
   --info: #5aa8ff;
   --shield: #7fd8ff;
@@ -114,6 +115,9 @@
   --panel-max-height: 46vh;
   --login-width: 340px;
   --vignette: radial-gradient(ellipse at center, rgba(5, 10, 25, 0) 58%, rgba(5, 10, 25, 0.42) 100%);
+  --hurt-vignette: radial-gradient(ellipse at center, rgba(255, 30, 20, 0) 50%, rgba(230, 20, 10, 0.6) 100%);
+  --alarm: #ff2d1f;                  /* "They're coming from everywhere!" banner */
+  --alarm-ink: #fff4c2;
   --login-glow: radial-gradient(ellipse at top, #24407a, var(--bg) 70%);
 
   /* ---- title screen (one pixel canvas; see client/src/siege/title.ts) ---- */
@@ -257,6 +261,17 @@
   --map-hp-back: #101624;
   --map-tracer: rgba(255, 240, 150, 0.95);
   --map-dirt-puff: 150, 110, 70;
+  /* Zombie siege */
+  --map-crack: #1a1008;              /* cracks zombies claw out of */
+  --map-crack-glow: 255, 110, 40;
+  --map-manhole-hole: #06080e;
+  --map-coin: #ffd23f;               /* "+1" kill pops */
+  --map-coin-outline: #2a1a00;
+  --map-arrow: 255, 64, 48;          /* edge arrow toward the heaviest side */
+  --map-arrow-outline: #1a0505;
+  --map-shake-first: 5;              /* screen shake, device px: first surge / breach / pincer */
+  --map-shake-breach: 7;
+  --map-shake-pincer: 2;
   --map-deploy: 255, 77, 61;
   --map-deploy-edge: rgba(255, 150, 130, 0.85);
   --map-pick: 255, 233, 120;

@@ -229,4 +229,118 @@ export class Sfx {
   error() {
     this.tone(220, 0, 0.18, 'sawtooth', 0.05, 110);
   }
+
+  // ---- siege ----------------------------------------------------------------------------------------
+
+  private noise: AudioBuffer | null = null;
+
+  /** One second of white noise, made once (growls and the breach boom are filtered noise). */
+  private noiseBuffer(ctx: AudioContext): AudioBuffer {
+    if (this.noise) return this.noise;
+    const b = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    const d = b.getChannelData(0);
+    let seed = 12345;
+    for (let i = 0; i < d.length; i++) {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      d[i] = (seed / 0x7fffffff) * 2 - 1;
+    }
+    return (this.noise = b);
+  }
+
+  /** Air-raid siren: `long` for the first surge (three wails), short sting for a pincer. */
+  siren(long: boolean) {
+    const ctx = this.ctx;
+    if (!ctx || this.muted) return;
+    const t = ctx.currentTime;
+    const wails = long ? 3 : 1;
+    const each = long ? 0.9 : 0.55;
+    for (const detune of [0, 7]) {
+      const o = ctx.createOscillator();
+      const v = ctx.createGain();
+      o.type = 'sawtooth';
+      o.detune.value = detune * 100;
+      for (let i = 0; i < wails; i++) {
+        o.frequency.setValueAtTime(440, t + i * each);
+        o.frequency.exponentialRampToValueAtTime(880, t + i * each + each * 0.6);
+        o.frequency.exponentialRampToValueAtTime(520, t + (i + 1) * each);
+      }
+      v.gain.setValueAtTime(0.0001, t);
+      v.gain.exponentialRampToValueAtTime(0.035, t + 0.08);
+      v.gain.setValueAtTime(0.035, t + wails * each - 0.15);
+      v.gain.exponentialRampToValueAtTime(0.0001, t + wails * each);
+      o.connect(v).connect(ctx.destination);
+      o.start(t);
+      o.stop(t + wails * each + 0.05);
+    }
+  }
+
+  /** A zombie growl: band-passed noise over a wobbling low saw. `pan` -1 (left) .. 1 (right), `vol` 0..1. */
+  growl(pan: number, vol: number) {
+    const ctx = this.ctx;
+    if (!ctx || this.muted || vol <= 0) return;
+    const t = ctx.currentTime;
+    const dur = 0.45 + Math.random() * 0.5;
+    const out = ctx.createStereoPanner();
+    out.pan.value = Math.max(-1, Math.min(1, pan));
+    out.connect(ctx.destination);
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.exponentialRampToValueAtTime(0.05 * vol, t + 0.06);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    env.connect(out);
+    const n = ctx.createBufferSource();
+    n.buffer = this.noiseBuffer(ctx);
+    n.playbackRate.value = 0.6 + Math.random() * 0.3;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(260 + Math.random() * 200, t);
+    bp.frequency.exponentialRampToValueAtTime(140 + Math.random() * 60, t + dur);
+    bp.Q.value = 3;
+    n.connect(bp).connect(env);
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(70 + Math.random() * 40, t);
+    o.frequency.exponentialRampToValueAtTime(45 + Math.random() * 20, t + dur);
+    const wob = ctx.createOscillator();
+    const wobAmt = ctx.createGain();
+    wob.frequency.value = 9 + Math.random() * 6;
+    wobAmt.gain.value = 12;
+    wob.connect(wobAmt).connect(o.frequency);
+    const og = ctx.createGain();
+    og.gain.value = 0.5;
+    o.connect(og).connect(env);
+    n.start(t, Math.random() * 0.4, dur);
+    o.start(t);
+    wob.start(t);
+    o.stop(t + dur);
+    wob.stop(t + dur);
+  }
+
+  /** The Main Tower falls: a deep thump with a noisy tail. */
+  boom() {
+    const ctx = this.ctx;
+    if (!ctx || this.muted) return;
+    const t = ctx.currentTime;
+    this.tone(90, 0, 0.5, 'sine', 0.2, 35);
+    const n = ctx.createBufferSource();
+    n.buffer = this.noiseBuffer(ctx);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(900, t);
+    lp.frequency.exponentialRampToValueAtTime(120, t + 0.7);
+    const v = ctx.createGain();
+    v.gain.setValueAtTime(0.12, t);
+    v.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+    n.connect(lp).connect(v).connect(ctx.destination);
+    n.start(t, 0, 0.8);
+  }
+
+  /** A surge held: two bright notes. */
+  held() {
+    this.tone(659, 0, 0.08, 'square', 0.035);
+    this.tone(988, 0.08, 0.14, 'square', 0.035);
+  }
 }
+
+/** The one sound player for the whole page: the title screen and the game share its mute switch. */
+export const sfx = new Sfx('siege.muted');

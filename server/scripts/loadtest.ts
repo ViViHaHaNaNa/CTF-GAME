@@ -41,6 +41,8 @@ if (EXTERNAL && !args.includes('--yes')) {
 const lat: Record<string, number[]> = { login: [], act: [], deploy: [], reconnect: [], answer: [] };
 const errors = new Map<string, number>();
 let received = 0;
+/** Bytes of packed combat snapshots received by all screens. */
+let snapBytes = 0;
 let raidsStarted = 0;
 let deploys = 0;
 const crateWinners = new Map<number, string[]>();
@@ -125,7 +127,10 @@ class Bot {
     return new Promise((resolve) => {
       this.socket = io(url, { auth: { token: this.token }, transports: ['websocket'], reconnection: false, forceNew: true });
       const s = this.socket;
-      s.onAny(() => received++);
+      s.onAny((ev: string, data: unknown) => {
+      received++;
+      if (ev === 'snap' && data && typeof (data as ArrayBuffer).byteLength === 'number') snapBytes += (data as ArrayBuffer).byteLength;
+    });
       s.on('needLogin', async () => {
         const r = await ack<{ token: string }>(s, 'login', { name: `Bot ${this.n}`, roll: this.roll }, 'login');
         if (r?.ok) this.token = r.token;
@@ -249,7 +254,10 @@ async function main() {
   const spectators: Socket[] = [];
   for (let i = 0; i < SPECTATORS; i++) {
     const s = io(url, { auth: { spectator: true }, transports: ['websocket'], forceNew: true });
-    s.onAny(() => received++);
+    s.onAny((ev: string, data: unknown) => {
+      received++;
+      if (ev === 'snap' && data && typeof (data as ArrayBuffer).byteLength === 'number') snapBytes += (data as ArrayBuffer).byteLength;
+    });
     spectators.push(s);
   }
   const specTimer = setInterval(() => {
@@ -295,6 +303,7 @@ async function main() {
   row('answer', lat.answer!);
   row('reconnect', lat.reconnect!);
   console.log(`  raids ${raidsStarted}, raiders deployed ${deploys}, messages received ${received} (${Math.round(received / secs)}/s across all screens)`);
+  console.log(`  combat snapshots: ${Math.round(snapBytes / secs / 1024)} KB/s across all screens (${(snapBytes / secs / 1024 / (CLIENTS + SPECTATORS)).toFixed(1)} KB/s per screen)`);
   console.log(`  server: tick avg ${worst('tickAvgMs')} ms (worst 10 s window), tick max ${worst('tickMaxMs')} ms, loop lag max ${worst('loopLagMaxMs')} ms, memory ${worst('memoryMb')} MB, tick errors ${worst('tickErrors')}`);
   const crates = [...crateWinners.entries()];
   console.log(`  crates won: ${crates.map(([id, w]) => `#${id} → ${w.join(', ')}`).join('; ') || 'none'}`);

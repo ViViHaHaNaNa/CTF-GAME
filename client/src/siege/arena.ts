@@ -110,7 +110,7 @@ async function boot() {
     if (key === watchKey || !socket.connected) return;
     watchKey = key;
     socket.emit('watch', { plots: want });
-    for (const plot of [...view.live.keys()]) if (!want.includes(plot)) view.live.delete(plot);
+    for (const plot of [...view.live.keys()]) if (!want.includes(plot)) view.dropLive(plot);
   }, 300);
   setInterval(tick, 500);
   requestAnimationFrame(frame);

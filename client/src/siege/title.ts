@@ -1,4 +1,4 @@
-import { Sfx, arrow, chunkyFrame, pixelText, tinyText, tinyWidth, wrap } from './retro.ts';
+import { sfx, arrow, chunkyFrame, pixelText, tinyText, tinyWidth, wrap } from './retro.ts';
 import { themeNum, themeVar } from './theme.ts';
 import { AttractScene, loadTitleArt } from './titleScene.ts';
 
@@ -61,7 +61,7 @@ export class TitleScreen {
   private nextGlitch = 4;
   private logo: HTMLCanvasElement | null = null;
   private poll = 0;
-  private sfx = new Sfx('siege.title.muted');
+  private sfx = sfx;
   private crt = true;
   private hits: { rect: Rect; act: () => void; hover?: () => void }[] = [];
   private nameInput: HTMLInputElement;

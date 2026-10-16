@@ -15,6 +15,7 @@
         <div class="hud-who"><span id="hud-name"></span><span class="hud-sub"><span id="hud-hq"></span><span class="chips" id="hud-chips"></span></span></div>
         <div class="hud-stat"><span class="coin"></span><span id="hud-coins">0</span><span class="delta" id="hud-delta"></span></div>
         <div class="hud-stat" title="Trophies"><span class="trophy">&#9819;</span><span id="hud-trophies">0</span></div>
+        <button class="icon-btn" id="sound-btn" aria-label="Sound on">&#128266;</button>
         <button class="icon-btn" id="menu-btn" aria-label="Menu">&#9776;</button>
       </header>
       <button class="wave-banner" id="wave-banner" hidden></button>
@@ -22,6 +23,7 @@
         <div class="board-wrap" id="board-wrap">
           <canvas id="board"></canvas>
           <div class="vignette" aria-hidden="true"></div>
+          <div class="hurt" id="hurt" aria-hidden="true"></div>
           <canvas class="minimap" id="minimap" width="180" height="180" aria-label="Map"></canvas>
           <div class="map-tools" id="map-tools" hidden>
             <button class="tool" id="home-btn">My base</button>

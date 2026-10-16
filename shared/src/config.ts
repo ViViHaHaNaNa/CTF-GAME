@@ -18,12 +18,13 @@ export type UnitKind = (typeof UNIT_KINDS)[number];
 export const CONFIG = {
   /** Simulation rate of the combat engine (ticks per second). */
   tickRate: 20,
-  /** Snapshots are streamed to clients every N ticks. */
-  snapshotEvery: 2,
+  /** Snapshots are streamed to clients every N ticks (clients interpolate between them). */
+  snapshotEvery: 3,
 
   start: {
+    /** Enough to buy a second pistol (60) at once, or upgrade the first (90) after a few kills. */
     coins: 120,
-    /** New bases start with a pistol post in slot 0 so the first wave can be defended. */
+    /** New bases start with a pistol post in slot 0 so the first surge can be defended. */
     starterPost: 'pistol' as PostType,
   },
 
@@ -80,38 +81,94 @@ export const CONFIG = {
   },
 
   zombies: {
-    // Speeds/cooldowns are base values (x pace.zombieSpeed / pace.zombieCooldown). Coins trimmed for the
-    // faster pace, which kills more zombies per minute, so income stays about where it was.
-    z_small: { hp: 30, speed: 1.4, damage: 5, cooldown: 0.8, range: 0.55, wallMult: 1, coins: 7 },
-    z_big: { hp: 140, speed: 0.55, damage: 18, cooldown: 1.4, range: 0.65, wallMult: 1, coins: 17 },
-    z_axe: { hp: 70, speed: 0.9, damage: 10, cooldown: 1.0, range: 0.6, wallMult: 3, coins: 10 },
-  } as Record<ZombieKind, { hp: number; speed: number; damage: number; cooldown: number; range: number; wallMult: number; coins: number }>,
+    // Speeds/cooldowns are base values (x pace.zombieSpeed / pace.zombieCooldown). The siege overwhelms
+    // with numbers, not toughness: Smalls are cheap, quick and die to 1-2 shots (a Lv1 pistol does 7),
+    // so every kill pops a coin. Big and Axe zombies mix in as surges escalate.
+    z_small: { hp: 12, speed: 1.5, damage: 4, cooldown: 0.8, range: 0.55, wallMult: 1, coins: 1, radius: 0.28 },
+    z_axe: { hp: 40, speed: 1.0, damage: 9, cooldown: 1.0, range: 0.6, wallMult: 3, coins: 3, radius: 0.32 },
+    z_big: { hp: 100, speed: 0.6, damage: 16, cooldown: 1.4, range: 0.65, wallMult: 1, coins: 6, radius: 0.42 },
+  } as Record<ZombieKind, { hp: number; speed: number; damage: number; cooldown: number; range: number; wallMult: number; coins: number; radius: number }>,
 
-  waves: {
-    /** Seconds of calm between waves. */
-    calm: 10,
-    /** A wave ends after this long even if zombies remain (counts as defended). */
-    maxDuration: 40,
-    /** Zombies trickle in over this many seconds. */
-    spawnSpread: 12,
-    /** Seconds a zombie spends climbing out of its grave (harmless and untargetable). */
+  /**
+   * Zombie defence: one continuous siege per base. Surges rise and fall (a brutal peak, a 3-5 s
+   * breather, the next peak) from every side: the base's graveyard, the street/alley edges, its
+   * manholes and cracks that open in the yard. A director scales the surges to keep a target share
+   * of them held. Times in seconds.
+   */
+  siege: {
+    /** After a base comes alive on screen, the first surge bursts in this soon (no countdown). */
+    firstSurge: 2.5,
+    /** Seconds a zombie spends climbing out of a grave, manhole or crack (harmless and untargetable). */
     riseTime: 0.6,
-    /** Seconds of warning shown above the graveyard before a wave. */
-    warning: 5,
-    count: (hq: number) => 4 + 2 * (hq - 1),
-    /** Relative spawn weights by HQ level. */
-    mix: (hq: number) => ({ z_small: 0.65 - 0.03 * (hq - 1), z_big: 0.15 + 0.015 * (hq - 1), z_axe: 0.2 + 0.015 * (hq - 1) }),
-    hpScale: (hq: number) => 1 + 0.25 * (hq - 1),
+    /** The scripted first minute: each surge's size and the breather after it. Surge 1 is always this size. */
+    ramp: [
+      { size: 8, breather: 5 },
+      { size: 12, breather: 4.5 },
+      { size: 16, breather: 4 },
+      { size: 21, breather: 3.5 },
+    ],
+    /**
+     * After the ramp a surge is (base + perHq x (HQ-1) + perKill x firepower) x (1 + perMinute x minutes played,
+     * up to maxMinutes) x pressure, capped at max. Firepower = Smalls per second the base's posts can kill, so
+     * a surge always outnumbers what the defence can shoot down at once, however it's built.
+     */
+    size: { base: 4, perHq: 2, perKill: 10, perMinute: 0.03, maxMinutes: 10, max: 110 },
+    /** Seconds over which a surge arrives. Each side's first zombie comes at once, so it's every side from the start. */
+    spawnWindow: 4,
+    /** From this surge on, surges are pincers: 2-3 sides get `pincerShare` of it within `pincerBurst` seconds. */
+    pincerFrom: 5,
+    pincerShare: 0.75,
+    pincerBurst: 1.2,
+    /** Breather after a surge (once the ramp is over): random between these. */
+    breather: [3, 5] as [number, number],
+    /** A surge still dragging on after this long counts as held, and the next one comes anyway. */
+    maxSurge: 30,
+    /** One stray Small every this many seconds during breathers (never while the base is losing). */
+    trickleEvery: 1.4,
+    /** Where a side's zombies come from (weights): running in off the street/alley edge, a crack in the yard, the side's manhole. */
+    sources: { edge: 0.45, crack: 0.35, manhole: 0.2 },
+    /** Share of every surge that rises from the base's graveyard. */
+    graveyardShare: 0.15,
+    /** Big and Axe shares of a surge, growing with Main Tower level and minutes played (the rest are Small). */
+    mix: {
+      z_big: { perHq: 0.015, perMinute: 0.008, max: 0.12 },
+      z_axe: { perHq: 0.02, perMinute: 0.02, max: 0.18 },
+    } as Record<'z_big' | 'z_axe', { perHq: number; perMinute: number; max: number }>,
+    hpScale: (hq: number) => 1 + 0.15 * (hq - 1),
     damageScale: (hq: number) => 1 + 0.15 * (hq - 1),
-    coinScale: (hq: number) => 1 + 0.12 * (hq - 1),
+    coinScale: (hq: number) => 1 + 0.1 * (hq - 1),
+    /** Posts reach further in zombie defence (range x mult, at least min tiles), so any post covers every wall and the yard beyond. Raids use the plain ranges. */
+    postRange: { mult: 1.4, min: 11 },
+    /** Each breather, every building gets back this share of its max health (fallen walls and posts are rebuilt). */
+    repair: 0.5,
+    /** Most zombies alive on one base; spawns wait while it's full. */
+    maxAlive: 120,
+    difficulty: {
+      /** Share of surges the director aims for players to hold: in their first `newMinutes` minutes, then after. */
+      targetNew: 0.8,
+      newMinutes: 5,
+      target: 0.85,
+      /** Pressure multiplies surge size. It starts here, drops `down` after a lost surge and creeps up after a held one (so the held share settles on the target). */
+      start: 1,
+      min: 0.45,
+      max: 1.6,
+      down: 0.25,
+      /** Falling behind: once the Main Tower is below this share of health, only `easeKeep` of the surge's remaining zombies still come. */
+      easeBelow: 0.45,
+      easeKeep: 0.4,
+    },
     breach: {
-      /** Share of coins lost when the HQ falls... */
-      lossPct: 0.1,
+      /** Share of coins lost when the Main Tower falls... */
+      lossPct: 0.05,
       /** ...never more than this... */
-      maxLoss: 300,
+      maxLoss: 60,
       /** ...and never dropping the player below this. */
       protectedFloor: 100,
+      /** The field clears and the base gets this long to recover. */
+      breather: 6,
     },
+    /** Ticks per second when a siege is resolved headlessly (offline bases): coarse but the same rules. */
+    coarseRate: 10,
   },
 
   pvp: {
@@ -190,10 +247,10 @@ export const CONFIG = {
   },
 
   offline: {
-    /** Coins earned by waves while offline are banked up to this cap, credited at next login. */
+    /** Coins earned while offline are banked up to this cap, credited at next login. */
     bankCap: 500,
-    /** Offline bases get a headless wave every this many seconds (calm + a typical wave). */
-    waveEvery: 45,
+    /** Offline bases resolve this many seconds of siege at a time, headlessly (coarse), once per that many seconds. */
+    every: 45,
   },
 
   account: {

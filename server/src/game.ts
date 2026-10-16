@@ -3,17 +3,19 @@ import {
   CONFIG,
   POST_TYPES,
   Raid,
-  ZombieWave,
+  Siege,
   applyAction,
   breachLoss,
   checkAnswer,
   currentPct,
+  encodeSnapshot,
   getWorld,
   grantCrate,
   liveBoosts,
   isRaiderKind,
   lootable,
   newBase,
+  newDirector,
   parseAction,
   quote,
   rollRarity,
@@ -28,12 +30,12 @@ import {
   type Rarity,
   type RaidResult,
   type RaidStatus,
-  type Snapshot,
+  type SiegeEvent,
 } from '@siege/shared';
 import type { PlayerRecord, Store } from './store.ts';
 
 // The authoritative game. Owns every player's state in memory and writes each change straight to the
-// store. Zombie waves run live (streamed) for bases someone is looking at, and headlessly for the rest.
+// store. Zombie sieges run live (streamed) for bases someone is looking at, and headlessly for the rest.
 // Raids run live for everyone watching that base. It knows nothing about sockets: it talks through Outbox.
 
 export class GameError extends Error {
@@ -51,22 +53,25 @@ export interface Outbox {
   toAll(event: string, data: unknown): void;
 }
 
-/** What a screen needs to start showing a base's live action. */
+/** What a screen needs to start showing a base's live action. Snapshots travel packed (see snapcodec). */
 export interface BaseLive {
   p: number;
-  phase: 'calm' | 'warning' | 'wave' | 'raid';
-  /** Seconds until zombies rise (calm / warning). */
-  nextIn?: number;
-  graveyard?: number;
-  snapshot?: Snapshot;
+  /** 'wave' = a zombie siege is running there; 'calm' = nothing live. */
+  phase: 'calm' | 'wave' | 'raid';
+  /** Siege state: surge number, 'start' / 'surge' / 'breather', seconds until the next surge. */
+  siege?: { n: number; phase: string; nextIn: number };
+  snapshot?: Uint8Array;
   raid?: RaidStatus;
 }
 
+/** A siege event as sent to screens watching that base ('siege'). Breaches carry the coins lost. */
+export type SiegeMessage = SiegeEvent & { p: number; lost?: number; total?: number };
+
 interface Live {
-  phase: 'calm' | 'wave';
-  calmUntil: number; // server tick
-  warned: boolean;
-  wave: ZombieWave | null;
+  /** null while a raid has the base (zombies come back after it). */
+  siege: Siege | null;
+  /** The defence boost the siege was built with (it's rebuilt when that changes). */
+  boost: number;
 }
 
 interface RaidState {
@@ -105,6 +110,11 @@ interface CrateMeta {
   nextAt: number;
 }
 
+/** Kill coins reach their owner in batches this many ticks apart. */
+const COIN_FLUSH_TICKS = 5;
+/** Seconds before zombies return to a base after a raid on it. */
+const AFTER_RAID = 5;
+
 const emptyOffline = (): OfflineSummary => ({ waves: 0, breaches: 0, coinsEarned: 0, coinsLost: 0, capped: false, raids: 0, raidLosses: 0 });
 const FEED_KEEP = 20;
 
@@ -127,6 +137,8 @@ export class GameServer {
   private raidByPlot = new Map<number, number>();
   private raidByAttacker = new Map<number, number>();
   private nextOffline = new Map<number, number>();
+  /** Kill coins credited to online players but not yet sent to them. */
+  private pendingCoins = new Map<number, number>();
   private dirty = new Set<number>();
   private summaries = new Map<number, BaseSummary>();
   private raidSeq = 0;
@@ -154,13 +166,14 @@ export class GameServer {
       p.shieldUntil ??= 0;
       p.immuneUntil ??= 0;
       p.boosts ??= {};
+      p.siege ??= newDirector();
       if (p.plot === undefined || this.byPlot.has(p.plot)) {
         p.plot = this.freePlot();
         this.save(p);
       }
       this.index(p);
-      // Spread the first offline waves out so a restart doesn't run every base at once.
-      this.nextOffline.set(p.id, t + CONFIG.offline.waveEvery * 1000 * Math.random());
+      // Spread the first offline sieges out so a restart doesn't run every base at once.
+      this.nextOffline.set(p.id, t + CONFIG.offline.every * 1000 * Math.random());
     }
     for (const p of this.players.values()) this.summaries.set(p.plot, this.summarize(p));
     this.crate = store.getMeta<CrateMeta>('crates') ?? { seq: 0, used: [], current: null, nextAt: 0 };
@@ -256,11 +269,12 @@ export class GameServer {
       bank: 0,
       offline: emptyOffline(),
       waveNo: 0,
+      siege: newDirector(),
       createdAt: t,
       lastSeen: t,
     });
     this.index(p);
-    this.nextOffline.set(p.id, t + CONFIG.offline.waveEvery * 1000);
+    this.nextOffline.set(p.id, t + CONFIG.offline.every * 1000);
     this.markDirty(p.plot);
     this.pushFeed(`${p.name} moved into the wasteland`, 'join');
     return p;
@@ -287,6 +301,8 @@ export class GameServer {
       p.lastSeen = this.now();
       this.save(p);
       this.markDirty(p.plot);
+      // Logging in drops the player straight into a fresh siege: the scripted first minute starts now.
+      if (this.live.has(p.plot)) this.startSiege(p.plot);
     }
     return { player: this.view(p), offline, feed: this.feed.slice(-10), crate: this.crateView() };
   }
@@ -301,35 +317,44 @@ export class GameServer {
     this.save(p);
   }
 
-  /** A screen started (+1) or stopped (-1) looking at a plot. Watched bases get live waves. */
+  /** A screen started (+1) or stopped (-1) looking at a plot. Watched bases get a live siege. */
   watch(plot: number, delta: 1 | -1) {
     const n = Math.max(0, (this.watchers.get(plot) ?? 0) + delta);
     this.watchers.set(plot, n);
     const owner = this.ownerOf(plot);
     if (!owner) return;
     if (n > 0 && !this.live.has(plot)) {
-      // First wave comes quickly so there's something to watch.
-      this.live.set(plot, { phase: 'calm', calmUntil: this.tickNo + 3 * CONFIG.tickRate, warned: false, wave: null });
       this.nextOffline.delete(owner.id);
+      this.startSiege(plot);
     } else if (n === 0 && this.live.has(plot)) {
       this.stopLive(plot);
     }
   }
 
-  /** Nobody is looking any more: finish a running wave headlessly and go back to offline waves. */
+  /**
+   * A fresh live siege on a plot: zombies burst in within seconds. The scripted first minute only
+   * runs when the owner is there to see it (`ramp`); after a raid they come back without it.
+   */
+  private startSiege(plot: number, opts: { ramp?: boolean; firstDelay?: number } = {}) {
+    const p = this.ownerOf(plot);
+    if (!p || this.raidByPlot.has(plot)) return;
+    p.waveNo++;
+    const boost = this.defenceBoost(p);
+    const siege = new Siege(p.base, getWorld().plots[plot]!, seedOf(p.id, p.waveNo), p.siege!, { defenceBoost: boost, ramp: opts.ramp ?? this.isOnline(p.id), firstDelay: opts.firstDelay });
+    siege.counting = this.isOnline(p.id);
+    this.live.set(plot, { siege, boost });
+    this.save(p);
+    this.setWaveFlag(plot, 1);
+    this.out.toBase(plot, 'wave', this.baseLive(plot));
+  }
+
+  /** Nobody is looking any more: the base goes back to headless (offline) sieges. */
   private stopLive(plot: number) {
-    const l = this.live.get(plot);
     this.live.delete(plot);
     const p = this.ownerOf(plot);
     if (!p) return;
-    if (l?.wave && !l.wave.done) {
-      const before = l.wave.coins;
-      l.wave.runToEnd();
-      this.credit(p, l.wave.coins - before);
-      this.settleWave(p, l.wave, false);
-    }
     this.setWaveFlag(plot, 0);
-    this.nextOffline.set(p.id, this.now() + CONFIG.offline.waveEvery * 1000);
+    this.nextOffline.set(p.id, this.now() + CONFIG.offline.every * 1000);
   }
 
   /** Current live state of a plot, for a screen that just started watching it. */
@@ -337,18 +362,16 @@ export class GameServer {
     const rid = this.raidByPlot.get(plot);
     if (rid !== undefined) {
       const r = this.raids.get(rid)!;
-      return { p: plot, phase: 'raid', raid: this.raidStatus(r), snapshot: r.raid.combat.snapshot(true) };
+      return { p: plot, phase: 'raid', raid: this.raidStatus(r), snapshot: encodeSnapshot(plot, r.raid.combat.snapshot(true)) };
     }
-    const l = this.live.get(plot);
-    if (!l) return { p: plot, phase: 'calm' };
-    if (l.phase === 'wave' && l.wave) return { p: plot, phase: 'wave', graveyard: l.wave.plan.graveyard, snapshot: l.wave.combat.snapshot(true) };
-    const nextIn = Math.max(0, (l.calmUntil - this.tickNo) / CONFIG.tickRate);
-    return { p: plot, phase: nextIn <= CONFIG.waves.warning ? 'warning' : 'calm', nextIn, graveyard: getWorld().plots[plot]!.graveyard };
+    const s = this.live.get(plot)?.siege;
+    if (!s) return { p: plot, phase: 'calm' };
+    return { p: plot, phase: 'wave', siege: { n: s.n, phase: s.phase, nextIn: s.nextIn() }, snapshot: encodeSnapshot(plot, s.combat.snapshot(true)) };
   }
 
   // ---- actions ----------------------------------------------------------------------------------
 
-  /** Build or upgrade. Changes take effect from the next fight. */
+  /** Build or upgrade. A running siege gets the change at once (raids keep the base they started with). */
   act(id: number, raw: unknown): PlayerView {
     this.assertRunning();
     const p = this.players.get(id);
@@ -362,7 +385,16 @@ export class GameServer {
     p.base = applyAction(p.base, action);
     this.save(p);
     this.markDirty(p.plot);
+    this.refreshSiege(p);
     return this.view(p);
+  }
+
+  /** A running siege picks up the player's current base and defence boost. */
+  private refreshSiege(p: PlayerRecord) {
+    const l = this.live.get(p.plot);
+    if (!l?.siege) return;
+    l.boost = this.defenceBoost(p);
+    l.siege.setBase(p.base, l.boost);
   }
 
   /** Why `attackerId` can't raid `plot` right now (null = allowed). */
@@ -385,14 +417,9 @@ export class GameServer {
     if (block) throw new GameError('blocked', block);
     const a = this.players.get(attackerId)!;
     const d = this.ownerOf(plot)!;
-    // A zombie wave in progress there stops; the base resumes waves after the raid.
+    // The zombies there scatter while raiders have the base; the siege comes back after the raid.
     const l = this.live.get(plot);
-    if (l) {
-      l.phase = 'calm';
-      l.wave = null;
-      l.warned = false;
-      l.calmUntil = Number.MAX_SAFE_INTEGER;
-    }
+    if (l) l.siege = null;
     this.setWaveFlag(plot, 0);
     // Attacking ends your own immunity, and uses up one charge of your attack and loot boosts.
     const t = this.now();
@@ -477,78 +504,81 @@ export class GameServer {
         this.tickOffline(5);
         if (this.questions.length && this.now() >= this.crate.nextAt) this.spawnCrate();
       }
+      if (this.tickNo % COIN_FLUSH_TICKS === 0) this.flushCoins();
     }
     if (this.loopNo % (CONFIG.tickRate / 2) === 0) this.flushSummaries();
   }
 
-  /** Coins from kills go straight to an online owner, or into the capped offline bank. */
+  /** Coins from kills go straight to an online owner (sent in small batches), or into the capped offline bank. */
   private credit(p: PlayerRecord, coins: number) {
     if (coins <= 0) return;
     if (this.isOnline(p.id)) {
       p.coins += coins;
-      this.out.toPlayer(p.id, 'coins', { coins: p.coins, delta: coins });
-    } else {
-      const room = Math.max(0, CONFIG.offline.bankCap - p.bank);
-      p.bank += Math.min(room, coins);
-      p.offline.coinsEarned += Math.min(room, coins);
-      if (coins > room) p.offline.capped = true;
+      this.pendingCoins.set(p.id, (this.pendingCoins.get(p.id) ?? 0) + coins);
+      return;
     }
+    const room = Math.max(0, CONFIG.offline.bankCap - p.bank);
+    p.bank += Math.min(room, coins);
+    p.offline.coinsEarned += Math.min(room, coins);
+    if (coins > room) p.offline.capped = true;
     this.save(p);
     this.markDirty(p.plot);
+  }
+
+  /** Kills pop coins several times a second: tell owners (and save) a few times a second instead. */
+  flushCoins() {
+    for (const [id, delta] of this.pendingCoins) {
+      const p = this.players.get(id);
+      if (!p) continue;
+      this.save(p);
+      this.markDirty(p.plot);
+      this.out.toPlayer(id, 'coins', { coins: p.coins, delta });
+    }
+    this.pendingCoins.clear();
   }
 
   private tickLive(plot: number, l: Live) {
     const p = this.ownerOf(plot);
-    if (!p || this.raidByPlot.has(plot)) return;
-    if (l.phase === 'calm') {
-      const warnAt = l.calmUntil - CONFIG.waves.warning * CONFIG.tickRate;
-      if (!l.warned && this.tickNo >= warnAt) {
-        l.warned = true;
-        this.setWaveFlag(plot, 1);
-        this.out.toBase(plot, 'wave', this.baseLive(plot));
-      }
-      if (this.tickNo < l.calmUntil) return;
-      p.waveNo++;
-      this.save(p);
-      l.wave = new ZombieWave(p.base, seedOf(p.id, p.waveNo), getWorld().plots[plot]!, this.defenceBoost(p));
-      l.phase = 'wave';
-      this.setWaveFlag(plot, 2);
-      this.out.toBase(plot, 'wave', this.baseLive(plot));
-      return;
-    }
-    const w = l.wave!;
-    this.credit(p, w.step());
-    if (w.combat.tick % CONFIG.snapshotEvery === 0 || w.done) this.out.toBase(plot, 'snap', { p: plot, ...w.combat.snapshot() });
-    if (w.done) {
-      this.settleWave(p, w, true);
-      l.phase = 'calm';
-      l.wave = null;
-      l.warned = false;
-      l.calmUntil = this.tickNo + CONFIG.waves.calm * CONFIG.tickRate;
-      this.setWaveFlag(plot, 0);
-      this.out.toBase(plot, 'wave', this.baseLive(plot));
+    const s = l.siege;
+    if (!p || !s || this.raidByPlot.has(plot)) return;
+    s.counting = this.isOnline(p.id);
+    // A defence boost ran out (or arrived): the siege uses the new numbers from now on.
+    if (this.tickNo % CONFIG.tickRate === 0 && this.defenceBoost(p) !== l.boost) this.refreshSiege(p);
+    this.credit(p, s.step());
+    for (const e of s.events) this.siegeEvent(p, plot, e);
+    s.events.length = 0;
+    if (s.combat.tick % CONFIG.snapshotEvery === 0) this.out.toBase(plot, 'snap', encodeSnapshot(plot, s.combat.snapshot()));
+    // Where the pressure is, for the owner's edge arrow and red vignette (even when the base is off screen).
+    if (s.combat.tick % (CONFIG.tickRate / 2) === 0 && this.isOnline(p.id)) {
+      this.out.toPlayer(p.id, 'pressure', { p: plot, sides: s.pressure(), hq: Math.round(100 * s.hqShare()), n: s.n, phase: s.phase, nextIn: Math.ceil(s.nextIn()) });
     }
   }
 
-  /** End of a wave (kill coins were already credited as they happened). */
-  private settleWave(p: PlayerRecord, w: ZombieWave, notify: boolean) {
-    const lost = w.breached ? breachLoss(p.coins) : 0;
-    p.coins -= lost;
-    if (!this.isOnline(p.id)) {
-      p.offline.waves++;
-      if (w.breached) p.offline.breaches++;
-      p.offline.coinsLost += lost;
+  private siegeEvent(p: PlayerRecord, plot: number, e: SiegeEvent) {
+    const msg: SiegeMessage = { ...e, p: plot };
+    if (e.type === 'surge') this.setWaveFlag(plot, 2);
+    if (e.type === 'breach') {
+      this.flushCoins();
+      const lost = breachLoss(p.coins);
+      p.coins -= lost;
+      if (!this.isOnline(p.id)) {
+        p.offline.breaches++;
+        p.offline.coinsLost += lost;
+      }
+      this.save(p);
+      this.markDirty(p.plot);
+      msg.lost = lost;
+      msg.total = p.coins;
     }
-    this.save(p);
-    this.markDirty(p.plot);
-    if (notify) this.out.toBase(p.plot, 'waveEnd', { p: p.plot, breached: w.breached, kills: w.kills, coins: w.coins, lost, total: p.coins });
+    if (e.type !== 'surge' && !this.isOnline(p.id)) p.offline.waves++;
+    this.out.toBase(plot, 'siege', msg);
   }
 
   private tickRaid(r: RaidState) {
     const raid = r.raid;
     raid.step();
     const plot = raid.plot.id;
-    if (raid.combat.tick % CONFIG.snapshotEvery === 0 || raid.done) this.out.toBase(plot, 'snap', { p: plot, ...raid.combat.snapshot() });
+    if (raid.combat.tick % CONFIG.snapshotEvery === 0 || raid.done) this.out.toBase(plot, 'snap', encodeSnapshot(plot, raid.combat.snapshot()));
     if (raid.combat.tick % CONFIG.tickRate === 0) this.out.toBase(plot, 'raid', this.raidStatus(r));
     if (raid.done) this.settleRaid(r);
   }
@@ -598,11 +628,10 @@ export class GameServer {
     const rankAfter = this.rankOf(a.id);
     if (!this.admin.frozen && rankAfter < rankBefore && rankAfter <= 3 && a.trophies > 0) this.pushFeed(rankAfter === 1 ? `${a.name} is now #1!` : `${a.name} climbed to #${rankAfter}`, 'rank');
     // Zombies come back a little after the raiders leave.
-    const l = this.live.get(plot);
-    if (l) l.calmUntil = this.tickNo + CONFIG.waves.calm * CONFIG.tickRate;
+    if (this.live.has(plot)) this.startSiege(plot, { ramp: false, firstDelay: AFTER_RAID });
   }
 
-  /** Resolve due offline waves (at most `budget` per call, to keep each tick cheap). */
+  /** Resolve due offline sieges (at most `budget` per call, to keep each tick cheap). */
   tickOffline(budget: number) {
     const t = this.now();
     for (const [id, due] of this.nextOffline) {
@@ -610,31 +639,42 @@ export class GameServer {
       if (due > t) continue;
       const p = this.players.get(id);
       if (!p || this.live.has(p.plot) || this.raidByPlot.has(p.plot)) {
-        this.nextOffline.set(id, t + CONFIG.offline.waveEvery * 1000);
+        this.nextOffline.set(id, t + CONFIG.offline.every * 1000);
         continue;
       }
       budget--;
-      this.runOfflineWave(p);
-      this.nextOffline.set(id, t + CONFIG.offline.waveEvery * 1000);
+      this.runOffline(p);
+      this.nextOffline.set(id, t + CONFIG.offline.every * 1000);
     }
   }
 
-  runOfflineWave(p: PlayerRecord) {
+  /** Nobody is looking: play the next stretch of this base's siege headlessly at the coarse tick rate. */
+  runOffline(p: PlayerRecord) {
     p.waveNo++;
-    const w = new ZombieWave(p.base, seedOf(p.id, p.waveNo), getWorld().plots[p.plot]!, this.defenceBoost(p));
-    w.runToEnd();
+    const s = new Siege(p.base, getWorld().plots[p.plot]!, seedOf(p.id, p.waveNo), p.siege!, { defenceBoost: this.defenceBoost(p), coarse: true, ramp: false, firstDelay: 0 });
+    s.counting = false;
+    s.runFor(CONFIG.offline.every);
     const room = Math.max(0, CONFIG.offline.bankCap - p.bank);
-    const banked = Math.min(room, w.coins);
+    const banked = Math.min(room, s.coins);
     p.bank += banked;
-    const lost = w.breached ? breachLoss(p.coins) : 0;
-    p.coins -= lost;
+    let lost = 0;
+    let surges = 0;
+    for (const e of s.events) {
+      if (e.type === 'surge') continue;
+      surges++;
+      if (e.type === 'breach') {
+        const l = breachLoss(p.coins);
+        p.coins -= l;
+        lost += l;
+      }
+    }
     p.offline = {
       ...p.offline,
-      waves: p.offline.waves + 1,
-      breaches: p.offline.breaches + (w.breached ? 1 : 0),
+      waves: p.offline.waves + surges,
+      breaches: p.offline.breaches + s.breaches,
       coinsEarned: p.offline.coinsEarned + banked,
       coinsLost: p.offline.coinsLost + lost,
-      capped: p.offline.capped || banked < w.coins,
+      capped: p.offline.capped || banked < s.coins,
     };
     this.save(p);
     this.markDirty(p.plot);
@@ -752,6 +792,7 @@ export class GameServer {
     }
     const g = grantCrate(p.boosts, c.rarity, t, Math.random());
     p.boosts = g.boosts;
+    this.refreshSiege(p);
     p.coins += g.coins;
     c.claimedBy = { id: p.id, name: p.name };
     c.reward = g.text;
@@ -785,8 +826,8 @@ export class GameServer {
   }
 
   /**
-   * Pause: no waves, raids, offline waves or crates, and players can't act (they can still look).
-   * On resume, every wall-clock timer (crate, shields, immunity, defence boosts, offline waves) is
+   * Pause: no sieges, raids, offline sieges or crates, and players can't act (they can still look).
+   * On resume, every wall-clock timer (crate, shields, immunity, defence boosts, offline sieges) is
    * pushed back by the pause, so nobody loses protection or a crate to the break.
    */
   setPaused(on: boolean) {
@@ -844,18 +885,11 @@ export class GameServer {
     p.boosts = {};
     p.bank = 0;
     p.offline = emptyOffline();
+    p.siege = newDirector();
     if (this.admin.frozen) this.admin.frozen[id] = 0;
     this.save(p);
-    // A wave running there was built from the old base: stop it; the next one uses the new base.
-    const l = this.live.get(p.plot);
-    if (l) {
-      l.phase = 'calm';
-      l.wave = null;
-      l.warned = false;
-      l.calmUntil = this.tickNo + CONFIG.waves.calm * CONFIG.tickRate;
-      this.setWaveFlag(p.plot, 0);
-      this.out.toBase(p.plot, 'wave', this.baseLive(p.plot));
-    }
+    // A siege running there was built from the old base: start over with the new one.
+    if (this.live.has(p.plot)) this.startSiege(p.plot);
     this.markDirty(p.plot);
     this.out.toPlayer(id, 'player', this.view(p));
     return this.view(p);
