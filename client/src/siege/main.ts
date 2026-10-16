@@ -22,10 +22,12 @@ import {
   type RaidStatus,
   type RaiderKind,
 } from '@siege/shared';
-import { Net, saveToken } from './net.ts';
+import { SERVER_URL } from './config.ts';
+import { Net, saveToken, savedToken } from './net.ts';
 import { loadSprites } from './sprites.ts';
 import { bindLiveStream } from './stream.ts';
 import { THEME, baseColor, loadFonts } from './theme.ts';
+import { TitleScreen } from './title.ts';
 import { CRATE_SPOT, WorldView } from './world.ts';
 
 // Game page controller: login, HUD, the shared map (pan / zoom / tap), base cards, raids, lists.
@@ -58,6 +60,11 @@ let crate: CrateView | null = null;
 let panelHtml = '';
 /** Organiser switches: game paused, leaderboard frozen. */
 let org = { paused: false, frozen: false };
+/** The arcade title screen (shown to anyone not logged in). */
+const title = new TitleScreen($('title'), {
+  login: (name, roll) => net.login(name, roll),
+  summaryUrl: `${SERVER_URL ?? ''}/api/summary`,
+});
 
 const serverNow = () => Date.now() + skew;
 
@@ -65,7 +72,7 @@ const serverNow = () => Date.now() + skew;
 
 async function boot() {
   try {
-    const [sprites] = await Promise.all([loadSprites((d, t) => ($('connecting').textContent = `Loading art ${Math.round((100 * d) / t)}%`)), loadFonts()]);
+    const [sprites] = await Promise.all([loadSprites((d, t) => ($('connecting').textContent = `Loading art ${Math.round((100 * d) / t)}%`)), loadFonts().then(() => title.init())]);
     view = new WorldView($<HTMLCanvasElement>('board'), sprites);
     view.prebake();
   } catch (e) {
@@ -79,6 +86,8 @@ async function boot() {
   new ResizeObserver(() => view.fit(wrap.clientWidth, wrap.clientHeight)).observe(wrap);
   view.fit(wrap.clientWidth, wrap.clientHeight);
   net = new Net();
+  // New visitors get the title screen straight away (even before the server answers).
+  if (!savedToken()) showTitle();
   bindInput();
   bindMinimap();
   bindNet();
@@ -89,6 +98,11 @@ async function boot() {
     renderChips();
   }, 500);
   requestAnimationFrame(frame);
+}
+
+function showTitle() {
+  $('connecting').hidden = true;
+  title.show();
 }
 
 function frame(now: number) {
@@ -103,15 +117,16 @@ function frame(now: number) {
 
 function bindNet() {
   const s = net.socket;
+  // The "connecting" overlay is for players in the game; the title screen handles being offline itself.
   s.on('connect', () => ($('connecting').hidden = true));
   s.on('disconnect', () => {
     $('connecting').textContent = 'Connection lost. Reconnecting...';
-    $('connecting').hidden = false;
+    $('connecting').hidden = title.shown;
     watchKey = '';
   });
   s.on('connect_error', () => {
     $('connecting').textContent = 'Cannot reach the game server. Retrying...';
-    $('connecting').hidden = false;
+    $('connecting').hidden = title.shown;
   });
   s.on('needLogin', () => {
     player = null;
@@ -123,11 +138,11 @@ function bindNet() {
     view.deployPlot = -1;
     view.live.clear();
     for (const id of ['hud', 'panel', 'wave-banner', 'map-tools', 'attack-bar']) $(id).hidden = true;
-    $('login').hidden = false;
+    showTitle();
   });
   s.on('welcome', (w: { token: string; player: PlayerView; offline: (OfflineSummary & { credited: number }) | null; feed: FeedItem[]; crate: CrateView | null }) => {
     saveToken(w.token);
-    $('login').hidden = true;
+    title.hide();
     $('hud').hidden = false;
     $('wave-banner').hidden = false;
     $('map-tools').hidden = false;
@@ -227,16 +242,6 @@ function updateWatch() {
 // ---- input --------------------------------------------------------------------------------------
 
 function bindInput() {
-  $('login-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const btn = $<HTMLButtonElement>('login-go');
-    btn.disabled = true;
-    $('login-error').textContent = '';
-    const r = await net.login($<HTMLInputElement>('login-name').value, $<HTMLInputElement>('login-roll').value);
-    btn.disabled = false;
-    if (!r.ok) $('login-error').textContent = r.error;
-  });
-
   // Map input: drag pans (with momentum on release), two fingers pinch-zoom around their centre,
   // the wheel zooms toward the cursor. Movement is applied straight to the camera; the animation
   // frame draws it, so nothing here waits on rendering.

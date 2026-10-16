@@ -100,6 +100,13 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
+/** Load one sheet from the art pack (path relative to the pack root; frame count from "SheetN"). */
+export async function loadSheet(file: string): Promise<Sheet> {
+  const img = await loadImage(url(file));
+  const frames = Number(/Sheet(\d+)/.exec(file)?.[1] ?? 1);
+  return { img, frames, fw: Math.floor(img.width / frames), fh: img.height };
+}
+
 export async function loadSprites(onProgress?: (done: number, total: number) => void): Promise<Sprites> {
   const named = Object.entries(FILES) as [SpriteKey, string][];
   const total = named.length + PROP_FILES.length + GRAVES.length;

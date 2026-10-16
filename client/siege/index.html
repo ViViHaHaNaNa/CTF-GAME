@@ -52,16 +52,18 @@
         <button id="logout-btn">Log out</button>
         <button id="close-menu">Close</button>
       </div>
-      <section class="login" id="login" hidden>
-        <h1>Code Siege</h1>
-        <p class="lead">Hold your base. Raid your rivals. Survive the swarm.</p>
-        <form id="login-form" autocomplete="off">
-          <label>Display name<input id="login-name" maxlength="16" required autocapitalize="words" /></label>
-          <label>Roll number<input id="login-roll" maxlength="20" required autocapitalize="characters" inputmode="text" /></label>
-          <button type="submit" id="login-go">Enter the siege</button>
-          <p class="error" id="login-error" role="alert"></p>
-          <p class="hint">One base per roll number. Use the same name and roll number to come back on any device.</p>
-        </form>
+      <section class="title" id="title" hidden aria-label="Code Siege title screen">
+        <canvas id="title-canvas" aria-hidden="true"></canvas>
+        <div class="title-crt" aria-hidden="true"></div>
+        <input id="title-name" class="title-input" maxlength="16" autocomplete="off" autocapitalize="words" spellcheck="false" aria-label="Your name" hidden />
+        <input id="title-roll" class="title-input" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Roll number" hidden />
+        <nav class="sr-only" aria-label="Main menu">
+          <button data-title-item="0">Start game</button>
+          <button data-title-item="1">How to play</button>
+          <button data-title-item="2">Leaderboard</button>
+          <button data-title-item="3">Live Arena</button>
+        </nav>
+        <p class="sr-only" id="title-live" aria-live="polite"></p>
       </section>
       <div class="connecting" id="connecting">Connecting...</div>
     </div>

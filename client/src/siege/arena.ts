@@ -19,6 +19,8 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 let view: WorldView;
 let skew = 0;
 let projector = new URLSearchParams(location.search).has('projector');
+/** ?board: just the big leaderboard (no battles), e.g. from the title screen's LEADERBOARD item. */
+const boardOnly = new URLSearchParams(location.search).has('board');
 /** Plot of the battle on screen (-1 = none). */
 let current = -1;
 let switchedAt = 0;
@@ -44,6 +46,11 @@ async function boot() {
   new ResizeObserver(() => view.fit(wrap.clientWidth, wrap.clientHeight)).observe(wrap);
   view.fit(wrap.clientWidth, wrap.clientHeight);
   setProjector(projector);
+  if (boardOnly) {
+    document.querySelector('#idle h2')!.textContent = 'Leaderboard';
+    document.querySelector('#idle p')!.textContent = 'Top survivors by trophies';
+    document.title = 'Leaderboard · Code Siege';
+  }
 
   const socket = spectatorSocket();
   bindLiveStream(socket, view);
@@ -121,6 +128,7 @@ function setProjector(on: boolean) {
 }
 
 function liveBattles(): BaseSummary[] {
+  if (boardOnly) return [];
   return [...view.bases.values()].filter((b) => b.raid).sort((a, b) => a.raid - b.raid);
 }
 
@@ -233,7 +241,7 @@ function renderSide() {
   const ranked = [...view.bases.values()].sort((a, b) => b.trophies - a.trophies || a.id - b.id);
   const row = (b: BaseSummary, i: number) => `<li><span class="rank">#${i + 1}</span><span class="nm">${esc(b.name)} <small>Lv${b.hq}</small></span><span class="val">♛ ${b.trophies}</span></li>`;
   put('ranks', ranked.slice(0, 10).map(row).join('') || '<li class="empty">No players yet.</li>');
-  put('big-ranks', ranked.slice(0, projector ? 10 : 5).map(row).join(''));
+  put('big-ranks', ranked.slice(0, projector || boardOnly ? 10 : 5).map(row).join(''));
   put('feed-list', [...feed].reverse().slice(0, 8).map((f) => `<li class="${f.kind}">${esc(f.text)}</li>`).join('') || '<li class="empty">Nothing yet.</li>');
   let box = '<p class="empty">The next crate drops soon.</p>';
   if (crate && crate.claimedBy) box = `<p><span class="rarity r-${crate.rarity}">${crate.rarity}</span> cracked by <b>${esc(crate.claimedBy)}</b>: ${esc(crate.reward ?? '')}</p><p class="empty">Answer: <code>${esc(crate.answer ?? '')}</code> · next crate in <span data-until="${crate.expiresAt}"></span></p>`;

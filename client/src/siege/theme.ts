@@ -11,6 +11,9 @@ function css(name: string): string {
   return v;
 }
 const num = (name: string) => Number(css(name));
+/** Read any theme variable (for screens with their own palette, like the title). */
+export const themeVar = css;
+export const themeNum = num;
 /** "r, g, b" triplet. */
 const rgb = (name: string) => css(name).split(',').map((x) => Number(x.trim())) as [number, number, number];
 

@@ -61,6 +61,16 @@ const stats = () => ({
 });
 
 app.get('/api/health', async () => ({ ok: true, players: game.players.size, ...stats() }));
+// Public live stats for the title screen: top 3 by trophies (as the leaderboard shows them, so a
+// frozen board stays frozen) and how many players are online.
+app.get('/api/summary', async () => {
+  const top = [...game.players.values()]
+    .map((p) => game.summarize(p))
+    .sort((a, b) => b.trophies - a.trophies || a.id - b.id)
+    .slice(0, 3)
+    .map((s) => ({ name: s.name, trophies: s.trophies }));
+  return { top, online: sessions.counts().players, players: game.players.size };
+});
 registerAdmin(app, { game, sessions, store, passphrase: ADMIN_PASS, backupDir: BACKUP_DIR, stats });
 
 if (existsSync(join(CLIENT_DIST, 'index.html'))) {

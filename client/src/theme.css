@@ -14,6 +14,12 @@
   font-display: swap;
   size-adjust: 78%;
 }
+/* The same arcade face at its true size, for pixel-exact canvas text (8 px grid). */
+@font-face {
+  font-family: 'Siege Pixel';
+  src: url('/fonts/press-start-2p-latin-400-normal.woff2') format('woff2');
+  font-display: block;
+}
 @font-face {
   font-family: 'Siege Sans';
   src: url('/fonts/pixelify-sans-latin-400-normal.woff2') format('woff2');
@@ -109,6 +115,52 @@
   --login-width: 340px;
   --vignette: radial-gradient(ellipse at center, rgba(5, 10, 25, 0) 58%, rgba(5, 10, 25, 0.42) 100%);
   --login-glow: radial-gradient(ellipse at top, #24407a, var(--bg) 70%);
+
+  /* ---- title screen (one pixel canvas; see client/src/siege/title.ts) ---- */
+  --font-pixel: 'Siege Pixel', monospace;
+  --title-res-long: 320;      /* internal resolution: 320x180 landscape, 180x320 portrait */
+  --title-res-short: 180;
+  --title-bg: #05070d;        /* letterbox */
+  --title-sky-top: #0c1030;
+  --title-sky-mid: #3a1a4a;
+  --title-sky-low: #b4432a;
+  --title-skyline: #120c22;
+  --title-street: #233670;
+  --title-street-light: #2e4589;
+  --title-street-dark: #1a2857;
+  --title-kerb: #4a5f95;
+  --title-lane: #ffd23f;
+  --title-pavement: #6b5a6e;
+  --title-frame-dark: #0a0710;
+  --title-frame: #5a5f6e;
+  --title-frame-light: #a3a9b8;
+  --title-frame-rust: #8a4a2a;
+  --title-rivet: #d9dde6;
+  --title-skull: #f2ead8;
+  --title-skull-eyes: #c41e1e;
+  --title-panel: #0b1324;
+  --title-logo-1: #fff7c2;
+  --title-logo-2: #ffd23f;
+  --title-logo-3: #ff8a1c;
+  --title-logo-4: #e8341c;
+  --title-logo-5: #8c0f2a;
+  --title-logo-outline: #1a0508;
+  --title-logo-shadow: #000000;
+  --title-text: #f5f8ff;
+  --title-dim: #8a96b8;
+  --title-menu-on: #ffd23f;
+  --title-rank: #ffd23f;
+  --title-score: #7fd8ff;
+  --title-good: #5fe08a;
+  --title-error: #ff6b5a;
+  --title-blood: #b3122a;
+  --title-flash: #ffffff;
+  --title-ember: #ff8c28;
+  --title-field: #14203a;
+  --title-field-line: #4a63a3;
+  --title-cursor: #ffd23f;
+  --title-scanlines: repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0.28) 0, rgba(0, 0, 0, 0.28) 1px, rgba(0, 0, 0, 0) 1px, rgba(0, 0, 0, 0) 3px);
+  --title-crt-vignette: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 60%, rgba(0, 0, 0, 0.55) 100%);
 
   /* ---- projector (Live Arena big screen): readable from the back of the room ---- */
   --proj-title: 2rem;
