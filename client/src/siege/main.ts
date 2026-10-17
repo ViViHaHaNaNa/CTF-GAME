@@ -1403,8 +1403,7 @@ function renderBanner(now: number) {
 
 /** m:ss for a duration in ms (never negative). */
 function clockText(ms: number): string {
-  const s = Math.max(0, Math.ceil(ms / 1000));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  return clock(ms);
 }
 
 let pauseShown = '';
@@ -1524,9 +1523,13 @@ function stats(items: [string, string | number][]): string {
   return `<div class="stats">${items.map(([k, v]) => `<div>${esc(k)}<b>${esc(String(v))}</b></div>`).join('')}</div>`;
 }
 
+/** A countdown: 4:59, 1:05:00 past an hour, "2d 3h" past a day. */
 function clock(ms: number) {
   const s = Math.max(0, Math.ceil(ms / 1000));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  if (s >= 86_400) return `${Math.floor(s / 86_400)}d ${Math.floor((s % 86_400) / 3600)}h`;
+  if (s >= 3600) return `${Math.floor(s / 3600)}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
+  return `${Math.floor(s / 60)}:${pad(s % 60)}`;
 }
 
 function renderPanel() {

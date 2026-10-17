@@ -236,6 +236,24 @@ describe('commander taps', () => {
   });
 });
 
+describe('world summary', () => {
+  it("a player who joins later shows up on the other players' maps (even after their own screen got the whole world)", () => {
+    const { game, sent } = setup();
+    const a = game.login('First One', 'F1001');
+    game.connect(a.id);
+    game.flushSummaries();
+    sent.length = 0;
+    // The newcomer logs in and their screen gets the whole world (as on connect)...
+    const b = game.login('Late Comer', 'L1002');
+    game.connect(b.id);
+    game.worldSummary();
+    // ...and the next broadcast still tells everyone about the new base.
+    game.flushSummaries();
+    const bases = sent.filter((m) => m.ev === 'world' && m.to === 'all').flatMap((m) => (m.data as { bases: { id: number }[] }).bases);
+    expect(bases.map((x) => x.id)).toContain(b.id);
+  });
+});
+
 describe('development bots', () => {
   it('8 bots, one per Main Tower level, fully built, with a spread of states; removable like any account', () => {
     const { game } = setup();

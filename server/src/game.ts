@@ -153,6 +153,12 @@ export class GameServer {
   private pendingCoins = new Map<number, number>();
   private dirty = new Set<number>();
   private summaries = new Map<number, BaseSummary>();
+  /**
+   * What the last broadcast told everyone about each base (JSON). Kept apart from `summaries`: a screen
+   * connecting gets the whole world (worldSummary) without that counting as having told everyone else,
+   * or a player who just joined would never appear on the other players' maps.
+   */
+  private sent = new Map<number, string>();
   private raidSeq = 0;
   private crate: CrateMeta;
   /** Organiser controls (persisted in store meta "admin"). */
@@ -189,7 +195,11 @@ export class GameServer {
       // Spread the first offline sieges out so a restart doesn't run every base at once.
       this.nextOffline.set(p.id, t + CONFIG.offline.firstWithin * 1000 * Math.random());
     }
-    for (const p of this.players.values()) this.summaries.set(p.plot, this.summarize(p));
+    for (const p of this.players.values()) {
+      const s = this.summarize(p);
+      this.summaries.set(p.plot, s);
+      this.sent.set(p.plot, JSON.stringify(s));
+    }
     this.crate = store.getMeta<CrateMeta>('crates') ?? { seq: 0, used: [], current: null, nextAt: 0 };
     if (this.crate.nextAt < t && !this.admin.paused) {
       // Down past the drop time (or first run): the next crate comes shortly after starting.
@@ -1300,8 +1310,11 @@ export class GameServer {
       const p = this.ownerOf(plot);
       if (!p) continue;
       const next = this.summarize(p);
-      const prev = this.summaries.get(plot);
-      if (!prev || JSON.stringify(prev) !== JSON.stringify(next)) changed.push(next);
+      const json = JSON.stringify(next);
+      if (this.sent.get(plot) !== json) {
+        changed.push(next);
+        this.sent.set(plot, json);
+      }
       this.summaries.set(plot, next);
     }
     this.dirty.clear();
