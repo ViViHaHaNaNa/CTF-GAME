@@ -210,6 +210,18 @@ export class GameServer {
     this.store.savePlayer(p);
   }
 
+  /** Dev tools (the bot accounts): save a record changed from outside, and refresh what everyone sees of it. */
+  commitPlayer(p: PlayerRecord) {
+    this.save(p);
+    this.markDirty(p.plot);
+  }
+
+  /** A crate is out and nobody has claimed it yet. */
+  hasOpenCrate(): boolean {
+    const c = this.crate.current;
+    return !!c && !c.claimedBy && c.expiresAt > this.now();
+  }
+
   /** The free plot with the lowest registration order (centre of the map first). */
   private freePlot(): number {
     const free = getWorld()

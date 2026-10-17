@@ -90,7 +90,7 @@ async function startServer(): Promise<{ url: string; child: ChildProcess; dir: s
   const port = 3990 + Math.floor(Math.random() * 9);
   const child = spawn(process.execPath, ['--import', 'tsx', 'server/src/index.ts'], {
     cwd: ROOT,
-    env: { ...process.env, SIEGE_PORT: String(port), SIEGE_HOST: '127.0.0.1', SIEGE_DB: join(dir, 'load.db'), SIEGE_ADMIN_PASS: ADMIN_PASS, SIEGE_BACKUPS: join(dir, 'backups') },
+    env: { ...process.env, SIEGE_PORT: String(port), SIEGE_HOST: '127.0.0.1', SIEGE_DB: join(dir, 'load.db'), SIEGE_ADMIN_PASS: ADMIN_PASS, SIEGE_BACKUPS: join(dir, 'backups'), DEV_MODE: 'false' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   child.stderr!.on('data', (d: Buffer) => process.stderr.write(`[server] ${d}`));

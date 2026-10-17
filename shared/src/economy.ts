@@ -77,14 +77,15 @@ export function quote(base: BaseState, a: BaseAction): Quote {
 
 /**
  * The basic base: guidance (gentler surges, one side, prompts) runs until every item is done, then
- * ends for good. All read straight from the base, so nothing extra needs saving.
+ * ends for good. All read straight from the base, so nothing extra needs saving. (The checklist's
+ * wording is UI copy: client/src/siege/copy.ts, by id.)
  */
-export const BASIC_BASE: { id: string; label: string; done: (b: BaseState) => boolean }[] = [
-  { id: 'post', label: 'Buy your first post', done: (b) => b.posts.filter(Boolean).length >= 2 },
-  { id: 'slots', label: 'Fill both starter post slots', done: (b) => b.posts.slice(0, CONFIG.hq.slotsUnlocked[0]).every(Boolean) },
-  { id: 'hq', label: 'Upgrade the Main Tower to level 2', done: (b) => b.hq >= 2 },
-  { id: 'postUp', label: 'Upgrade a post', done: (b) => b.posts.some((p) => !!p && p.level >= 2) },
-  { id: 'walls', label: 'Upgrade the walls', done: (b) => b.walls >= 2 },
+export const BASIC_BASE: { id: string; done: (b: BaseState) => boolean }[] = [
+  { id: 'post', done: (b) => b.posts.filter(Boolean).length >= 2 },
+  { id: 'slots', done: (b) => b.posts.slice(0, CONFIG.hq.slotsUnlocked[0]).every(Boolean) },
+  { id: 'hq', done: (b) => b.hq >= 2 },
+  { id: 'postUp', done: (b) => b.posts.some((p) => !!p && p.level >= 2) },
+  { id: 'walls', done: (b) => b.walls >= 2 },
 ];
 
 export function basicBaseDone(b: BaseState): boolean {

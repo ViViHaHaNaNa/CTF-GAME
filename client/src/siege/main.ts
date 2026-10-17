@@ -46,6 +46,7 @@ import { bindLiveStream, type SiegeMessage, type TapMessage } from './stream.ts'
 import { THEME, baseColor, loadFonts } from './theme.ts';
 import { TitleScreen } from './title.ts';
 import { CRATE_SPOT, WorldView } from './world.ts';
+import { COACH, OBJECTIVE_LABEL, POST_NAME, POWER_COPY, POWER_NAME, RAIDER_NAME, SIDE_LABEL, WEAPON_NAME } from './copy.ts';
 
 // Game page controller: login, HUD, the shared map (pan / zoom / tap), base cards, raids, lists.
 // Everything shown comes from the server; buttons only send intents.
@@ -54,8 +55,6 @@ type PanelMode = 'none' | 'mine' | 'other' | 'ranks' | 'live' | 'crate';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const world = getWorld();
-const POST_NAME: Record<PostType, string> = { pistol: 'Pistol post', gun: 'Gun post', shotgun: 'Shotgun post' };
-const RAIDER_NAME: Record<RaiderKind, string> = { r_bat: 'Bat', r_pistol: 'Pistol', r_helmet: 'Brute', r_shotgun: 'Shotgun' };
 const WATCH_MAX = 6;
 
 let player: PlayerView | null = null;
@@ -110,7 +109,6 @@ let squadKind: RaiderKind = (() => {
   return 'r_helmet';
 })();
 const CMD = CONFIG.commander;
-const WEAPON_NAME = { pistol: 'Pistol', gun: 'Gun', shotgun: 'Shotgun' } as const;
 /** The arcade title screen (shown to anyone not logged in). */
 const title = new TitleScreen($('title'), {
   login: (name, roll) => net.login(name, roll),
@@ -806,7 +804,6 @@ function reloadGun() {
   net.reload();
 }
 
-const POWER_NAME: Record<AbilityId, string> = { airstrike: 'Airstrike', molotov: 'Molotov', squad: 'Squad member', ultimate: 'Carpet bomb' };
 
 /** Is this power locked, or cooling down? A toast says so (true = can't use it now). */
 function powerBlocked(id: AbilityId, readyAt: number): boolean {
@@ -1164,13 +1161,6 @@ function setPlayer(p: PlayerView) {
 /** Small status chips under the name: immunity/shield and active boosts. */
 // ---- the walkthrough --------------------------------------------------------------------------------------
 
-const COACH = [
-  '',
-  'Tap the zombies to shoot them!',
-  'Nice shooting! Keep tapping, your posts help too.',
-  'Held! Now buy a post: tap a glowing + slot in your base.',
-  "You're ready. Watch the arrows: they show where the next surge comes from.",
-];
 
 /** Show walkthrough prompt `step` (0 hides it). */
 function coach(step: number) {
@@ -1247,7 +1237,7 @@ function renderObjectives() {
   const el = $('objectives');
   if (el.hidden !== done) el.hidden = done;
   if (done) return;
-  const html = BASIC_BASE.map((i) => `<li class="${i.done(player!.base) ? 'done' : ''}">${esc(i.label)}</li>`).join('');
+  const html = BASIC_BASE.map((i) => `<li class="${i.done(player!.base) ? 'done' : ''}">${esc(OBJECTIVE_LABEL[i.id] ?? i.id)}</li>`).join('');
   if ($('objectives-list').innerHTML !== html) $('objectives-list').innerHTML = html;
   const count = `${BASIC_BASE.filter((i) => i.done(player!.base)).length}/${BASIC_BASE.length}`;
   if ($('objectives-count').textContent !== count) $('objectives-count').textContent = count;
@@ -1358,7 +1348,6 @@ function renderHud(delta = 0) {
   }
 }
 
-const SIDE_LABEL = ['north', 'east', 'south', 'west'];
 
 function renderBanner(now: number) {
   if (!player) return;
@@ -1665,7 +1654,7 @@ function minePanel(): string {
       if (moreSlots > 0) unlocks.push(`+${moreSlots} post slot`);
       for (const t of POST_TYPES) if (CONFIG.hq.postUnlock[t] === next) unlocks.push(`${POST_NAME[t]}s`);
       for (const k of RAIDER_KINDS) if (CONFIG.pvp.raiders[k].unlockHq === next) unlocks.push(`${RAIDER_NAME[k]} raiders`);
-      for (const pw of powersUnlockedAt(next)) unlocks.push(`${pw.icon} ${pw.name}`);
+      for (const pw of powersUnlockedAt(next)) unlocks.push(`${POWER_COPY[pw.id].icon} ${POWER_COPY[pw.id].name}`);
       unlocks.push(`posts & walls up to Lv ${next}`);
     }
     return `${head(`Main Tower · Lv ${base.hq}`)}<p class="sub">The heart of your base. If zombies destroy it you lose some coins; raiders who destroy it win. Its level caps everything else.</p>${stats([
@@ -1728,7 +1717,8 @@ function commanderCard(base: BaseState): string {
   const powers = POWERS.map((pw) => {
     const locked = base.hq < pw.unlockHq;
     const tag = locked ? `🔒 Lv ${pw.unlockHq}` : pw.kind === 'weapon' ? ((base.cmd ?? 0) >= COMMANDER_WEAPONS.indexOf(pw.id as (typeof COMMANDER_WEAPONS)[number]) ? 'Armed' : 'Buy above') : 'Ready';
-    return `<li class="power${locked ? ' locked' : ''}"><span class="power-icon">${pw.icon}</span><span><b>${esc(pw.name)}</b><small>${esc(pw.desc)}</small></span><em>${tag}</em></li>`;
+    const c = POWER_COPY[pw.id];
+    return `<li class="power${locked ? ' locked' : ''}"><span class="power-icon">${c.icon}</span><span><b>${esc(c.name)}</b><small>${esc(c.desc)}</small></span><em>${tag}</em></li>`;
   }).join('');
   const squad = abilityUnlocked(base.hq, 'squad')
     ? `<p class="sub">Squad member: pick who answers your call (your raider roster).</p><div class="squad-pick">${RAIDER_KINDS.map((k) => `<button class="troop ${k === squadKind ? 'on' : ''}" data-squad="${k}" ${raiderUnlocked(k, base.hq) ? '' : 'disabled'}>${RAIDER_NAME[k]}</button>`).join('')}</div>`
@@ -1743,7 +1733,7 @@ function commanderCard(base: BaseState): string {
 /** The "New power unlocked!" moment after a Main Tower upgrade. */
 function showUnlocked(list: PowerInfo[]) {
   const el = $('unlock');
-  el.innerHTML = `<div class="unlock-card"><p class="unlock-title">New power unlocked!</p>${list.map((p) => `<div class="unlock-item"><span class="unlock-icon">${p.icon}</span><span><b>${esc(p.name)}</b><small>${esc(p.desc)}</small></span></div>`).join('')}<p class="unlock-tap">Tap to continue</p></div>`;
+  el.innerHTML = `<div class="unlock-card"><p class="unlock-title">New power unlocked!</p>${list.map((p) => POWER_COPY[p.id]).map((c) => `<div class="unlock-item"><span class="unlock-icon">${c.icon}</span><span><b>${esc(c.name)}</b><small>${esc(c.desc)}</small></span></div>`).join('')}<p class="unlock-tap">Tap to continue</p></div>`;
   el.hidden = false;
   el.classList.remove('show');
   void el.offsetWidth;

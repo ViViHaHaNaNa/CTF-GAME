@@ -1,6 +1,6 @@
 // Layout audit: screenshots every screen and state at five sizes and measures what overlaps.
 //
-//   npm run ui-audit -- --out layout-audit/after
+//   npm run ui-audit                (writes layout-audit/latest; --out <folder> for another)
 //
 // Starts a throwaway game server and the dev client on spare ports (a scratch database seeded with
 // worst-case players: a 20-character name, coins in the millions, every boost, Main Tower 8), then
@@ -25,7 +25,7 @@ const opt = (name: string, def: string) => {
   return i >= 0 && args[i + 1] ? args[i + 1]! : def;
 };
 const ROOT = resolve(import.meta.dirname, '../..');
-const OUT = resolve(ROOT, opt('out', 'layout-audit/run'));
+const OUT = resolve(ROOT, opt('out', 'layout-audit/latest'));
 const ONLY = opt('only', '');
 /** The client to audit (default this repo's; a worktree of an older commit for a "before" run). */
 const CLIENT_DIR = resolve(ROOT, opt('client', 'client'));
@@ -402,7 +402,7 @@ async function main() {
   const dir = mkdtempSync(join(tmpdir(), 'siege-ui-audit-'));
   const db = join(dir, 'audit.db');
   seed(db);
-  const env = { SIEGE_PORT: String(SERVER_PORT), SIEGE_DB: db, SIEGE_BACKUPS: join(dir, 'backups'), SIEGE_ADMIN_PASS: PASS, SIEGE_HOST: '127.0.0.1' };
+  const env = { SIEGE_PORT: String(SERVER_PORT), SIEGE_DB: db, SIEGE_BACKUPS: join(dir, 'backups'), SIEGE_ADMIN_PASS: PASS, SIEGE_HOST: '127.0.0.1', DEV_MODE: 'false' };
   console.log(`UI audit → ${OUT}`);
   const server = await start('npx', ['tsx', 'src/index.ts'], join(ROOT, 'server'), env, /game server on port/);
   const client = await start('npx', ['vite', '--port', String(CLIENT_PORT), '--strictPort', '--host', '127.0.0.1'], CLIENT_DIR, env, /ready in|Local:/);

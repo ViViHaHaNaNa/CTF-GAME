@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch --clear-screen=false src/index.ts",
-    "start": "tsx src/index.ts"
+    "dev": "tsx watch --clear-screen=false src/index.ts --with-vite",
+    "start": "tsx src/index.ts --event"
   },
   "dependencies": {
     "@fastify/static": "^10.1.6",

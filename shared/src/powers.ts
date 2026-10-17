@@ -9,27 +9,26 @@ import type { BaseState } from './types.ts';
 export type AbilityId = 'airstrike' | 'molotov' | 'squad' | 'ultimate';
 export const ABILITIES: readonly AbilityId[] = ['airstrike', 'molotov', 'squad', 'ultimate'];
 
+/** A power and when it unlocks (its name, icon and description are UI copy: client/src/siege/copy.ts). */
 export interface PowerInfo {
   id: CommanderWeapon | AbilityId;
   kind: 'weapon' | 'ability';
-  name: string;
-  icon: string;
   unlockHq: number;
-  /** One line for the upgrade panel and the unlock moment. */
-  desc: string;
 }
 
 const C = CONFIG.commander;
 
 /** Every power past the starting pistol, in unlock order. */
-export const POWERS: PowerInfo[] = [
-  { id: 'gun', kind: 'weapon', name: 'Gun', icon: '🔫', unlockHq: C.weapons.gun.unlockHq, desc: 'Harder hits and a 24-round magazine for the Commander.' },
-  { id: 'airstrike', kind: 'ability', name: 'Airstrike', icon: '✈', unlockHq: C.airstrike.unlockHq, desc: 'Tap ✈ then a spot: a bomb flattens a whole clump.' },
-  { id: 'shotgun', kind: 'weapon', name: 'Shotgun', icon: '💥', unlockHq: C.weapons.shotgun.unlockHq, desc: 'Five pellets a shot: shreds crowds up close.' },
-  { id: 'molotov', kind: 'ability', name: 'Molotov', icon: '🔥', unlockHq: C.molotov.unlockHq, desc: 'Tap 🔥 then a spot: a fire that burns and slows zombies.' },
-  { id: 'squad', kind: 'ability', name: 'Squad member', icon: '🪖', unlockHq: C.squad.unlockHq, desc: 'Summon a survivor from your raider roster; tap or drag to send them.' },
-  { id: 'ultimate', kind: 'ability', name: 'Carpet bomb', icon: '💣', unlockHq: C.ultimate.unlockHq, desc: 'Your ultimate: bombs every zombie around your base.' },
-].sort((a, b) => a.unlockHq - b.unlockHq) as PowerInfo[];
+export const POWERS: PowerInfo[] = (
+  [
+    { id: 'gun', kind: 'weapon', unlockHq: C.weapons.gun.unlockHq },
+    { id: 'airstrike', kind: 'ability', unlockHq: C.airstrike.unlockHq },
+    { id: 'shotgun', kind: 'weapon', unlockHq: C.weapons.shotgun.unlockHq },
+    { id: 'molotov', kind: 'ability', unlockHq: C.molotov.unlockHq },
+    { id: 'squad', kind: 'ability', unlockHq: C.squad.unlockHq },
+    { id: 'ultimate', kind: 'ability', unlockHq: C.ultimate.unlockHq },
+  ] as PowerInfo[]
+).sort((a, b) => a.unlockHq - b.unlockHq);
 
 export function abilityUnlocked(hq: number, id: AbilityId): boolean {
   return hq >= C[id].unlockHq;

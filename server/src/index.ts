@@ -9,26 +9,23 @@ import { GameServer } from './game.ts';
 import { registerAdmin } from './admin.ts';
 import { attachSockets } from './net.ts';
 import { SqliteStore } from './store.ts';
+import { EVENT, SETTINGS } from './settings.ts';
+import { isBot, seedBots } from './bots.ts';
 
 // One process: the game (socket.io) plus, in production, the built website.
 // Binds 0.0.0.0 so phones on the venue wifi can reach it; prints the LAN URL at startup.
 
-// Optional settings file (gitignored): server/.env, e.g. SIEGE_ADMIN_PASS=... (see .env.example).
-// Real environment variables win over the file.
-try {
-  process.loadEnvFile(join(import.meta.dirname, '../.env'));
-} catch {
-  /* no .env file: defaults and real environment variables only */
-}
-
-const PORT = Number(process.env.SIEGE_PORT ?? 3000);
-const HOST = process.env.SIEGE_HOST ?? '0.0.0.0';
-const DB_FILE = process.env.SIEGE_DB ?? join(import.meta.dirname, '../data/siege.db');
+// Settings (ports, passphrase, database, DEV_MODE): see settings.ts and .env.example.
+// `npm start` (the event) passes --event; `npm run dev` passes --with-vite (Vite serves the site then).
+const PORT = SETTINGS.port;
+const HOST = SETTINGS.host;
+const DB_FILE = SETTINGS.db;
 const CLIENT_DIST = join(import.meta.dirname, '../../client/dist');
+const WITH_VITE = process.argv.includes('--with-vite');
 
-const ADMIN_PASS = process.env.SIEGE_ADMIN_PASS || undefined;
-const BACKUP_DIR = process.env.SIEGE_BACKUPS ?? join(import.meta.dirname, '../data/backups');
-const QUESTIONS_FILE = process.env.SIEGE_QUESTIONS ?? join(import.meta.dirname, '../data/questions.json');
+const ADMIN_PASS = SETTINGS.adminPass;
+const BACKUP_DIR = SETTINGS.backups;
+const QUESTIONS_FILE = SETTINGS.questions;
 const questions = JSON.parse(readFileSync(QUESTIONS_FILE, 'utf8')) as Question[];
 
 const store = new SqliteStore(DB_FILE);
@@ -45,6 +42,23 @@ const game = new GameServer(store, {
   toAll: (ev, data) => io.emit(ev, data),
 }, Date.now, questions);
 const sessions = attachSockets(io, game);
+
+// The real event never has bot accounts on its leaderboard.
+if (SETTINGS.devModeRefused) console.warn('\n  DEV_MODE is set but ignored: npm start is the event build (no bots, no dev helpers).');
+if (EVENT) {
+  const bots = [...game.players.values()].filter(isBot);
+  if (bots.length) {
+    console.error(`\n  This database has ${bots.length} bot account(s) (${bots.map((b) => b.name).join(', ')}).`);
+    console.error('  The event must not show them. Remove them first:  npm run bots -- --remove   (or npm run reset for a fresh world)\n');
+    process.exit(1);
+  }
+}
+// DEV_MODE: a fresh (empty) database gets the 8 bot accounts, and a crate is waiting to be claimed.
+let botsMade = 0;
+if (SETTINGS.devMode) {
+  if (game.players.size === 0) botsMade = seedBots(game);
+  if (!game.hasOpenCrate()) game.spawnCrate('rare');
+}
 
 // Loop health, measured over the last ~10 s: how long ticks take and how late the loop runs.
 const health = { tickAvgMs: 0, tickMaxMs: 0, lagMaxMs: 0, ticks: 0, errors: 0, since: Date.now() };
@@ -73,7 +87,8 @@ app.get('/api/summary', async () => {
 });
 registerAdmin(app, { game, sessions, store, passphrase: ADMIN_PASS, backupDir: BACKUP_DIR, stats });
 
-if (existsSync(join(CLIENT_DIST, 'index.html'))) {
+// The built site (npm start). During npm run dev, Vite serves the site instead (never a stale build).
+if (!WITH_VITE && existsSync(join(CLIENT_DIST, 'index.html'))) {
   await app.register(fastifyStatic, { root: CLIENT_DIST });
   // /siege/arena... loads the Live Arena; every other /siege/... route loads the game page.
   app.setNotFoundHandler((req, reply) => {
@@ -123,14 +138,17 @@ const VIRTUAL = /vethernet|wsl|hyper-v|virtual|vmware|vbox|docker|loopback|tails
 const lan = Object.entries(networkInterfaces())
   .flatMap(([name, list]) => (list ?? []).filter((i) => i.family === 'IPv4' && !i.internal).map((i) => ({ name, address: i.address, virtual: VIRTUAL.test(name) })))
   .sort((a, b) => Number(a.virtual) - Number(b.virtual));
-const served = existsSync(join(CLIENT_DIST, 'index.html'));
-// In dev the site is served by Vite (port 5173), not by this process.
-const sitePort = served ? PORT : Number(process.env.SIEGE_DEV_PORT ?? 5173);
+const served = !WITH_VITE && existsSync(join(CLIENT_DIST, 'index.html'));
+// In dev the site is served by Vite (SIEGE_DEV_PORT, 5173), not by this process.
+const sitePort = served ? PORT : SETTINGS.devPort;
 console.log(`\n  Code Siege game server on port ${PORT} (${game.players.size} players, ${questions.length} crate questions)${served ? '' : ' [dev: site served by Vite]'}`);
 console.log(`  This laptop: http://localhost:${sitePort}/siege/`);
 for (const ip of lan) console.log(`  LAN:         http://${ip.address}:${sitePort}/siege/   (${ip.name}${ip.virtual ? ', virtual: phones cannot use this' : ''})`);
 console.log(`  Live Arena:  /siege/arena/   Projector: /siege/arena/?projector=1`);
 console.log(ADMIN_PASS ? `  Admin:       /siege/admin/ (passphrase from SIEGE_ADMIN_PASS)` : '  Admin:       off (set SIEGE_ADMIN_PASS to turn it on)');
+if (SETTINGS.devMode) {
+  console.log(`  DEV_MODE:    on${botsMade ? ` (made ${botsMade} bot accounts)` : ''}. Bots: name "Bot Lv1".."Bot Lv8", roll BOT01..BOT08. Never for the event.`);
+}
 console.log('');
 
 function shutdown() {

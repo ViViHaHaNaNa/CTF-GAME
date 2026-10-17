@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { CONFIG, PLOT, checkAnswer, decodeSnapshot, getWorld, lootable, raiderCost, postId, postUpgradeCost, starBonus, vaultCapacity, type CrateView, type Question } from '@siege/shared';
 import { GameServer, type Outbox } from '../src/game.ts';
+import { BOT_ROLL, botBase, isBot, removeBots, seedBots } from '../src/bots.ts';
 import { SqliteStore } from '../src/store.ts';
 
 const dirs: string[] = [];
@@ -232,6 +233,44 @@ describe('commander taps', () => {
     const armed = game.act(p.id, { kind: 'commander' }).base;
     expect(armed).toMatchObject({ cmd: 1, cmdLv: 1 });
     expect(game.worldSummary().find((b) => b.id === p.id)!.cmd).toBe(1);
+  });
+});
+
+describe('development bots', () => {
+  it('8 bots, one per Main Tower level, fully built, with a spread of states; removable like any account', () => {
+    const { game } = setup();
+    expect(seedBots(game, 1_000_000)).toBe(8);
+    expect(seedBots(game, 1_000_000)).toBe(0); // only the missing ones
+    const bots = [...game.players.values()].filter(isBot).sort((a, b) => a.base.hq - b.base.hq);
+    expect(bots.map((b) => [b.name, b.roll, b.base.hq])).toEqual([1, 2, 3, 4, 5, 6, 7, 8].map((l) => [`Bot Lv${l}`, `BOT0${l}`, l]));
+    for (const b of bots) {
+      const l = b.base.hq;
+      expect(b.base.walls).toBe(l);
+      expect(b.base.posts.filter(Boolean).length).toBe(CONFIG.hq.slotsUnlocked[l - 1]);
+      expect(b.base.posts.every((p) => !p || p.level === l)).toBe(true);
+      expect(b.coins).toBeGreaterThan(0);
+      // Logs in with the predictable name and roll.
+      expect(game.login(b.name, b.roll).id).toBe(b.id);
+    }
+    // Weapons follow the unlocks: pistol, then gun at 3, shotgun at 5.
+    expect(botBase(2).cmd).toBe(0);
+    expect(botBase(3).cmd).toBe(1);
+    expect(botBase(5).cmd).toBe(2);
+    // Variety: both modes, different trophies, one boost, one paused (shown on the map), one immune.
+    expect(new Set(bots.map((b) => b.mode))).toEqual(new Set(['pve', 'pvp']));
+    expect(new Set(bots.map((b) => b.trophies)).size).toBe(8);
+    expect(bots.filter((b) => Object.keys(b.boosts).length).length).toBe(1);
+    expect(bots.filter((b) => b.pause?.state === 'paused').length).toBe(1);
+    expect(game.worldSummary().filter((s) => s.paused).length).toBe(1);
+    expect(bots.filter((b) => b.immuneUntil > 1_000_000).length).toBe(1);
+    // Ordinary accounts: raidable (the unshielded ones), on the leaderboard.
+    const a = game.login('Real Person', 'R1234');
+    game.players.get(a.id)!.coins = 5000;
+    game.setMode(a.id, 'pvp');
+    expect(game.raidBlock(a.id, bots[2]!.plot)).toBeNull();
+    expect(game.worldSummary().filter((s) => BOT_ROLL.test(game.players.get(s.id)!.roll)).length).toBe(8);
+    expect(removeBots(game)).toBe(8);
+    expect([...game.players.values()].map((p) => p.name)).toEqual(['Real Person']);
   });
 });
 

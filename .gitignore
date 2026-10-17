@@ -1,9 +1,26 @@
+# Dependencies and build output
 node_modules/
 client/dist/
-server/data/*.db
-server/data/*.db-*
-server/data/backups/
-.env
+dist/
+*.tsbuildinfo
 
-# Layout audit screenshots (regenerate with npm run ui-audit)
+# Settings and secrets (copy .env.example to .env)
+.env
+.env.*
+!.env.example
+
+# Game data: the database, its journal files and backups (never commit these)
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+server/data/backups/
+
+# Logs and OS clutter
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Layout audit screenshots (regenerate with npm run ui-audit; the reports are kept)
 layout-audit/**/*.png

@@ -148,6 +148,8 @@ export class AttractScene {
     blood: themeVar('--title-blood'),
     flash: themeVar('--title-flash'),
     ember: themeVar('--title-ember'),
+    shadow: themeVar('--title-unit-shadow'),
+    bossBar: themeVar('--title-boss-bar'),
   };
 
   constructor(private readonly art: TitleArt) {}
@@ -354,7 +356,7 @@ export class AttractScene {
     const x = Math.round(ox + s.x);
     const y = Math.round(oy + this.footY - 16);
     const idle = Math.floor(this.time * 8 + s.phase) % 6;
-    g.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    g.fillStyle = this.colors.shadow;
     g.fillRect(x - 1, y + 15, 12, 2);
     drawFrame(g, a.body, idle, x, y);
     if (s.helmet) drawFrame(g, a.helmet, idle, x + LAYER_OFFSET.helmet.x, y + LAYER_OFFSET.helmet.y);
@@ -397,7 +399,7 @@ export class AttractScene {
     const x = Math.round(ox + z.x - w / 2);
     const y = Math.round(oy + this.footY + z.dy - h + 1);
     if (z.state === 'die') g.globalAlpha = Math.max(0, Math.min(1, 1.4 - z.t));
-    g.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    g.fillStyle = this.colors.shadow;
     g.fillRect(x + 2 * k, y + h - 1, w - 4 * k, 2);
     const f = ((frame % sheet.frames) + sheet.frames) % sheet.frames;
     g.drawImage(sheet.img, f * sheet.fw, 0, sheet.fw, sheet.fh, x, y, w, h);
@@ -420,7 +422,7 @@ export class AttractScene {
     }
     g.globalAlpha = 1;
     if (z.boss && z.state !== 'die') {
-      g.fillStyle = '#000000';
+      g.fillStyle = this.colors.bossBar;
       g.fillRect(x + 2, y - 5, w - 4, 3);
       g.fillStyle = this.colors.blood;
       g.fillRect(x + 3, y - 4, Math.max(1, Math.round(((w - 6) * z.hp) / z.maxHp)), 1);

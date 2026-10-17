@@ -8,10 +8,11 @@
 import Database from 'better-sqlite3';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { SETTINGS } from '../src/settings.ts';
 import { backupFileName } from '../src/store.ts';
 
-const DB_FILE = process.env.SIEGE_DB ?? join(import.meta.dirname, '../data/siege.db');
-const DIR = process.env.SIEGE_BACKUPS ?? join(import.meta.dirname, '../data/backups');
+const DB_FILE = SETTINGS.db;
+const DIR = SETTINGS.backups;
 
 if (!existsSync(DB_FILE)) {
   console.error(`No database at ${DB_FILE}`);

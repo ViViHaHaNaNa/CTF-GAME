@@ -15,7 +15,9 @@
     "typecheck": "tsc -p shared && tsc -p server && tsc -p client",
     "loadtest": "tsx server/scripts/loadtest.ts",
     "backup": "tsx server/scripts/backup.ts",
-    "ui-audit": "tsx server/scripts/ui-audit.ts"
+    "ui-audit": "tsx server/scripts/ui-audit.ts",
+    "bots": "tsx server/scripts/bots.ts",
+    "reset": "tsx server/scripts/reset.ts"
   },
   "devDependencies": {
     "concurrently": "^9.2.5",
@@ -23,5 +25,8 @@
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"
+  },
+  "engines": {
+    "node": ">=22.12"
   }
 }

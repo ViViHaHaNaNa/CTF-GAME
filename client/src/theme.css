@@ -64,6 +64,7 @@
   --surface-2: #1c2b4d;       /* cards, inputs, list rows */
   --surface-3: #263a66;       /* hover / selected */
   --overlay: rgba(11, 19, 36, 0.86);   /* things floating over the map */
+  --backdrop: rgba(5, 10, 25, 0.55);   /* dims the page behind a dialog (menu, New power unlocked!) */
   --overlay-strong: rgba(11, 19, 36, 0.95);
   --code-bg: #0a1020;
   --line: #2e4374;
@@ -176,6 +177,8 @@
   --title-good: #5fe08a;
   --title-error: #ff6b5a;
   --title-blood: #b3122a;
+  --title-unit-shadow: rgba(0, 0, 0, 0.3);  /* shadows under the title screen's characters */
+  --title-boss-bar: #000000;         /* behind the title screen boss's health bar */
   --title-flash: #ffffff;
   --title-ember: #ff8c28;
   --title-field: #14203a;
