@@ -16,7 +16,7 @@ export interface BaseLive {
 
 export interface SiegeMessage {
   p: number;
-  type: 'surge' | 'held' | 'breach' | 'strike' | 'rage' | 'bomb' | 'squad';
+  type: 'surge' | 'held' | 'breach' | 'strike' | 'rage' | 'bomb' | 'squad' | 'paused';
   n: number;
   size?: number;
   sides?: number[];
@@ -85,7 +85,7 @@ export function bindLiveStream(socket: Socket, view: WorldView) {
       return;
     }
     if (m.type === 'rage' || m.type === 'bomb' || m.type === 'squad') return;
-    l.siege = { n: m.n, phase: m.type === 'surge' ? 'surge' : 'breather' };
+    l.siege = { n: m.n, phase: m.type === 'surge' ? 'surge' : m.type === 'paused' ? 'paused' : 'breather' };
   });
   // The Commander's shots: your own are drawn the moment you tap (prediction); everyone else's on arrival.
   socket.on('tap', (m: TapMessage) => {

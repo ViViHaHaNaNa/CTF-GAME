@@ -6,7 +6,9 @@
 //                                          (creates LOAD#### accounts there: never on event day)
 //
 // Each bot logs in, watches nearby bases (like a real screen), upgrades, raids other bots and
-// deploys raiders, answers crates, and now and then drops its connection and comes back.
+// deploys raiders, answers crates, and now and then drops its connection and comes back. Bots also
+// pause and resume their surges: spam (pause/resume as fast as the server lets them) and a pause
+// called mid-surge, which must take hold once that surge is over.
 // A few spectators watch raids like the Live Arena. At the end it prints latencies, server tick
 // timing and memory, and checks every crate had exactly one winner.
 
@@ -38,7 +40,9 @@ if (EXTERNAL && !args.includes('--yes')) {
 
 // ---- measurements ---------------------------------------------------------------------------------
 
-const lat: Record<string, number[]> = { login: [], act: [], deploy: [], reconnect: [], answer: [], airstrike: [] };
+const lat: Record<string, number[]> = { login: [], act: [], deploy: [], reconnect: [], answer: [], airstrike: [], pause: [] };
+/** Pauses: calls made, held at once, queued mid-surge, queued ones that then took hold, refused by the rules. */
+const pauses = { calls: 0, held: 0, pending: 0, tookHold: 0, refused: 0 };
 /** Commander taps: sent, hit results back, refusals by reason, kills. */
 const taps = { sent: 0, ok: 0, kills: 0, refused: new Map<string, number>(), firstAt: 0, lastAt: 0 };
 const errors = new Map<string, number>();
@@ -61,7 +65,7 @@ const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const pick = <T>(xs: T[]): T | undefined => xs[Math.floor(Math.random() * xs.length)];
 
 /** Expected rejections (rules of the game), not failures. */
-const NORMAL = /switch again in|Hold the surge|Finish your raid|being raided|Raid mode|No zombies to bomb|Airstrike ready in|more coins|locked|Max|Main Tower|Empty slot|already has a post|Shielded|Immune|under attack|current raid|own base|not raiding|raid is over|Troop limit|Wait|Too late|gone|Slow down|level/i;
+const NORMAL = /first surge is over|already paused|Already pausing|pause again in|not paused|Surges are paused|switch again in|Hold the surge|Finish your raid|being raided|Raid mode|No zombies to bomb|Airstrike ready in|more coins|locked|Max|Main Tower|Empty slot|already has a post|Shielded|Immune|under attack|current raid|own base|not raiding|raid is over|Troop limit|Wait|Too late|gone|Slow down|level/i;
 
 function ack<T>(s: Socket, ev: string, data: unknown, kind: string): Promise<({ ok: true } & T) | { ok: false; error: string } | null> {
   const t0 = performance.now();
@@ -118,6 +122,8 @@ class Bot {
   raiding: number | null = null;
   stopped = false;
   mode: 'pve' | 'pvp' = 'pve';
+  /** Our surge pause as the server last said. */
+  pause: 'pending' | 'paused' | null = null;
   /** Zombies on our own base from the latest snapshot (world tiles), to aim at. */
   targets: [number, number][] = [];
 
@@ -170,9 +176,12 @@ class Bot {
           taps.kills += r.kills ?? 0;
         } else taps.refused.set(r.error ?? '?', (taps.refused.get(r.error ?? '?') ?? 0) + 1);
       });
-      s.on('player', (p: { coins: number; base: { hq: number } }) => {
+      s.on('player', (p: { coins: number; base: { hq: number }; pause: { state: string } | null }) => {
         this.coins = p.coins;
         this.hq = p.base.hq;
+        // A pause queued mid-surge took hold when the surge ended.
+        if (this.pause === 'pending' && p.pause?.state === 'paused') pauses.tookHold++;
+        this.pause = (p.pause?.state as Bot['pause']) ?? null;
       });
       s.on('raidEnd', (r: { attacker: string }) => {
         if (r.attacker === `Bot ${this.n}`) this.raiding = null;
@@ -212,6 +221,37 @@ class Bot {
   async upgrade() {
     const action = pick([{ kind: 'walls' }, { kind: 'hq' }, { kind: 'build', slot: 1, type: 'pistol' }, { kind: 'post', slot: 0 }, { kind: 'post', slot: 1 }]);
     await ack(this.socket, 'act', action, 'act');
+  }
+
+  /** Pause or resume surges (whichever applies now); the server may refuse (walkthrough, cooldown...). */
+  async togglePause() {
+    pauses.calls++;
+    const r = await ack<{ player: { pause: { state: 'pending' | 'paused' } | null } }>(this.socket, this.pause ? 'resume' : 'pause', {}, 'pause');
+    if (!r) return;
+    if (!r.ok) {
+      pauses.refused++;
+      return;
+    }
+    const was = this.pause;
+    this.pause = r.player.pause?.state ?? null;
+    if (!was && this.pause === 'paused') pauses.held++;
+    if (!was && this.pause === 'pending') pauses.pending++;
+  }
+
+  /** Pause/resume spam: as fast as a thumb can tap, a few times in a row. */
+  async pauseSpam() {
+    for (let i = 0; i < 6 && !this.stopped; i++) {
+      await this.togglePause();
+      await sleep(rand(50, 250));
+    }
+  }
+
+  /** Pause while zombies are on the field (it should queue), and resume a while later. */
+  async midSurgePause() {
+    if (this.pause || !this.targets.length) return;
+    await this.togglePause();
+    await sleep(rand(3000, 9000));
+    if (this.pause === 'paused') await this.togglePause();
   }
 
   /** Switch Grind / Raid (the server may say not yet: cooldown, a surge, a raid). */
@@ -274,6 +314,8 @@ class Bot {
     while (!this.stopped && Date.now() < until) {
       const r = Math.random();
       if (r < 0.1 && this.mode === 'pvp' && this.raiding === null) await this.switchMode('pve');
+      else if (r < 0.16 && this.mode === 'pve') await this.pauseSpam();
+      else if (r < 0.24 && this.mode === 'pve') await this.midSurgePause();
       else if (r < 0.55) await this.upgrade();
       else if (r < 0.75) await this.raid();
       else if (r < 0.82) await this.reconnect(url);
@@ -351,6 +393,8 @@ async function main() {
   row('answer', lat.answer!);
   row('reconnect', lat.reconnect!);
   row('airstrike', lat.airstrike!);
+  row('pause', lat.pause!);
+  console.log(`  pauses: ${pauses.calls} pause/resume calls, ${pauses.held} held at once, ${pauses.pending} queued mid-surge (${pauses.tookHold} took hold after their surge), ${pauses.refused} refused by the rules`);
   console.log(`  raids ${raidsStarted}, raiders deployed ${deploys}, messages received ${received} (${Math.round(received / secs)}/s across all screens)`);
   const tapSecs = Math.max(1, (taps.lastAt - taps.firstAt) / 1000);
   console.log(`  commander taps: ${taps.sent} sent (${(taps.sent / tapSecs).toFixed(0)}/s across ${CLIENTS} bots), ${taps.ok} resolved as shots, ${taps.kills} zombies killed by taps; refused: ${[...taps.refused].map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}`);
@@ -368,6 +412,7 @@ async function main() {
     [`actions answered fast (p95 ${pct(lat.act!, 95)} ms < 250 ms)`, pct(lat.act!, 95) < 250],
     [`max-rate taps all answered (${taps.ok + [...taps.refused.values()].reduce((x, y) => x + y, 0)}/${taps.sent}; reconnects drop a few)`, taps.ok + [...taps.refused.values()].reduce((x, y) => x + y, 0) >= taps.sent * 0.9],
     [`deploys answered fast (p95 ${pct(lat.deploy!, 95)} ms < 250 ms)`, pct(lat.deploy!, 95) < 250],
+    [`pause/resume answered fast (p95 ${pct(lat.pause!, 95)} ms < 250 ms)`, pct(lat.pause!, 95) < 250],
     [`game ticks fit their 50 ms budget (max ${worst('tickMaxMs')} ms)`, worst('tickMaxMs') < 50],
     [`no tick errors (${worst('tickErrors')})`, worst('tickErrors') === 0],
     ['every crate had at most one winner', crates.every(([, w]) => w.length === 1)],

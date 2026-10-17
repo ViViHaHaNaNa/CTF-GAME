@@ -233,6 +233,8 @@ export class GameServer {
       boosts: liveBoosts(p.boosts, this.now()),
       mode: p.mode ?? CONFIG.modes.start,
       modeAt: p.modeAt ?? 0,
+      pause: p.pause ?? null,
+      pauseCooldownUntil: p.pauseCooldownUntil ?? 0,
     };
   }
 
@@ -367,11 +369,14 @@ export class GameServer {
     }
     p.waveNo++;
     const boost = this.defenceBoost(p);
-    const siege = new Siege(p.base, getWorld().plots[plot]!, seedOf(p.id, p.waveNo), p.siege!, { defenceBoost: boost, ramp: opts.ramp ?? this.isOnline(p.id), firstDelay: opts.firstDelay });
+    // A paused base stays paused across reconnects, raids and restarts (a pause still waiting for its
+    // surge to end takes hold now: a fresh siege has no surge in progress).
+    if (p.pause?.state === 'pending') this.pauseTakesHold(p);
+    const siege = new Siege(p.base, getWorld().plots[plot]!, seedOf(p.id, p.waveNo), p.siege!, { defenceBoost: boost, ramp: opts.ramp ?? this.isOnline(p.id), firstDelay: opts.firstDelay, paused: !!p.pause });
     siege.counting = this.isOnline(p.id);
     this.live.set(plot, { siege, boost });
     this.save(p);
-    this.setWaveFlag(plot, 1);
+    this.setWaveFlag(plot, p.pause ? 0 : 1);
     this.out.toBase(plot, 'wave', this.baseLive(plot));
   }
 
@@ -597,6 +602,7 @@ export class GameServer {
     this.assertRunning();
     const own = this.ownSiege(id);
     if (!own) throw new GameError('no_siege', 'No surge to call: switch to Grind mode');
+    if (own.p.pause) throw new GameError('paused', 'Surges are paused: resume first');
     const bonus = own.siege.callEarly();
     if (!bonus && own.siege.phase === 'surge') throw new GameError('in_surge', "A surge is already on");
     if (!bonus) throw new GameError('too_late', "It's coming anyway");
@@ -631,6 +637,59 @@ export class GameServer {
     return null;
   }
 
+  /**
+   * Pause surges on your base. Between surges the countdown freezes at once; during a surge the pause
+   * waits for the last zombie to die. Grind mode only, not during the walkthrough surge, and not again
+   * until the cooldown after the last pause has passed.
+   */
+  pauseSurges(id: number): PlayerView {
+    this.assertRunning();
+    const p = this.players.get(id);
+    if (!p) throw new GameError('no_player', 'Not logged in');
+    if ((p.mode ?? CONFIG.modes.start) !== 'pve') throw new GameError('pause_mode', 'Surges are already off in Raid mode');
+    if (p.pause) throw new GameError('paused', p.pause.state === 'paused' ? 'Surges are already paused' : 'Already pausing after this surge');
+    const siege = this.live.get(p.plot)?.siege;
+    if ((p.siege?.surges ?? 0) === 0 || siege?.tutorial) throw new GameError('pause_tutorial', 'You can pause once the first surge is over');
+    const left = (p.pauseCooldownUntil ?? 0) - this.now();
+    if (left > 0) throw new GameError('pause_cooldown', `You can pause again in ${Math.ceil(left / 1000)}s`);
+    if (siege && siege.pause() === 'pending') p.pause = { state: 'pending', until: 0 };
+    else this.pauseTakesHold(p);
+    this.save(p);
+    this.markDirty(p.plot);
+    return this.view(p);
+  }
+
+  /** Resume surges (or drop a pause that hasn't taken hold yet). `auto`: the pause ran out. */
+  resumeSurges(id: number, auto = false): PlayerView {
+    const p = this.players.get(id);
+    if (!p) throw new GameError('no_player', 'Not logged in');
+    if (!p.pause) throw new GameError('not_paused', 'Surges are not paused');
+    const held = p.pause.state === 'paused';
+    p.pause = undefined;
+    // Only a pause that actually held costs the cooldown.
+    if (held) p.pauseCooldownUntil = this.now() + CONFIG.pause.cooldown * 1000;
+    this.live.get(p.plot)?.siege?.resume();
+    this.save(p);
+    this.markDirty(p.plot);
+    const view = this.view(p);
+    if (auto) {
+      this.out.toPlayer(id, 'player', view);
+      this.out.toPlayer(id, 'paused', { auto: true });
+    }
+    return view;
+  }
+
+  /** The pause holds from now: its time limit starts. */
+  private pauseTakesHold(p: PlayerRecord) {
+    p.pause = { state: 'paused', until: this.now() + CONFIG.pause.maxSeconds * 1000 };
+  }
+
+  /** Pauses that ran out resume on their own (checked once a second). */
+  private expirePauses() {
+    const t = this.now();
+    for (const p of this.players.values()) if (p.pause?.state === 'paused' && t >= p.pause.until) this.resumeSurges(p.id, true);
+  }
+
   /** Grind (pve: swarms on, no raiding) or Raid (pvp: swarms paused, may raid). */
   setMode(id: number, raw: unknown): PlayerView {
     this.assertRunning();
@@ -643,6 +702,8 @@ export class GameServer {
     if (block) throw new GameError('mode_locked', block);
     p.mode = mode;
     p.modeAt = this.now();
+    // Raid mode already stops the surges: a pause doesn't carry over (and costs no cooldown).
+    p.pause = undefined;
     this.save(p);
     this.markDirty(p.plot);
     // Grind: the swarms come back within seconds. Raid: they stop (startSiege knows the mode).
@@ -688,6 +749,7 @@ export class GameServer {
       for (const [plot, l] of this.live) this.tickLive(plot, l);
       for (const r of this.raids.values()) this.tickRaid(r);
       if (this.tickNo % CONFIG.tickRate === 0) {
+        this.expirePauses();
         this.tickOffline(5);
         if (this.questions.length && this.now() >= this.crate.nextAt) this.spawnCrate();
       }
@@ -759,6 +821,13 @@ export class GameServer {
       else if (process.env.SIEGE_DEBUG) console.log(line);
     }
     if (e.type === 'surge') this.setWaveFlag(plot, 2);
+    if (e.type === 'paused') {
+      if (p.pause?.state !== 'paused') this.pauseTakesHold(p);
+      this.save(p);
+      this.markDirty(p.plot);
+      this.setWaveFlag(plot, 0);
+      this.out.toPlayer(p.id, 'player', this.view(p));
+    }
     if (e.type === 'breach') {
       this.flushCoins();
       const lost = breachLoss(p.coins, p.base.hq);
@@ -772,7 +841,7 @@ export class GameServer {
       msg.lost = lost;
       msg.total = p.coins;
     }
-    if (e.type !== 'surge' && !this.isOnline(p.id)) p.offline.waves++;
+    if ((e.type === 'held' || e.type === 'breach') && !this.isOnline(p.id)) p.offline.waves++;
     this.out.toBase(plot, 'siege', msg);
   }
 
@@ -860,7 +929,9 @@ export class GameServer {
       if (budget <= 0) break;
       if (due > t) continue;
       const p = this.players.get(id);
-      if (!p || this.live.has(p.plot) || this.raidByPlot.has(p.plot) || (p.mode ?? CONFIG.modes.start) !== 'pve') {
+      // Paused bases (pausing ones too: nothing to finish offline) have no surges and earn nothing until it ends.
+      if (p?.pause?.state === 'pending') this.pauseTakesHold(p);
+      if (!p || this.live.has(p.plot) || this.raidByPlot.has(p.plot) || (p.mode ?? CONFIG.modes.start) !== 'pve' || p.pause) {
         if (p) this.nextOffline.set(id, t + this.offlineGap(p));
         continue;
       }
@@ -1176,6 +1247,7 @@ export class GameServer {
       cmd: p.base.cmd ?? 0,
       mode: p.mode ?? CONFIG.modes.start,
       vaultFull: (p.mode ?? CONFIG.modes.start) === 'pve' && p.coins >= vaultCapacity(p.base.hq) * CONFIG.vault.fullAt,
+      paused: p.pause?.state === 'paused',
       trophies: this.admin.frozen ? (this.admin.frozen[p.id] ?? 0) : p.trophies,
       shield: p.shieldUntil > this.now() ? p.shieldUntil : 0,
       immune: p.immuneUntil > this.now() ? p.immuneUntil : 0,

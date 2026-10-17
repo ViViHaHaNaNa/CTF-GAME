@@ -133,7 +133,9 @@ export type SiegeEvent =
   /** The ultimate (carpet bomb) landed. */
   | { type: 'bomb'; kills: number; coins: number }
   /** The squad member went down. */
-  | { type: 'squad'; n: number; down: true };
+  | { type: 'squad'; n: number; down: true }
+  /** Surges are paused (at once between surges, or as soon as the surge in progress ended). */
+  | { type: 'paused'; n: number };
 
 /** The squad member's unit id in snapshots (clear of zombie ids and building ids). */
 export const ALLY_ID = 65500;
@@ -232,6 +234,8 @@ export interface SiegeOptions {
   ramp?: boolean;
   /** Seconds before the first surge (default CONFIG.siege.firstSurge). */
   firstDelay?: number;
+  /** Start with surges paused (a paused player's base, rebuilt after a reconnect or a restart). */
+  paused?: boolean;
 }
 
 interface Spawn {
@@ -242,7 +246,8 @@ interface Spawn {
   rise: boolean;
 }
 
-type Phase = 'start' | 'surge' | 'breather';
+/** 'paused': surges held, no countdown; 'resuming': the 3-2-1 before the countdown starts again. */
+type Phase = 'start' | 'surge' | 'breather' | 'paused' | 'resuming';
 
 export class Siege {
   readonly combat: Combat;
@@ -322,6 +327,34 @@ export class Siege {
     this.hqX = plot.x + HQ_RECT.x + HQ_RECT.w / 2;
     this.hqY = plot.y + HQ_RECT.y + HQ_RECT.h / 2;
     this.planIncoming();
+    if (opts.paused) this.phase = 'paused';
+  }
+
+  /** A pause asked for during a surge: it takes hold the moment the surge is over. */
+  pausePending = false;
+
+  /**
+   * Pause surges. Between surges the countdown freezes at once; during a surge the pause is queued
+   * and the surge plays out (zombies are never frozen mid-fight).
+   */
+  pause(): 'paused' | 'pending' {
+    if (this.phase === 'surge') {
+      this.pausePending = true;
+      return 'pending';
+    }
+    if (this.phase !== 'paused') {
+      this.phase = 'paused';
+      this.events.push({ type: 'paused', n: this.n });
+    }
+    return 'paused';
+  }
+
+  /** Resume: a queued pause is simply dropped; a held siege shows a 3-2-1, then the normal countdown starts. */
+  resume() {
+    this.pausePending = false;
+    if (this.phase !== 'paused') return;
+    this.phase = 'resuming';
+    this.until = this.combat.tick + this.ticks(CONFIG.pause.resumeCountdown);
   }
 
   private ticks(seconds: number) {
@@ -686,7 +719,7 @@ export class Siege {
 
   /** Seconds until the next surge (0 while one is on). */
   nextIn(): number {
-    return this.phase === 'surge' ? 0 : Math.max(0, (this.until - this.combat.tick) / this.combat.rate);
+    return this.phase === 'surge' || this.phase === 'paused' ? 0 : Math.max(0, (this.until - this.combat.tick) / this.combat.rate);
   }
 
   /** Main Tower health share (0..1). */
@@ -700,7 +733,8 @@ export class Siege {
     const c = this.combat;
     const S = CONFIG.siege;
     if (this.counting) this.director.played += 1 / c.rate;
-    if (this.phase !== 'surge' && c.tick >= this.until) this.startSurge();
+    if (this.phase === 'resuming' && c.tick >= this.until) this.countdown(true);
+    else if ((this.phase === 'start' || this.phase === 'breather') && c.tick >= this.until) this.startSurge();
     const rise = this.ticks(S.riseTime);
     if (this.phase === 'surge') {
       // The next pulse comes as soon as the field thins out (or after a while), never on a fixed clock.
@@ -774,7 +808,7 @@ export class Siege {
     const t0 = c.tick;
     const limit = t0 + this.ticks(CONFIG.siege.maxSurge + 90);
     const n = this.n;
-    while (c.tick < limit && !(this.n > n && this.phase === 'breather')) this.step();
+    while (c.tick < limit && !(this.n > n && (this.phase === 'breather' || this.phase === 'paused'))) this.step();
     return (c.tick - t0) / c.rate;
   }
 
@@ -836,9 +870,10 @@ export class Siege {
     const E = CONFIG.siege.callEarly;
     const left = this.nextIn();
     // When "call early" opens (seconds from now; 0 = now) and what it would pay right now.
-    const opensIn = this.phase === 'surge' ? -1 : Math.max(0, left - this.byLevel(CONFIG.siege.gap) * (1 - E.minWait));
-    const early = this.phase !== 'surge' && opensIn === 0 && left >= E.minLeft ? Math.round(left * this.byLevel(E.perSecond)) : 0;
-    return { n: this.n, phase: this.phase, nextIn: Math.ceil(left), incoming: this.incoming, tutorial: this.tutorial, guided: this.guided, early, earlyOpensIn: Math.ceil(opensIn), ...this.threat(), toughness: this.toughness, surges: this.director.surges };
+    const counting = this.phase === 'breather' || this.phase === 'start';
+    const opensIn = !counting ? -1 : Math.max(0, left - this.byLevel(CONFIG.siege.gap) * (1 - E.minWait));
+    const early = counting && opensIn === 0 && left >= E.minLeft ? Math.round(left * this.byLevel(E.perSecond)) : 0;
+    return { n: this.n, phase: this.phase, nextIn: Math.ceil(left), incoming: this.incoming, tutorial: this.tutorial, guided: this.guided, early, earlyOpensIn: Math.ceil(opensIn), ...this.threat(), toughness: this.toughness, surges: this.director.surges, pausing: this.pausePending };
   }
 
   /**
@@ -847,7 +882,7 @@ export class Siege {
    */
   callEarly(): number {
     const E = CONFIG.siege.callEarly;
-    if (this.phase === 'surge') return 0;
+    if (this.phase !== 'breather' && this.phase !== 'start') return 0;
     const left = (this.until - this.combat.tick) / this.combat.rate;
     if (left < E.minLeft || left > this.byLevel(CONFIG.siege.gap) * (1 - E.minWait) + 1e-6) return 0;
     this.until = this.combat.tick;
@@ -948,8 +983,11 @@ export class Siege {
     return { at, kind, x, y, rise: crack };
   }
 
-  /** Between surges: repair, then a regular countdown (by level) to the next one, whose sides are picked now. */
-  private countdown() {
+  /**
+   * Between surges: repair, then a regular countdown (by level) to the next one, whose sides are picked
+   * now. A queued pause takes hold here instead (`resumed`: the countdown after a pause, which never re-pauses).
+   */
+  private countdown(resumed = false) {
     const S = CONFIG.siege;
     const c = this.combat;
     this.queue = [];
@@ -964,6 +1002,11 @@ export class Siege {
     this.phase = 'breather';
     this.until = c.tick + this.ticks(this.byLevel(S.gap));
     this.planIncoming();
+    if (this.pausePending && !resumed) {
+      this.pausePending = false;
+      this.phase = 'paused';
+      this.events.push({ type: 'paused', n: this.n });
+    }
   }
 
   /** The ramp for this base: the player's, but never below its Main Tower level's floor. */

@@ -78,7 +78,7 @@ let panelHtml = '';
 /** Organiser switches: game paused, leaderboard frozen. */
 let org = { paused: false, frozen: false };
 /** Your own base's siege, from the server's 'pressure' updates (twice a second). */
-let siege: { n: number; phase: string; nextIn: number; sides: number[]; hq: number; at: number; incoming: number[]; tutorial: boolean; guided: boolean; early: number; earlyOpensIn: number; defence: number; next: number; horde: boolean } | null = null;
+let siege: { n: number; phase: string; nextIn: number; sides: number[]; hq: number; at: number; incoming: number[]; tutorial: boolean; guided: boolean; early: number; earlyOpensIn: number; defence: number; next: number; horde: boolean; surges: number } | null = null;
 /** Guidance is over (the basic base is built): show "Base ready!" once, the moment it happens. */
 let wasGuided: boolean | null = null;
 /** The walkthrough: which prompt is up (0 none), and since when. */
@@ -132,7 +132,7 @@ async function boot() {
   }
   $('connecting').textContent = 'Connecting...';
   // Dev-only handle for poking at the map from the browser console.
-  if (import.meta.env.DEV) (window as unknown as { siege: unknown }).siege = { view, tap: (x: number, y: number) => tap(x, y) };
+  if (import.meta.env.DEV) (window as unknown as { siege: unknown }).siege = { view, tap: (x: number, y: number) => tap(x, y), frame: (now: number) => frame(now) };
   const wrap = $('board-wrap');
   new ResizeObserver(() => view.fit(wrap.clientWidth, wrap.clientHeight)).observe(wrap);
   view.fit(wrap.clientWidth, wrap.clientHeight);
@@ -181,14 +181,33 @@ function showTitle() {
   title.show();
 }
 
+const FRAME_STEPS: [string, (now: number) => void][] = [
+  ['update', (now) => view.update(now)],
+  ['draw', (now) => view.draw(now)],
+  ['minimap', drawMinimap],
+  ['banner', renderBanner],
+  ['growls', growls],
+  ['cmdBar', renderCmdBar],
+  ['coach', tickCoach],
+];
+let lastFrame = 0;
+
 function frame(now: number) {
-  view.update(now);
-  view.draw(now);
-  drawMinimap(now);
-  renderBanner(now);
-  growls(now);
-  renderCmdBar(now);
-  tickCoach(now);
+  if (import.meta.env.DEV) {
+    // Dev only: a frame that took long (or a long gap since the last one) is logged with what took the time.
+    const took: string[] = [];
+    let total = 0;
+    for (const [name, step] of FRAME_STEPS) {
+      const t = performance.now();
+      step(now);
+      const d = performance.now() - t;
+      total += d;
+      if (d > 8) took.push(`${name} ${d.toFixed(0)}ms`);
+    }
+    const gap = lastFrame ? now - lastFrame : 0;
+    if (!document.hidden && (total > 50 || gap > 250)) console.warn(`[siege] slow frame: ${total.toFixed(0)}ms of work, ${gap.toFixed(0)}ms since the last frame${took.length ? ` (${took.join(', ')})` : ''}`);
+    lastFrame = now;
+  } else for (const [, step] of FRAME_STEPS) step(now);
   requestAnimationFrame(frame);
 }
 
@@ -292,6 +311,8 @@ function bindNet() {
     renderAttackBar();
   });
   s.on('player', (p: PlayerView) => setPlayer(p));
+  // A pause ran out on its own.
+  s.on('paused', () => toast('Pause over: surges are coming back', '', 3000));
   s.on('siege', (m: SiegeMessage) => {
     if (!player || m.p !== player.plot) return;
     const now = performance.now();
@@ -335,6 +356,9 @@ function bindNet() {
       flash = { text: `💣 Carpet bomb! ${m.kills} down${m.coins ? `, +${m.coins} coins` : ''}`, cls: 'held', until: now + 2500 };
       view.shake(S.breach * view.dpr, 700);
       sfx.boom();
+    } else if (m.type === 'paused') {
+      flash = null;
+      sfx.held();
     } else if (m.type === 'squad') {
       toast(`Your squad member is down. Back in ${CMD.squad.cooldown}s`, 'bad', 2500);
       gun.ally = 0;
@@ -349,7 +373,7 @@ function bindNet() {
       sfx.boom();
     }
   });
-  s.on('pressure', (m: { p: number; sides: number[]; hq: number; n: number; phase: string; nextIn: number; incoming: number[]; tutorial: boolean; guided: boolean; early: number; earlyOpensIn: number; defence: number; next: number; horde: boolean; toughness: number; ammo: { mag: number; reload: number; weapon: number; airIn: number; molIn: number; ultIn: number; squadIn: number; ally: number; combo: number } }) => {
+  s.on('pressure', (m: { p: number; sides: number[]; hq: number; n: number; phase: string; nextIn: number; incoming: number[]; tutorial: boolean; guided: boolean; early: number; earlyOpensIn: number; defence: number; next: number; horde: boolean; toughness: number; surges: number; ammo: { mag: number; reload: number; weapon: number; airIn: number; molIn: number; ultIn: number; squadIn: number; ally: number; combo: number } }) => {
     if (!player || m.p !== player.plot) return;
     const now = performance.now();
     // Resync the gun unless a shot is in flight (the prediction is fresher for a moment).
@@ -365,7 +389,7 @@ function bindNet() {
     gun.squadReadyAt = now + m.ammo.squadIn * 1000;
     gun.ally = m.ammo.ally;
     if (!gun.ally && aiming === 'order') aiming = null;
-    siege = { n: m.n, phase: m.phase, nextIn: m.nextIn, sides: m.sides, hq: m.hq, at: now, incoming: m.incoming, tutorial: m.tutorial, guided: m.guided, early: m.early, earlyOpensIn: m.earlyOpensIn, defence: m.defence, next: m.next, horde: m.horde };
+    siege = { n: m.n, phase: m.phase, nextIn: m.nextIn, sides: m.sides, hq: m.hq, at: now, incoming: m.incoming, tutorial: m.tutorial, guided: m.guided, early: m.early, earlyOpensIn: m.earlyOpensIn, defence: m.defence, next: m.next, horde: m.horde, surges: m.surges };
     view.pressure = { sides: m.sides, at: now };
     view.myToughness = m.toughness;
     // Incoming-side hints are part of guidance: shown for the whole countdown, and only while guided.
@@ -576,13 +600,16 @@ function bindInput() {
     const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-mode]');
     if (btn) void switchMode(btn.dataset.mode as 'pve' | 'pvp');
   });
+  $('pause-btn').addEventListener('click', () => void togglePause());
   $('strike-btn').addEventListener('click', () => toggleAim('airstrike'));
   $('molotov-btn').addEventListener('click', () => toggleAim('molotov'));
   $('squad-btn').addEventListener('click', () => void squadButton());
   $('ult-btn').addEventListener('click', () => void callUltimate());
   window.addEventListener('keydown', (e) => {
-    if (!player || (e.target as HTMLElement).closest('input, textarea') || !$('cmd-bar').offsetParent) return;
+    if (!player || (e.target as HTMLElement).closest('input, textarea')) return;
     const k = e.key.toLowerCase();
+    if (k === 'p' && !e.repeat) return void togglePause();
+    if (!$('cmd-bar').offsetParent) return;
     if (k === 'r') reloadGun();
     else if (k === 'q') toggleAim('airstrike');
     else if (k === 'e') toggleAim('molotov');
@@ -897,7 +924,7 @@ function renderCmdBar(now: number) {
   $('squad-hp').style.width = gun.ally > 0 ? `${gun.ally}%` : '0';
   // Call early: between surges; the button says when it opens and what it pays.
   const early = $<HTMLButtonElement>('early-btn');
-  const between = !!siege && siege.phase !== 'surge' && now - siege.at < 3000 && !siege.tutorial;
+  const between = !!siege && (siege.phase === 'breather' || siege.phase === 'start') && now - siege.at < 3000 && !siege.tutorial;
   if (early.hidden === between) early.hidden = !between;
   if (between) {
     const opens = Math.max(0, siege!.earlyOpensIn - Math.floor((now - siege!.at) / 1000));
@@ -1284,6 +1311,13 @@ function renderBanner(now: number) {
   } else if (player.mode === 'pvp') {
     text = myRaid ? `⚔ Raiding ${myRaid.defender}` : '⚔ Raid mode: the swarms hold off. Tap a rival base and attack!';
     cls = 'attack';
+  } else if (player.pause?.state === 'paused') {
+    text = `⏸ PAUSED · surges resume on their own in ${clockText(player.pause.until - serverNow())}`;
+    cls = 'paused';
+  } else if (siege && siege.phase === 'resuming' && now - siege.at < 3000) {
+    const left = Math.max(1, siege.nextIn - Math.floor((now - siege.at) / 1000));
+    text = `▶ Surges resume in ${left}...`;
+    cls = 'alarm';
   } else if (flash && now < flash.until) {
     text = flash.text;
     cls = flash.cls;
@@ -1310,6 +1344,69 @@ function renderBanner(now: number) {
     b.classList.toggle('attack', cls === 'attack');
     b.classList.toggle('alarm', cls === 'alarm');
     b.classList.toggle('held', cls === 'held');
+    b.classList.toggle('paused', cls === 'paused');
+  }
+  renderPauseButton(now);
+}
+
+/** m:ss for a duration in ms (never negative). */
+function clockText(ms: number): string {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+let pauseShown = '';
+/** The Pause/Resume button: Grind mode only, from surge 2, with the pause's time left or the cooldown. */
+function renderPauseButton(now: number) {
+  if (!player) return;
+  const btn = $<HTMLButtonElement>('pause-btn');
+  const show = player.mode === 'pve' && !myRaid && !org.paused;
+  let text = '';
+  let state = '';
+  let disabled = false;
+  if (show) {
+    const p = player.pause;
+    const cooldown = player.pauseCooldownUntil - serverNow();
+    const firstSurge = !siege || siege.surges === 0 || siege.tutorial;
+    if (p?.state === 'paused') {
+      text = `▶ Surges paused · Resume ${clockText(p.until - serverNow())}`;
+      state = 'paused';
+    } else if (p?.state === 'pending') {
+      text = '⏳ Pausing after this surge...';
+      state = 'pending';
+    } else if (firstSurge) {
+      text = '⏸ Pause after surge 1';
+      disabled = true;
+    } else if (cooldown > 0) {
+      text = `⏸ Pause in ${clockText(cooldown)}`;
+      disabled = true;
+    } else text = '⏸ Pause surges';
+  }
+  void now;
+  const key = `${show}|${text}|${state}|${disabled}`;
+  if (key === pauseShown) return;
+  pauseShown = key;
+  btn.hidden = !show;
+  btn.textContent = text;
+  btn.disabled = disabled;
+  btn.dataset.state = state;
+  btn.title = state === 'pending' ? 'Tap to cancel the pause' : state === 'paused' ? 'Tap (or P) to resume' : 'Pause surges (P)';
+}
+
+/** P or the button: pause, cancel a pending pause, or resume. */
+async function togglePause() {
+  if (!player || player.mode !== 'pve') return;
+  const r = player.pause ? await net.resume() : await net.pause();
+  if (!r.ok) return toast(r.error, 'bad', 2500);
+  const was = player.pause;
+  setPlayer(r.player);
+  const p = r.player.pause;
+  if (p?.state === 'paused') toast('Surges paused. Upgrade, buy and shoot freely; no zombie income while paused.', 'good', 3500);
+  else if (p?.state === 'pending') toast('Pausing as soon as this surge is over', '', 2500);
+  else if (was?.state === 'pending') toast('Pause cancelled', '', 2000);
+  else {
+    toast('Surges resume in 3...', 'good', 2000);
+    sfx.siren(false);
   }
 }
 

@@ -14,6 +14,7 @@ import { GameError, type GameServer } from './game.ts';
 //  airstrike {x, y} (ack) / reload          siege {p, ...SiegeEvent} / pressure {sides, hq, ammo, ...} (owner)
 //  molotov {x, y} (ack) / ultimate (ack)    molotov {p, x, y, radius, duration} / ultimate {p, spots, delay}
 //  summon {kind} (ack) / order {x, y}       (the squad member shows up in snapshots as a raider-kind unit)
+//  pause (ack) / resume (ack)               player {...PlayerView} / paused {auto} (a pause ran out)
 //  mode {mode: 'pve' | 'pvp'} (ack)
 //  immunity {minutes} (ack)                 crate CrateView            (a new crate, or it was claimed)
 //  answer {crate, answer} (ack)             status {paused, frozen}    (organiser switches)
@@ -243,6 +244,25 @@ export function attachSockets(io: Server, game: GameServer): Sessions {
       if (playerId === null || !allowOrder()) return;
       const d = (data ?? {}) as { x?: unknown; y?: unknown };
       game.order(playerId, d.x, d.y);
+    });
+
+    socket.on('pause', (_data: unknown, ack: unknown) => {
+      if (playerId === null) return reply(ack, { ok: false, error: 'Not logged in' });
+      if (!allowAct()) return reply(ack, { ok: false, error: 'Slow down a little' });
+      try {
+        reply(ack, { ok: true, player: game.pauseSurges(playerId) });
+      } catch (e) {
+        fail(ack, e);
+      }
+    });
+    socket.on('resume', (_data: unknown, ack: unknown) => {
+      if (playerId === null) return reply(ack, { ok: false, error: 'Not logged in' });
+      if (!allowAct()) return reply(ack, { ok: false, error: 'Slow down a little' });
+      try {
+        reply(ack, { ok: true, player: game.resumeSurges(playerId) });
+      } catch (e) {
+        fail(ack, e);
+      }
     });
 
     socket.on('mode', (data: unknown, ack: unknown) => {

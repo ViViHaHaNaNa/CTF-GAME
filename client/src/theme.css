@@ -130,6 +130,9 @@
   --star-shadow: #5a3a00;
   --combo-shadow: #7a1a0a;
   --strike: #ff5a3c;
+  --paused: #7fd8ff;                 /* surges paused: Resume button and banner */
+  --paused-ink: #0b1324;
+  --paused-soft: rgba(127, 216, 255, 0.35);
   --strike-ink: #ffffff;
   --alarm: #ff2d1f;                  /* "They're coming from everywhere!" banner */
   --alarm-ink: #fff4c2;
@@ -303,6 +306,7 @@
   --map-cmd-marker: #ffffff;         /* hit-marker X on a kill */
   --map-cmd-strike: 255, 60, 40;     /* airstrike warning ring */
   --map-cmd-squad: 95, 224, 138;     /* your squad member's ring and order flag */
+  --map-paused: #7fd8ff;             /* "PAUSED" chip on a base whose surges are paused */
   --map-cmd-fire: 255, 150, 40;      /* airstrike fireball */
   --map-cmd-smoke: 60, 50, 50;
   --map-cmd-flash: #fffbe0;

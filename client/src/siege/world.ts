@@ -1723,7 +1723,7 @@ export class WorldView {
     const mine = p.id === this.myPlot;
     const shielded = Math.max(s.shield, s.immune) > Date.now() + this.clockSkew;
     const text = `${mine ? '★ ' : ''}${small ? s.name : `${s.name}  Lv${s.hq}  ♛${s.trophies}`}`;
-    const key = `${text}|${s.id}|${mine}|${shielded}|${s.raid ? 1 : 0}|${small}|${d}|${s.mode}|${s.vaultFull}`;
+    const key = `${text}|${s.id}|${mine}|${shielded}|${s.raid ? 1 : 0}|${small}|${d}|${s.mode}|${s.vaultFull}|${s.paused ? 1 : 0}`;
     const hit = this.tagCache.get(p.id);
     if (hit && hit.key === key) return hit.canvas;
     const t = THEME.tag;
@@ -1787,6 +1787,7 @@ export class WorldView {
     const M = THEME.modes;
     const chips: [string, string][] = [s.mode === 'pvp' ? ['RAIDING', M.pvp] : ['GRINDING', M.pve]];
     if (s.vaultFull) chips.push(['VAULT FULL', M.vaultFull]);
+    if (s.paused) chips.push(['II PAUSED', M.paused]);
     const fs = Math.round(M.chipSize * d);
     const g0 = document.createElement('canvas').getContext('2d')!;
     g0.font = `${fs}px ${FONT_DISPLAY}`;

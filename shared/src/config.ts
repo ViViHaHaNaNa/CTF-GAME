@@ -381,6 +381,19 @@ export const CONFIG = {
     consolation: { rare: 100, epic: 200, legendary: 400 },
   },
 
+  /**
+   * Pausing surges (Grind mode, from surge 2). Between surges a pause freezes the countdown at once;
+   * during a surge it waits until the last zombie is dead. Server-side and saved with the player.
+   */
+  pause: {
+    /** A pause lasts at most this long (s), then surges resume on their own. */
+    maxSeconds: 300,
+    /** After a pause ends, the next one is possible after this long (s). */
+    cooldown: 30,
+    /** Resuming shows a 3-2-1 this long (s), then the normal countdown to the next surge starts. */
+    resumeCountdown: 3,
+  },
+
   offline: {
     /** Coins earned while offline are banked up to this cap, credited at next login. */
     bankCap: 500,

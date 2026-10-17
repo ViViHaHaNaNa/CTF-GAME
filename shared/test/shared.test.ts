@@ -310,6 +310,62 @@ describe('zombie siege', () => {
     if (small) expect(small.stats.speed).toBeCloseTo(zombieStats('z_small').speed * CONFIG.siege.rage.speed, 5);
   });
 
+  it('pause between surges freezes the countdown at once; resume is a 3-2-1, then the full countdown', () => {
+    const P = CONFIG.pause;
+    const base = { hq: 3, walls: 3, cmd: 0, posts: SLOTS.map((_, i) => (i < 5 ? { type: 'gun' as const, level: 3 } : null)) };
+    const d = { ...newDirector(), surges: 9 };
+    const s = new Siege(base, plot, 21, d, { firstDelay: 30 });
+    expect(s.pause()).toBe('paused');
+    expect(s.events.at(-1)).toMatchObject({ type: 'paused' });
+    const ramp = d.ramp;
+    // Paused for a long time: no surge starts, nothing spawns, the ramp stays put, no early call.
+    for (let t = 0; t < 120 * rate; t++) s.step();
+    expect(s.phase).toBe('paused');
+    expect(s.n).toBe(0);
+    expect(s.combat.liveUnits).toBe(0);
+    expect(d.ramp).toBe(ramp);
+    expect(s.callEarly()).toBe(0);
+    expect(s.info()).toMatchObject({ phase: 'paused', early: 0 });
+    // Resume: 3 s of 3-2-1, then the level's normal countdown.
+    s.resume();
+    expect(s.phase).toBe('resuming');
+    expect(s.nextIn()).toBeCloseTo(P.resumeCountdown, 5);
+    for (let t = 0; t <= P.resumeCountdown * rate; t++) s.step();
+    expect(s.phase).toBe('breather');
+    expect(s.nextIn()).toBeCloseTo(CONFIG.siege.gap[2]!, 0);
+  });
+
+  it('pause during a surge waits for the last zombie: the surge plays out, then it holds', () => {
+    const base = { hq: 3, walls: 3, cmd: 0, posts: SLOTS.map((_, i) => (i < 5 ? { type: 'gun' as const, level: 3 } : null)) };
+    const s = new Siege(base, plot, 22, { ...newDirector(), surges: 9 }, { firstDelay: 0 });
+    while (s.phase !== 'surge' || s.combat.liveUnits < 3) s.step();
+    expect(s.pause()).toBe('pending');
+    expect(s.info().pausing).toBe(true);
+    // Zombies keep moving and fighting (never frozen mid-fight).
+    while (!s.combat.units.some((x) => x.state === 'move')) s.step();
+    const u = s.combat.units.find((x) => x.state === 'move')!;
+    const [x0, y0] = [u.x, u.y];
+    s.step();
+    expect(Math.hypot(u.x - x0, u.y - y0)).toBeGreaterThan(0);
+    let ended = false;
+    for (let t = 0; t < 200 * rate && (s.phase as string) !== 'paused'; t++) {
+      s.step();
+      if (s.events.some((e) => e.type === 'held' || e.type === 'breach')) ended = true;
+      if (!ended) expect(s.phase).toBe('surge');
+    }
+    expect(ended).toBe(true);
+    expect(s.phase).toBe('paused');
+    expect(s.events.some((e) => e.type === 'paused')).toBe(true);
+    // Cancel-style resume of a pending pause: nothing pending is left behind.
+    const t2 = new Siege(base, plot, 23, { ...newDirector(), surges: 9 }, { firstDelay: 0 });
+    while (t2.phase !== 'surge') t2.step();
+    t2.pause();
+    t2.resume();
+    expect(t2.pausePending).toBe(false);
+    // A siege rebuilt for a paused player starts paused.
+    expect(new Siege(base, plot, 24, { ...newDirector(), surges: 9 }, { paused: true }).phase).toBe('paused');
+  });
+
   it('calling a surge early pays for the time skipped, once enough of the countdown has passed', () => {
     const E = CONFIG.siege.callEarly;
     const gap = CONFIG.siege.gap[0]!;

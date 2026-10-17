@@ -235,6 +235,142 @@ describe('commander taps', () => {
   });
 });
 
+describe('pausing surges', () => {
+  /** A grinder past the walkthrough, online and watching their base. */
+  function grinder() {
+    const s = setup();
+    const p = s.game.login('Pausy', 'P5005');
+    s.game.players.get(p.id)!.siege!.surges = 5;
+    s.game.connect(p.id);
+    s.game.watch(p.plot, 1);
+    return { ...s, p };
+  }
+  const secs = (game: GameServer, n: number) => {
+    for (let i = 0; i < n * CONFIG.tickRate; i++) game.tick();
+  };
+  const liveSiege = (game: GameServer, plot: number) => (game as unknown as { live: Map<number, { siege: { phase: string; pausePending: boolean; n: number } | null }> }).live.get(plot)!.siege!;
+
+  it('not during the walkthrough, not in Raid mode', () => {
+    const { game } = setup();
+    const p = game.login('Newbie', 'N5001');
+    game.connect(p.id);
+    game.watch(p.plot, 1);
+    expect(() => game.pauseSurges(p.id)).toThrow(/first surge/);
+    game.players.get(p.id)!.siege!.surges = 3;
+    game.setMode(p.id, 'pvp');
+    expect(() => game.pauseSurges(p.id)).toThrow(/Raid mode/);
+  });
+
+  it('between surges it holds at once; it shows on the map; resume starts a cooldown', () => {
+    const { game, p, advance } = grinder();
+    const v = game.pauseSurges(p.id);
+    expect(v.pause).toMatchObject({ state: 'paused' });
+    expect(v.pause!.until).toBeGreaterThan(0);
+    expect(liveSiege(game, p.plot).phase).toBe('paused');
+    expect(game.worldSummary().find((b) => b.id === p.id)!.paused).toBe(true);
+    expect(() => game.pauseSurges(p.id)).toThrow(/already paused/);
+    // Nothing happens while paused: no surge, no kill coins.
+    const coins = game.players.get(p.id)!.coins;
+    secs(game, 60);
+    expect(liveSiege(game, p.plot).phase).toBe('paused');
+    expect(game.players.get(p.id)!.coins).toBe(coins);
+    expect(() => game.callEarly(p.id)).toThrow(/paused/);
+    const r = game.resumeSurges(p.id);
+    expect(r.pause).toBeNull();
+    expect(liveSiege(game, p.plot).phase).toBe('resuming');
+    expect(() => game.pauseSurges(p.id)).toThrow(/pause again in/);
+    advance(CONFIG.pause.cooldown * 1000);
+    expect(game.pauseSurges(p.id).pause).not.toBeNull();
+  });
+
+  it('during a surge it waits for the surge to end, then holds', () => {
+    const { game, p, sent } = grinder();
+    let guard = 0;
+    while (liveSiege(game, p.plot).phase !== 'surge' && guard++ < 10_000) game.tick();
+    expect(game.pauseSurges(p.id).pause).toMatchObject({ state: 'pending', until: 0 });
+    expect(game.worldSummary().find((b) => b.id === p.id)!.paused).toBe(false);
+    guard = 0;
+    while (liveSiege(game, p.plot).phase === 'surge' && guard++ < 20_000) game.tick();
+    expect(liveSiege(game, p.plot).phase).toBe('paused');
+    const rec = game.players.get(p.id)!;
+    expect(rec.pause).toMatchObject({ state: 'paused' });
+    expect(sent.some((s) => s.ev === 'player' && (s.data as { pause: unknown }).pause !== null)).toBe(true);
+    // Cancelling a pending pause costs no cooldown.
+    const g2 = grinder();
+    guard = 0;
+    while (liveSiege(g2.game, g2.p.plot).phase !== 'surge' && guard++ < 10_000) g2.game.tick();
+    g2.game.pauseSurges(g2.p.id);
+    g2.game.resumeSurges(g2.p.id);
+    expect(g2.game.players.get(g2.p.id)!.pauseCooldownUntil ?? 0).toBe(0);
+    expect(liveSiege(g2.game, g2.p.plot).pausePending).toBe(false);
+  });
+
+  it('runs out on its own after the maximum, then the cooldown applies', () => {
+    const { game, p, advance, sent } = grinder();
+    game.pauseSurges(p.id);
+    advance(CONFIG.pause.maxSeconds * 1000 + 1);
+    secs(game, 1);
+    expect(game.players.get(p.id)!.pause).toBeUndefined();
+    expect(liveSiege(game, p.plot).phase).not.toBe('paused');
+    expect(sent.some((s) => s.ev === 'paused' && s.to === `p:${p.id}`)).toBe(true);
+    expect(() => game.pauseSurges(p.id)).toThrow(/pause again/);
+  });
+
+  it('survives a server restart and a reconnect; offline it earns nothing until it ends', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'siege-pause-'));
+    dirs.push(dir);
+    const file = join(dir, 'p.db');
+    const a = setup(file);
+    const p = a.game.login('Saved', 'S5006');
+    a.game.players.get(p.id)!.siege!.surges = 5;
+    a.store.savePlayer(a.game.players.get(p.id)!);
+    a.game.connect(p.id);
+    a.game.pauseSurges(p.id);
+    a.store.close();
+    const b = setup(file);
+    expect(b.game.players.get(p.id)!.pause).toMatchObject({ state: 'paused' });
+    b.game.connect(p.id);
+    b.game.watch(p.plot, 1);
+    expect(liveSiege(b.game, p.plot).phase).toBe('paused');
+    // Offline (nobody watching): no headless surges, no bank.
+    b.game.watch(p.plot, -1);
+    b.game.disconnect(p.id);
+    for (let i = 0; i < 5; i++) {
+      b.advance(30_000);
+      b.game.tickOffline(10);
+    }
+    const rec = b.game.players.get(p.id)!;
+    expect(rec.bank).toBe(0);
+    expect(rec.offline.waves).toBe(0);
+    b.store.close();
+  });
+
+  it('a paused base can still be raided, and is still paused afterwards', () => {
+    const { game, p } = grinder();
+    game.pauseSurges(p.id);
+    const a = game.login('Raider', 'R5007');
+    game.connect(a.id);
+    game.players.get(a.id)!.coins = 2000;
+    game.setMode(a.id, 'pvp');
+    expect(game.raidBlock(a.id, p.plot)).toBeNull();
+    game.attack(a.id, p.plot);
+    const plot = getWorld().plots[p.plot]!;
+    for (let i = 0; i < 12; i++) game.deploy(a.id, 'r_bat', plot.x + 0.5, plot.y + 0.5 + (i % 4) * 0.5);
+    let guard = 0;
+    while (game.baseLive(p.plot).phase === 'raid' && guard++ < 20_000) game.tick();
+    expect(game.baseLive(p.plot).phase).not.toBe('raid');
+    expect(game.players.get(p.id)!.pause).toMatchObject({ state: 'paused' });
+    expect(liveSiege(game, p.plot).phase).toBe('paused');
+  });
+
+  it('switching to Raid mode drops the pause', () => {
+    const { game, p, advance } = grinder();
+    game.pauseSurges(p.id);
+    advance(CONFIG.modes.cooldown * 1000);
+    expect(game.setMode(p.id, 'pvp').pause).toBeNull();
+  });
+});
+
 describe('raids', () => {
   function twoPlayers() {
     const s = setup();

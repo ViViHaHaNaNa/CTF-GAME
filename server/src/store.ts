@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { BaseState, Boosts, DirectorState, Mode, OfflineSummary } from '@siege/shared';
+import type { BaseState, Boosts, DirectorState, Mode, OfflineSummary, PauseState } from '@siege/shared';
 
 // Storage behind a thin interface. Today: one SQLite file. Swapping to another backend only means
 // implementing Store again. Every change is written immediately (synchronous, a few µs per row).
@@ -41,6 +41,10 @@ export interface PlayerRecord {
   modeAt?: number;
   /** The zombie director's memory of this player (difficulty pressure, minutes played). Older records lack it. */
   siege?: DirectorState;
+  /** Surges paused by the player (survives reconnects and restarts). */
+  pause?: PauseState;
+  /** Server ms until which a new pause can't start. */
+  pauseCooldownUntil?: number;
   createdAt: number;
   lastSeen: number;
 }

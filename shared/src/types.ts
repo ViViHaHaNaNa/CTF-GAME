@@ -49,6 +49,13 @@ export interface BaseState {
   cmdLv?: number;
 }
 
+/** A player's surge pause (server-side, saved with the player). 'pending': waiting for the current surge to end. */
+export interface PauseState {
+  state: 'pending' | 'paused';
+  /** Server ms when a pause that has taken hold resumes on its own (0 while pending). */
+  until: number;
+}
+
 /** What the client is told about its own player. */
 export interface PlayerView {
   id: number;
@@ -67,6 +74,10 @@ export interface PlayerView {
   mode: Mode;
   /** Server ms of the last mode switch (the cooldown runs from here). */
   modeAt: number;
+  /** Surges paused (or pausing after this surge); null = running. */
+  pause: PauseState | null;
+  /** Server ms until which a new pause can't start (after the last one ended). */
+  pauseCooldownUntil: number;
 }
 
 /** Combat snapshot streamed to clients (compact on purpose). Positions are world pixels. */
@@ -113,6 +124,8 @@ export interface BaseSummary {
   mode: Mode;
   /** Grinding with a (nearly) full vault: the juiciest target. */
   vaultFull: boolean;
+  /** Surges paused on this base (shown on the map). */
+  paused?: boolean;
 }
 
 export interface RaidStatus {

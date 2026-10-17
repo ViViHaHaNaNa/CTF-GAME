@@ -27,6 +27,15 @@ body.siege { overflow: hidden; display: flex; flex-direction: column; height: 10
 .banner-row { display: flex; align-items: stretch; background: var(--surface-2); border-bottom: var(--border) solid var(--line); }
 .banner-row .wave-banner { flex: 1; min-width: 0; border-bottom: 0; }
 .mode-toggle { position: relative; display: flex; gap: 0; padding: 4px; flex: none; }
+.pause-btn { flex: none; min-height: 40px; margin: 4px 4px 4px 0; padding: 0 10px; border-radius: var(--radius); border: var(--border) solid var(--line-strong); background: var(--surface); color: var(--ink); font-family: var(--font-display); font-size: var(--text-2xs); letter-spacing: var(--display-tracking); cursor: pointer; white-space: nowrap; }
+.pause-btn[hidden] { display: none; }
+.pause-btn:disabled { color: var(--muted); cursor: default; opacity: 0.7; }
+.pause-btn[data-state='pending'] { border-color: var(--warn); color: var(--warn); }
+.pause-btn[data-state='paused'] { background: var(--paused); color: var(--paused-ink); border-color: var(--paused); animation: pause-glow 1.6s ease-in-out infinite; }
+@keyframes pause-glow { 50% { box-shadow: 0 0 0 3px var(--paused-soft); } }
+@media (prefers-reduced-motion: reduce) { .pause-btn[data-state='paused'] { animation: none; } }
+.wave-banner.paused { background: var(--paused); color: var(--paused-ink); }
+@media (max-width: 520px) { .pause-btn { font-size: 0.6rem; padding: 0 6px; } }
 .mode-toggle button { min-height: 40px; min-width: 64px; padding: 0 10px; font-family: var(--font-display); font-size: var(--text-2xs); letter-spacing: var(--display-tracking); background: var(--surface); color: var(--muted); border: var(--border) solid var(--line); cursor: pointer; }
 .mode-toggle button:first-of-type { border-radius: var(--radius) 0 0 var(--radius); }
 .mode-toggle button:last-of-type { border-radius: 0 var(--radius) var(--radius) 0; border-left: 0; }

@@ -119,6 +119,16 @@ export class Net {
   }
 
   /** Grind (pve) or Raid (pvp). */
+  /** Pause surges on your base (between surges at once, otherwise after this surge). */
+  pause() {
+    return this.call<{ player: PlayerView }>('pause', {});
+  }
+
+  /** Resume surges (or cancel a pause that hasn't taken hold yet). */
+  resume() {
+    return this.call<{ player: PlayerView }>('resume', {});
+  }
+
   setMode(mode: 'pve' | 'pvp') {
     return this.call<{ player: PlayerView }>('mode', { mode });
   }

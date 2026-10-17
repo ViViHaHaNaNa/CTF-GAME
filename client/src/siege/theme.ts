@@ -130,7 +130,7 @@ export const THEME = {
     shake: { first: num('--map-shake-first'), breach: num('--map-shake-breach'), pincer: num('--map-shake-pincer'), shotgun: num('--map-shake-shotgun'), strike: num('--map-shake-strike') },
   },
   /** Mode chips under the map tags. */
-  modes: { pve: css('--map-mode-pve'), pvp: css('--map-mode-pvp'), vaultFull: css('--map-vault-full'), chipInk: css('--map-chip-ink'), chipOutline: css('--map-chip-outline'), chipSize: num('--map-chip-size') },
+  modes: { pve: css('--map-mode-pve'), pvp: css('--map-mode-pvp'), vaultFull: css('--map-vault-full'), paused: css('--map-paused'), chipInk: css('--map-chip-ink'), chipOutline: css('--map-chip-outline'), chipSize: num('--map-chip-size') },
   cmd: {
     tracer: css('--map-cmd-tracer'),
     tracerGlow: css('--map-cmd-tracer-glow'),
