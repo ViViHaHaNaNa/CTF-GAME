@@ -1,6 +1,11 @@
 /* Live Arena (read-only spectating) and its projector mode. Builds on siege.css; values from theme.css. */
 
 body.arena { overflow: hidden; }
+/* The Live Arena page: header, then stage + sidebar (one grid), then the credit (its link gets a full touch target). */
+body.arena .credit { overflow: visible; white-space: normal; }
+body.arena .credit a { display: inline-flex; align-items: center; min-height: var(--hit); }
+.arena-main { min-width: 0; }
+.arena-side { min-width: 0; }
 .arena-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top)); background: var(--surface); border-bottom: var(--border) solid var(--line); flex-wrap: wrap; }
 .arena-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .arena-title h1 { margin: 0; font-weight: var(--weight-heavy); font-size: var(--text-xl); color: var(--accent); }
@@ -26,7 +31,7 @@ body.arena { overflow: hidden; }
 .crate-box code { font-family: var(--font-mono); background: var(--code-bg); padding: 1px 6px; border-radius: var(--radius-sm); }
 
 /* Scoreboard over the battle */
-.scoreboard { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); width: min(580px, calc(100% - 20px)); background: var(--overlay-strong); border: var(--border) solid var(--line-strong); border-radius: var(--radius-lg); padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; pointer-events: none; box-shadow: var(--shadow-float); }
+.scoreboard { z-index: var(--z-hud); position: absolute; left: 50%; top: 10px; transform: translateX(-50%); width: min(580px, calc(100% - 20px)); background: var(--overlay-strong); border: var(--border) solid var(--line-strong); border-radius: var(--radius-lg); padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; pointer-events: none; box-shadow: var(--shadow-float); }
 .sb-names { display: flex; align-items: center; justify-content: center; gap: 12px; font-weight: var(--weight-heavy); font-size: var(--text-lg); }
 .sb-att { color: var(--danger-text); text-align: right; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sb-def { color: var(--shield); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -38,7 +43,7 @@ body.arena { overflow: hidden; }
 .sb-stats { display: flex; justify-content: space-between; gap: var(--gap); font-size: var(--text-xs); color: var(--muted); flex-wrap: wrap; }
 .sb-stats b { color: var(--ink); font-family: var(--font-mono); }
 
-.arena-result { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--overlay-strong); border: 3px solid var(--accent); border-radius: var(--radius-lg); padding: 18px 28px; text-align: center; display: flex; flex-direction: column; gap: 6px; animation: toast-in 0.3s ease-out; max-width: calc(100% - 24px); box-shadow: var(--shadow-float); }
+.arena-result { z-index: var(--z-toast); position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--overlay-strong); border: 3px solid var(--accent); border-radius: var(--radius-lg); padding: 18px 28px; text-align: center; display: flex; flex-direction: column; gap: 6px; animation: toast-in 0.3s ease-out; max-width: calc(100% - 24px); box-shadow: var(--shadow-float); }
 .arena-result b { font-size: var(--text-xl); font-weight: var(--weight-heavy); }
 .arena-result.won { border-color: var(--danger); }
 .arena-result.won b { color: var(--danger-text); }
@@ -52,7 +57,7 @@ body.arena { overflow: hidden; }
 .big-ranks { list-style: none; margin: 0; padding: 0; width: min(440px, 100%); display: flex; flex-direction: column; gap: 6px; text-align: left; }
 .big-ranks li { display: flex; align-items: center; gap: var(--gap); }
 .big-ranks li:first-child { border-color: var(--accent); }
-.cycle { position: absolute; right: 10px; bottom: 10px; background: var(--overlay-strong); border: 1px solid var(--line-strong); border-radius: var(--radius-pill); padding: 4px 12px; font-size: var(--text-xs); color: var(--muted); }
+.cycle { position: absolute; right: 10px; bottom: 10px; z-index: var(--z-hud); background: var(--overlay-strong); border: 1px solid var(--line-strong); border-radius: var(--radius-pill); padding: 4px 12px; font-size: var(--text-xs); color: var(--muted); }
 
 @media (min-width: 900px) {
   .arena-main { flex-direction: row; }
@@ -82,6 +87,6 @@ body.projector .cycle { font-size: var(--proj-feed); }
 .arena-title h1, .arena-side h2, .sb-names, .arena-result b, .arena-idle h2, .cycle { font-family: var(--font-display); letter-spacing: var(--display-tracking); }
 
 /* Each player's mode on the leaderboard. */
-.mode-chip { display: inline-block; margin-left: 6px; padding: 1px 5px; border-radius: 3px; font-family: var(--font-display); font-size: var(--text-2xs); letter-spacing: var(--display-tracking); vertical-align: middle; }
+.mode-chip { display: inline-block; margin-left: 6px; padding: 1px 5px; border-radius: 3px; font-family: var(--font-display); font-size: var(--ui-2xs); letter-spacing: var(--display-tracking); vertical-align: middle; }
 .mode-chip.pve { background: var(--mode-pve); color: var(--mode-pve-ink); }
 .mode-chip.pvp { background: var(--mode-pvp); color: var(--mode-pvp-ink); }

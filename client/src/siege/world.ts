@@ -290,10 +290,46 @@ export class WorldView {
     return Math.max(this.kMin, Math.min(this.kMax, Math.floor(this.canvas.width / (across * period))));
   }
 
-  /** A zoom that shows one whole base comfortably. */
+  /**
+   * The part of the map the HUD leaves uncovered (device px, relative to the canvas; null = all of it).
+   * The page measures it from its layout grid (the free zone between the tools, the corner and the rail).
+   */
+  private free: { x: number; y: number; w: number; h: number } | null = null;
+  /** The plot the camera is framing in the free zone ("My base"); kept framed as the zones change, until the player pans or zooms. */
+  framed = -1;
+
+  /** The free zone changed (CSS px relative to the canvas): keep a framed base framed. */
+  setFree(r: { x: number; y: number; w: number; h: number }) {
+    const d = this.dpr;
+    const f = { x: r.x * d, y: r.y * d, w: Math.max(1, r.w * d), h: Math.max(1, r.h * d) };
+    const old = this.free;
+    if (old && Math.abs(old.x - f.x) < 1 && Math.abs(old.y - f.y) < 1 && Math.abs(old.w - f.w) < 1 && Math.abs(old.h - f.h) < 1) return;
+    this.free = f;
+    if (this.framed >= 0) this.frame(this.framed);
+  }
+
+  /** A zoom that shows one whole base inside the free zone (the largest crisp level that fits). */
   baseZoom(): number {
-    const fit = Math.floor((Math.min(this.canvas.width, this.canvas.height) * 0.85) / (PLOT * T));
+    const w = this.free?.w ?? this.canvas.width * 0.85;
+    const h = this.free?.h ?? this.canvas.height * 0.85;
+    const fit = Math.floor((Math.min(w, h) * 0.97) / (PLOT * T));
     return Math.max(this.kMin, Math.min(this.kMax, fit));
+  }
+
+  /** Put a plot's centre in the middle of the free zone at zoom k. */
+  private centreIn(plot: number, k: number) {
+    const p = world.plots[plot];
+    if (!p) return;
+    const f = this.free ?? { x: 0, y: 0, w: this.canvas.width, h: this.canvas.height };
+    const dx = (f.x + f.w / 2 - this.canvas.width / 2) / k;
+    const dy = (f.y + f.h / 2 - this.canvas.height / 2) / k;
+    this.jumpTo((p.x + PLOT / 2) * T - dx, (p.y + PLOT / 2) * T - dy, k);
+  }
+
+  /** Frame a base: whole, in the free zone, nothing of the HUD over it; it stays framed as panels open and close. */
+  frame(plot: number) {
+    this.centreIn(plot, this.baseZoom());
+    this.framed = plot;
   }
 
   clamp() {
@@ -321,6 +357,7 @@ export class WorldView {
 
   /** Zoom one level in (+1) or out (-1), easing toward the point under (sx, sy) in CSS px. */
   zoomAt(step: number, sx: number, sy: number) {
+    this.framed = -1;
     this.holding = false;
     this.zoom = Math.max(this.kMin, Math.min(this.kMax, this.zoom + step));
     this.anchor = [sx * this.dpr, sy * this.dpr];
@@ -328,6 +365,7 @@ export class WorldView {
 
   /** Follow a pinch / trackpad zoom exactly (any in-between level) until settleZoom(). */
   zoomFree(k: number, sx: number, sy: number) {
+    this.framed = -1;
     this.holding = true;
     this.anchor = [sx * this.dpr, sy * this.dpr];
     this.setK(k, this.anchor[0], this.anchor[1]);
@@ -342,6 +380,7 @@ export class WorldView {
   }
 
   panBy(dxCss: number, dyCss: number) {
+    this.framed = -1;
     this.cam.x -= (dxCss * this.dpr) / this.cam.k;
     this.cam.y -= (dyCss * this.dpr) / this.cam.k;
     this.clamp();
@@ -360,6 +399,7 @@ export class WorldView {
 
   /** Jump the camera (no easing), optionally to an integer zoom. */
   jumpTo(wx: number, wy: number, k?: number) {
+    this.framed = -1;
     this.stopFling();
     this.cam.x = wx;
     this.cam.y = wy;
@@ -373,8 +413,7 @@ export class WorldView {
   }
 
   centerOnPlot(plot: number, k?: number) {
-    const p = world.plots[plot];
-    if (p) this.jumpTo((p.x + PLOT / 2) * T, (p.y + PLOT / 2) * T, k);
+    this.centreIn(plot, k ?? this.cam.k);
   }
 
   /** The default view: the plot's city block (its 4 compounds around the graveyard) at overview zoom. */

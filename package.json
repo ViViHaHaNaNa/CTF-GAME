@@ -14,10 +14,12 @@
     "test": "vitest run",
     "typecheck": "tsc -p shared && tsc -p server && tsc -p client",
     "loadtest": "tsx server/scripts/loadtest.ts",
-    "backup": "tsx server/scripts/backup.ts"
+    "backup": "tsx server/scripts/backup.ts",
+    "ui-audit": "tsx server/scripts/ui-audit.ts"
   },
   "devDependencies": {
     "concurrently": "^9.2.5",
+    "playwright-core": "^1.48.2",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"

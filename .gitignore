@@ -4,3 +4,6 @@ server/data/*.db
 server/data/*.db-*
 server/data/backups/
 .env
+
+# Layout audit screenshots (regenerate with npm run ui-audit)
+layout-audit/**/*.png

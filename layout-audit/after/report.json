@@ -1,0 +1,427 @@
+[
+ {
+  "size": "1920x1080",
+  "state": "01-map-hud",
+  "issues": []
+ },
+ {
+  "size": "1920x1080",
+  "state": "02-banners-at-once",
+  "issues": []
+ },
+ {
+  "size": "1920x1080",
+  "state": "03-upgrade-panel",
+  "issues": []
+ },
+ {
+  "size": "1920x1080",
+  "state": "04-unlock-popup",
+  "issues": []
+ },
+ {
+  "size": "1920x1080",
+  "state": "05-paused",
+  "issues": []
+ },
+ {
+  "size": "1920x1080",
+  "state": "06-crate",
+  "issues": []
+ },
+ {
+  "size": "1920x1080",
+  "state": "07-ranks",
+  "issues": []
+ },
+ {
+  "size": "1920x1080",
+  "state": "08-live-list",
+  "issues": []
+ },
+ {
+  "size": "1920x1080",
+  "state": "09-menu",
+  "issues": []
+ },
+ {
+  "size": "1920x1080",
+  "state": "10-objectives",
+  "issues": []
+ },
+ {
+  "size": "1920x1080",
+  "state": "11-target-card",
+  "issues": []
+ },
+ {
+  "size": "1920x1080",
+  "state": "12-raid-army-picker",
+  "issues": []
+ },
+ {
+  "size": "1920x1080",
+  "state": "13-raid-deploying",
+  "issues": []
+ },
+ {
+  "size": "1920x1080",
+  "state": "14-raid-result",
+  "issues": []
+ },
+ {
+  "size": "1920x1080",
+  "state": "20-arena",
+  "issues": []
+ },
+ {
+  "size": "1920x1080",
+  "state": "21-arena-projector",
+  "issues": []
+ },
+ {
+  "size": "1920x1080",
+  "state": "22-admin",
+  "issues": []
+ },
+ {
+  "size": "1366x768",
+  "state": "01-map-hud",
+  "issues": []
+ },
+ {
+  "size": "1366x768",
+  "state": "02-banners-at-once",
+  "issues": []
+ },
+ {
+  "size": "1366x768",
+  "state": "03-upgrade-panel",
+  "issues": []
+ },
+ {
+  "size": "1366x768",
+  "state": "04-unlock-popup",
+  "issues": []
+ },
+ {
+  "size": "1366x768",
+  "state": "05-paused",
+  "issues": []
+ },
+ {
+  "size": "1366x768",
+  "state": "06-crate",
+  "issues": []
+ },
+ {
+  "size": "1366x768",
+  "state": "07-ranks",
+  "issues": []
+ },
+ {
+  "size": "1366x768",
+  "state": "08-live-list",
+  "issues": []
+ },
+ {
+  "size": "1366x768",
+  "state": "09-menu",
+  "issues": []
+ },
+ {
+  "size": "1366x768",
+  "state": "10-objectives",
+  "issues": []
+ },
+ {
+  "size": "1366x768",
+  "state": "11-target-card",
+  "issues": []
+ },
+ {
+  "size": "1366x768",
+  "state": "12-raid-army-picker",
+  "issues": []
+ },
+ {
+  "size": "1366x768",
+  "state": "13-raid-deploying",
+  "issues": []
+ },
+ {
+  "size": "1366x768",
+  "state": "14-raid-result",
+  "issues": []
+ },
+ {
+  "size": "1366x768",
+  "state": "20-arena",
+  "issues": []
+ },
+ {
+  "size": "1366x768",
+  "state": "21-arena-projector",
+  "issues": []
+ },
+ {
+  "size": "1366x768",
+  "state": "22-admin",
+  "issues": []
+ },
+ {
+  "size": "1280x720",
+  "state": "01-map-hud",
+  "issues": []
+ },
+ {
+  "size": "1280x720",
+  "state": "02-banners-at-once",
+  "issues": []
+ },
+ {
+  "size": "1280x720",
+  "state": "03-upgrade-panel",
+  "issues": []
+ },
+ {
+  "size": "1280x720",
+  "state": "04-unlock-popup",
+  "issues": []
+ },
+ {
+  "size": "1280x720",
+  "state": "05-paused",
+  "issues": []
+ },
+ {
+  "size": "1280x720",
+  "state": "06-crate",
+  "issues": []
+ },
+ {
+  "size": "1280x720",
+  "state": "07-ranks",
+  "issues": []
+ },
+ {
+  "size": "1280x720",
+  "state": "08-live-list",
+  "issues": []
+ },
+ {
+  "size": "1280x720",
+  "state": "09-menu",
+  "issues": []
+ },
+ {
+  "size": "1280x720",
+  "state": "10-objectives",
+  "issues": []
+ },
+ {
+  "size": "1280x720",
+  "state": "11-target-card",
+  "issues": []
+ },
+ {
+  "size": "1280x720",
+  "state": "12-raid-army-picker",
+  "issues": []
+ },
+ {
+  "size": "1280x720",
+  "state": "13-raid-deploying",
+  "issues": []
+ },
+ {
+  "size": "1280x720",
+  "state": "14-raid-result",
+  "issues": []
+ },
+ {
+  "size": "1280x720",
+  "state": "20-arena",
+  "issues": []
+ },
+ {
+  "size": "1280x720",
+  "state": "21-arena-projector",
+  "issues": []
+ },
+ {
+  "size": "1280x720",
+  "state": "22-admin",
+  "issues": []
+ },
+ {
+  "size": "phone-portrait-390x844",
+  "state": "01-map-hud",
+  "issues": []
+ },
+ {
+  "size": "phone-portrait-390x844",
+  "state": "02-banners-at-once",
+  "issues": []
+ },
+ {
+  "size": "phone-portrait-390x844",
+  "state": "03-upgrade-panel",
+  "issues": []
+ },
+ {
+  "size": "phone-portrait-390x844",
+  "state": "04-unlock-popup",
+  "issues": []
+ },
+ {
+  "size": "phone-portrait-390x844",
+  "state": "05-paused",
+  "issues": []
+ },
+ {
+  "size": "phone-portrait-390x844",
+  "state": "06-crate",
+  "issues": []
+ },
+ {
+  "size": "phone-portrait-390x844",
+  "state": "07-ranks",
+  "issues": []
+ },
+ {
+  "size": "phone-portrait-390x844",
+  "state": "08-live-list",
+  "issues": []
+ },
+ {
+  "size": "phone-portrait-390x844",
+  "state": "09-menu",
+  "issues": []
+ },
+ {
+  "size": "phone-portrait-390x844",
+  "state": "10-objectives",
+  "issues": []
+ },
+ {
+  "size": "phone-portrait-390x844",
+  "state": "11-target-card",
+  "issues": []
+ },
+ {
+  "size": "phone-portrait-390x844",
+  "state": "12-raid-army-picker",
+  "issues": []
+ },
+ {
+  "size": "phone-portrait-390x844",
+  "state": "13-raid-deploying",
+  "issues": []
+ },
+ {
+  "size": "phone-portrait-390x844",
+  "state": "14-raid-result",
+  "issues": []
+ },
+ {
+  "size": "phone-portrait-390x844",
+  "state": "20-arena",
+  "issues": []
+ },
+ {
+  "size": "phone-portrait-390x844",
+  "state": "21-arena-projector",
+  "issues": []
+ },
+ {
+  "size": "phone-portrait-390x844",
+  "state": "22-admin",
+  "issues": []
+ },
+ {
+  "size": "phone-landscape-844x390",
+  "state": "01-map-hud",
+  "issues": []
+ },
+ {
+  "size": "phone-landscape-844x390",
+  "state": "02-banners-at-once",
+  "issues": []
+ },
+ {
+  "size": "phone-landscape-844x390",
+  "state": "03-upgrade-panel",
+  "issues": []
+ },
+ {
+  "size": "phone-landscape-844x390",
+  "state": "04-unlock-popup",
+  "issues": []
+ },
+ {
+  "size": "phone-landscape-844x390",
+  "state": "05-paused",
+  "issues": []
+ },
+ {
+  "size": "phone-landscape-844x390",
+  "state": "06-crate",
+  "issues": []
+ },
+ {
+  "size": "phone-landscape-844x390",
+  "state": "07-ranks",
+  "issues": []
+ },
+ {
+  "size": "phone-landscape-844x390",
+  "state": "08-live-list",
+  "issues": []
+ },
+ {
+  "size": "phone-landscape-844x390",
+  "state": "09-menu",
+  "issues": []
+ },
+ {
+  "size": "phone-landscape-844x390",
+  "state": "10-objectives",
+  "issues": []
+ },
+ {
+  "size": "phone-landscape-844x390",
+  "state": "11-target-card",
+  "issues": []
+ },
+ {
+  "size": "phone-landscape-844x390",
+  "state": "12-raid-army-picker",
+  "issues": []
+ },
+ {
+  "size": "phone-landscape-844x390",
+  "state": "13-raid-deploying",
+  "issues": []
+ },
+ {
+  "size": "phone-landscape-844x390",
+  "state": "14-raid-result",
+  "issues": []
+ },
+ {
+  "size": "phone-landscape-844x390",
+  "state": "20-arena",
+  "issues": []
+ },
+ {
+  "size": "phone-landscape-844x390",
+  "state": "21-arena-projector",
+  "issues": []
+ },
+ {
+  "size": "phone-landscape-844x390",
+  "state": "22-admin",
+  "issues": []
+ }
+]

@@ -1,69 +1,169 @@
 [hidden] { display: none !important; }
 
-/* Game page. Colours, fonts and sizes all come from theme.css.
-   Portrait (phones): top bar / map / panel stacked. Landscape (laptops): map left, panel right. */
+/* Game page. Colours, fonts and sizes all come from theme.css; this file only does layout.
+
+   Layout zones (no HUD element is positioned on its own over another):
+     top bar (.hud)            name, chips, coins, trophies, sound, menu
+     banner row (.banner-row)  wave banner, Grind/Raid, Pause
+     stage                     map viewport + side panel (wide) or bottom sheet (phones, portrait)
+       map viewport            canvas, and over it ONE grid (.hud-layer) with named areas:
+                               tools | free | corner,  notes, feed, coach, rail
+   The free area is what the camera frames your base in (main.ts measures it), so nothing of the
+   HUD ever sits on your base or on the minimap. Toasts queue inside the free area. */
+
+:root {
+  /* One stacking scale for the whole page. */
+  --z-map: 0;
+  --z-map-fx: 1;
+  --z-hud: 10;
+  --z-toast: 20;
+  --z-panel: 30;
+  --z-modal: 50;
+  --z-title: 60;
+  --z-connecting: 70;
+  /* Never smaller than these, whatever the theme says (readability and thumbs). */
+  --ui-2xs: max(12px, var(--text-2xs));
+  --ui-xs: max(12px, var(--text-xs));
+  --hit: max(44px, var(--touch-sm));
+  /* HUD grid tracks. */
+  --hud-side: 264px;
+  --hud-corner: var(--minimap);
+  --hud-pad: 8px;
+}
 
 body.siege { overflow: hidden; display: flex; flex-direction: column; height: 100dvh; }
-#app { flex: 1; display: flex; flex-direction: column; min-height: 0; position: relative; }
+#app { flex: 1; min-height: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); grid-template-areas: "hud" "banner" "stage"; position: relative; }
 
 /* ---- top bar ---- */
-.hud { display: flex; align-items: center; gap: 10px; padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top)); background: var(--surface); border-bottom: var(--border) solid var(--line); }
-.hud-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; line-height: 1.2; }
-.hud-who > span:first-child { font-weight: var(--weight-heavy); font-size: var(--text-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hud-sub { color: var(--muted); font-size: var(--text-xs); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
-.hud-stat { display: flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border-radius: var(--radius-pill); background: var(--surface-2); border: 1px solid var(--line); font-family: var(--font-mono); font-weight: var(--weight-bold); font-size: var(--text-md); position: relative; }
-.coin { width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, var(--coin-light), var(--coin) 55%, var(--coin-dark)); box-shadow: 0 0 0 2px var(--coin-dark); }
+.hud { grid-area: hud; display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto auto auto auto; grid-template-areas: "who chips coins trophies sound menu"; align-items: center; gap: 4px 10px; padding: 6px 12px; padding-top: max(6px, env(safe-area-inset-top)); padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); background: var(--surface); border-bottom: var(--border) solid var(--line); min-width: 0; }
+.hud-who { grid-area: who; min-width: 0; max-width: 32ch; display: flex; flex-direction: column; gap: 2px; line-height: 1.2; }
+.hud-name { font-weight: var(--weight-heavy); font-size: var(--text-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud-sub { color: var(--muted); font-size: var(--ui-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#hud-coins-box { grid-area: coins; }
+#hud-trophies-box { grid-area: trophies; }
+#sound-btn { grid-area: sound; }
+#menu-btn { grid-area: menu; }
+.hud-stat { display: flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border-radius: var(--radius-pill); background: var(--surface-2); border: 1px solid var(--line); font-family: var(--font-mono); font-weight: var(--weight-bold); font-size: var(--text-md); position: relative; white-space: nowrap; }
+.coin { width: 14px; height: 14px; flex: none; border-radius: 50%; background: radial-gradient(circle at 35% 35%, var(--coin-light), var(--coin) 55%, var(--coin-dark)); box-shadow: 0 0 0 2px var(--coin-dark); }
 .trophy { color: var(--trophy); }
-.delta { position: absolute; left: 100%; top: -4px; margin-left: 4px; color: var(--good); font-size: var(--text-xs); opacity: 0; transition: opacity 0.6s; pointer-events: none; }
+/* The +coins pop sits inside the pill (it used to hang outside, over its neighbour). */
+.delta { position: absolute; right: 6px; top: -2px; color: var(--good); font-size: var(--ui-xs); opacity: 0; transition: opacity 0.6s; pointer-events: none; }
 .delta.show { opacity: 1; transition: none; }
 .icon-btn { background: var(--surface-2); border: 1px solid var(--line); color: var(--ink); font-size: var(--text-lg); width: var(--touch); height: var(--touch); border-radius: var(--radius); cursor: pointer; }
+/* Boost and shield chips: one line; more than fit scroll sideways inside their own strip. */
+.chips { grid-area: chips; display: flex; flex-wrap: nowrap; gap: 4px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chip { flex: none; font-family: var(--font-mono); font-size: var(--ui-2xs); font-weight: var(--weight-bold); padding: 0 8px; border-radius: var(--radius-pill); background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-shade); line-height: 20px; white-space: nowrap; }
+.chip.shield { color: var(--shield); background: var(--shield-soft); border-color: var(--shield); }
 
-/* ---- banner under the top bar ---- */
-.wave-banner { display: block; width: 100%; min-height: 36px; border: 0; font-family: inherit; cursor: pointer; text-align: center; padding: 8px 12px; font-weight: var(--weight-bold); font-size: var(--text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0.02em; background: var(--surface-2); color: var(--ink); border-bottom: var(--border) solid var(--line); }
-/* One line always (the map must not jump as messages change); a size down on narrow phones. */
-@media (max-width: 480px) { .wave-banner { font-size: var(--text-2xs); padding: 10px 8px; } }
-.wave-banner.attack { background: var(--danger); color: var(--danger-ink); border-bottom-color: var(--danger); }
-/* Banner + the Grind / Raid toggle on one row. */
-.banner-row { display: flex; align-items: stretch; background: var(--surface-2); border-bottom: var(--border) solid var(--line); }
-.banner-row .wave-banner { flex: 1; min-width: 0; border-bottom: 0; }
-.mode-toggle { position: relative; display: flex; gap: 0; padding: 4px; flex: none; }
-.pause-btn { flex: none; min-height: 40px; margin: 4px 4px 4px 0; padding: 0 10px; border-radius: var(--radius); border: var(--border) solid var(--line-strong); background: var(--surface); color: var(--ink); font-family: var(--font-display); font-size: var(--text-2xs); letter-spacing: var(--display-tracking); cursor: pointer; white-space: nowrap; }
-.pause-btn[hidden] { display: none; }
+/* ---- banner row: wave banner, Grind/Raid, Pause ---- */
+.banner-row { grid-area: banner; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "banner mode pause"; align-items: stretch; gap: 0 4px; padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); background: var(--surface-2); border-bottom: var(--border) solid var(--line); min-width: 0; }
+.wave-banner { grid-area: banner; display: block; min-width: 0; min-height: var(--hit); border: 0; font-family: inherit; cursor: pointer; text-align: center; padding: 8px 12px; font-weight: var(--weight-bold); font-size: var(--text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0.02em; background: var(--surface-2); color: var(--ink); }
+.wave-banner.attack { background: var(--danger); color: var(--danger-ink); }
+.wave-banner.alarm { background: var(--alarm); color: var(--alarm-ink); animation: alarm 0.35s steps(2) infinite; }
+.wave-banner.held { background: var(--good); color: var(--good-ink); }
+.wave-banner.paused { background: var(--paused); color: var(--paused-ink); }
+@keyframes alarm { 50% { filter: brightness(1.35); } }
+.mode-toggle { grid-area: mode; display: flex; align-items: center; gap: 0; padding: 4px 0; flex: none; }
+.mode-toggle button { min-height: var(--hit); min-width: 64px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-family: var(--font-display); font-size: var(--ui-2xs); letter-spacing: var(--display-tracking); background: var(--surface); color: var(--muted); border: var(--border) solid var(--line); cursor: pointer; }
+.mode-toggle button:first-of-type { border-radius: var(--radius) 0 0 var(--radius); }
+.mode-toggle button:nth-of-type(2) { border-radius: 0 var(--radius) var(--radius) 0; border-left: 0; }
+.mode-toggle button[data-mode="pve"][aria-pressed="true"] { background: var(--mode-pve); color: var(--mode-pve-ink); border-color: var(--mode-pve); }
+.mode-toggle button[data-mode="pvp"][aria-pressed="true"] { background: var(--mode-pvp); color: var(--mode-pvp-ink); border-color: var(--mode-pvp); }
+/* The switch cooldown sits beside the toggle (it used to hang below it, over the map). */
+.mode-cd { padding: 0 6px; font-family: var(--font-mono); font-size: var(--ui-xs); color: var(--muted); white-space: nowrap; }
+.mode-cd:empty { display: none; }
+.pause-btn { grid-area: pause; flex: none; min-height: var(--hit); margin: 4px 4px 4px 0; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: var(--radius); border: var(--border) solid var(--line-strong); background: var(--surface); color: var(--ink); font-family: var(--font-display); font-size: var(--ui-2xs); letter-spacing: var(--display-tracking); cursor: pointer; white-space: nowrap; min-width: 0; overflow: hidden; }
+.pause-btn .lbl { overflow: hidden; text-overflow: ellipsis; }
 .pause-btn:disabled { color: var(--muted); cursor: default; opacity: 0.7; }
 .pause-btn[data-state='pending'] { border-color: var(--warn); color: var(--warn); }
 .pause-btn[data-state='paused'] { background: var(--paused); color: var(--paused-ink); border-color: var(--paused); animation: pause-glow 1.6s ease-in-out infinite; }
 @keyframes pause-glow { 50% { box-shadow: 0 0 0 3px var(--paused-soft); } }
 @media (prefers-reduced-motion: reduce) { .pause-btn[data-state='paused'] { animation: none; } }
-.wave-banner.paused { background: var(--paused); color: var(--paused-ink); }
-@media (max-width: 520px) { .pause-btn { font-size: 0.6rem; padding: 0 6px; } }
-.mode-toggle button { min-height: 40px; min-width: 64px; padding: 0 10px; font-family: var(--font-display); font-size: var(--text-2xs); letter-spacing: var(--display-tracking); background: var(--surface); color: var(--muted); border: var(--border) solid var(--line); cursor: pointer; }
-.mode-toggle button:first-of-type { border-radius: var(--radius) 0 0 var(--radius); }
-.mode-toggle button:last-of-type { border-radius: 0 var(--radius) var(--radius) 0; border-left: 0; }
-.mode-toggle button[data-mode="pve"][aria-pressed="true"] { background: var(--mode-pve); color: var(--mode-pve-ink); border-color: var(--mode-pve); }
-.mode-toggle button[data-mode="pvp"][aria-pressed="true"] { background: var(--mode-pvp); color: var(--mode-pvp-ink); border-color: var(--mode-pvp); }
-.mode-cd { position: absolute; right: 6px; bottom: -14px; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--muted); white-space: nowrap; pointer-events: none; }
-.mode-chip { display: inline-block; margin-left: 6px; padding: 1px 5px; border-radius: 3px; font-family: var(--font-display); font-size: var(--text-2xs); letter-spacing: var(--display-tracking); vertical-align: middle; }
+.mode-chip { display: inline-block; margin-left: 6px; padding: 1px 5px; border-radius: 3px; font-family: var(--font-display); font-size: var(--ui-2xs); letter-spacing: var(--display-tracking); vertical-align: middle; }
 .mode-chip.pve { background: var(--mode-pve); color: var(--mode-pve-ink); }
 .mode-chip.pvp { background: var(--mode-pvp); color: var(--mode-pvp-ink); }
-.wave-banner.alarm { background: var(--alarm); color: var(--alarm-ink); border-bottom-color: var(--alarm); animation: alarm 0.35s steps(2) infinite; }
-.wave-banner.held { background: var(--good); color: var(--good-ink); border-bottom-color: var(--good); }
-@keyframes alarm { 50% { filter: brightness(1.35); } }
 
-/* ---- map ---- */
-.stage { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.board-wrap { flex: 1; min-height: 0; position: relative; overflow: hidden; background: var(--map-void); touch-action: none; }
-#board { position: absolute; inset: 0; image-rendering: pixelated; image-rendering: crisp-edges; display: block; touch-action: none; cursor: grab; }
+/* ---- stage: map viewport + side panel / bottom sheet ---- */
+.stage { grid-area: stage; min-height: 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; grid-template-areas: "map" "panel"; }
+.board-wrap { grid-area: map; min-height: 0; min-width: 0; position: relative; overflow: hidden; background: var(--map-void); touch-action: none; }
+#board { position: absolute; inset: 0; z-index: var(--z-map); image-rendering: pixelated; image-rendering: crisp-edges; display: block; touch-action: none; cursor: grab; }
 #board.dragging { cursor: grabbing; }
 #board.deploying { cursor: crosshair; }
-/* Soft darkening toward the map edges (a separate layer: costs the canvas nothing). */
-.vignette { position: absolute; inset: 0; pointer-events: none; background: var(--vignette); }
-/* Tap-to-attack: crosshair over the map, ammo bar + combo + airstrike button at the bottom. */
 #board.aim { cursor: crosshair; }
 #board.aim.strike-aim { cursor: cell; }
-.cmd-bar { position: absolute; left: 50%; bottom: calc(10px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; align-items: flex-end; gap: var(--gap); z-index: 5; pointer-events: none; }
-.cmd-bar > button { pointer-events: auto; }
-.ammo { position: relative; min-height: var(--touch); min-width: 150px; padding: 6px 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; background: var(--overlay-strong); color: var(--ink); border: var(--border) solid var(--line-strong); border-radius: var(--radius); font: inherit; cursor: pointer; overflow: hidden; box-shadow: var(--shadow-float); }
-.ammo-name { font-family: var(--font-display); font-size: var(--text-2xs); letter-spacing: var(--display-tracking); color: var(--muted); }
+/* Soft darkening toward the map edges and the red hit pulse (separate layers: they cost the canvas nothing). */
+.vignette, .hurt { position: absolute; inset: 0; z-index: var(--z-map-fx); pointer-events: none; }
+.vignette { background: var(--vignette); }
+.hurt { background: var(--hurt-vignette); opacity: 0; }
+.hurt.pulse { animation: hurt 0.7s ease-out; }
+@keyframes hurt { 0% { opacity: var(--hurt, 0.6); } 100% { opacity: 0; } }
+
+/* ---- the HUD over the map: one grid, fixed zones ---- */
+.hud-layer {
+  position: absolute; inset: 0; z-index: var(--z-hud); pointer-events: none;
+  display: grid; gap: 8px;
+  padding: var(--hud-pad); padding-left: max(var(--hud-pad), env(safe-area-inset-left)); padding-right: max(var(--hud-pad), env(safe-area-inset-right)); padding-bottom: max(var(--hud-pad), env(safe-area-inset-bottom));
+  grid-template-columns: var(--hud-side) minmax(0, 1fr) var(--hud-corner);
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    "tools free corner"
+    "notes free corner"
+    "feed  free corner"
+    "coach coach coach"
+    "rail  rail  rail";
+}
+.hud-layer > * { pointer-events: auto; min-width: 0; min-height: 0; }
+.hud-free { grid-area: free; pointer-events: none; }
+.map-tools { grid-area: tools; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--gap); align-self: start; }
+.map-corner { grid-area: corner; display: flex; flex-direction: column; align-items: flex-end; gap: var(--gap); align-self: start; }
+.minimap { width: var(--minimap); height: var(--minimap); border: var(--border) solid var(--line-strong); border-radius: var(--radius); background: var(--map-void); image-rendering: pixelated; cursor: pointer; touch-action: none; box-shadow: var(--shadow-float); }
+.zoom-tools { display: flex; flex-direction: column; gap: var(--gap); }
+.objectives { grid-area: notes; align-self: start; padding: 8px 10px; background: var(--overlay-strong); border: var(--border) solid var(--accent); border-radius: var(--radius); box-shadow: var(--shadow-float); font-size: var(--ui-xs); }
+.obj-head { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 8px; min-height: var(--hit); margin: -6px 0 0; padding: 0; background: none; border: 0; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+.obj-head b { font-family: var(--font-display); font-size: var(--ui-2xs); letter-spacing: var(--display-tracking); color: var(--accent); }
+.obj-head span { font-family: var(--font-mono); color: var(--muted); }
+.objectives ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; }
+.objectives li::before { content: '\2610  '; color: var(--muted); }
+.objectives li.done { color: var(--muted); text-decoration: line-through; }
+.objectives li.done::before { content: '\2611  '; color: var(--good); text-decoration: none; }
+.objectives.closed ul { display: none; }
+.feed { grid-area: feed; align-self: end; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; overflow: hidden; pointer-events: none; }
+.feed div { align-self: flex-start; max-width: 100%; flex: none; background: var(--overlay); border-left: 4px solid var(--line-strong); padding: 4px 10px; font-size: var(--ui-xs); color: var(--ink); border-radius: var(--radius-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: toast-in 0.25s ease-out; transition: opacity 1s; }
+.feed div.raid { border-left-color: var(--danger); }
+.feed div.join { border-left-color: var(--good); }
+.feed div.crate { border-left-color: var(--info); }
+.feed div.rank { border-left-color: var(--accent); }
+.feed div.old { opacity: 0; }
+/* The walkthrough's coach: its own row above the rail. */
+.coach { grid-area: coach; justify-self: center; max-width: min(100%, 460px); padding: 10px 14px; text-align: center; font-family: var(--font-display); font-size: var(--ui-xs); letter-spacing: var(--display-tracking); line-height: 1.5; color: var(--coach-ink); background: var(--coach); border: var(--border) solid var(--coach-edge); border-radius: var(--radius); box-shadow: var(--shadow-float); pointer-events: none; animation: coach-in 0.25s ease-out; }
+@keyframes coach-in { from { opacity: 0; transform: translateY(8px); } }
+/* Toasts queue at the top of the free area (newest first; the oldest drop off the bottom). */
+.toasts { grid-area: free; z-index: var(--z-toast); align-self: start; justify-self: center; width: min(100%, 440px); max-height: 100%; overflow: hidden; display: flex; flex-direction: column-reverse; justify-content: flex-end; gap: 6px; pointer-events: none; }
+.toast { flex: none; background: var(--overlay-strong); border: 1px solid var(--line-strong); border-left: 6px solid var(--accent); padding: 10px 14px; border-radius: var(--radius); font-size: var(--text-sm); font-weight: var(--weight-bold); box-shadow: var(--shadow-float); animation: toast-in 0.2s ease-out; }
+.toast.bad { border-left-color: var(--danger); }
+.toast.good { border-left-color: var(--good); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(-6px); } }
+
+/* ---- the action rail: combo line, then threat / call early / ammo / powers in one row (it wraps on phones) ---- */
+.rail { grid-area: rail; display: flex; flex-direction: column; align-items: stretch; pointer-events: none; }
+.rail > * { pointer-events: auto; }
+.cmd-bar { display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: none; }
+.cmd-bar button, .cmd-bar .threat { pointer-events: auto; }
+/* The combo keeps its line even when empty, so the rail (and the free area) never jump. */
+.combo { min-height: 1.4em; text-align: center; font-family: var(--font-display); font-size: var(--text-md); letter-spacing: var(--display-tracking); color: var(--combo); text-shadow: 2px 2px 0 var(--combo-shadow); white-space: nowrap; pointer-events: none; }
+.combo[hidden] { display: block !important; visibility: hidden; }
+.combo.bump { animation: combo-bump 0.18s ease-out; }
+@keyframes combo-bump { from { transform: scale(1.35); } }
+.rail-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--gap); max-width: 100%; }
+.threat { display: flex; align-items: center; gap: 6px; min-height: var(--hit); padding: 4px 10px; background: var(--overlay-strong); border: var(--border) solid var(--line-strong); border-radius: var(--radius); font-family: var(--font-mono); font-size: var(--text-md); color: var(--ink); white-space: nowrap; }
+.threat .vs { color: var(--muted); }
+.threat small { font-family: var(--font-display); font-size: var(--ui-2xs); letter-spacing: var(--display-tracking); }
+.threat.safe { border-color: var(--good); } .threat.safe small { color: var(--good); }
+.threat.close { border-color: var(--warn); } .threat.close small { color: var(--warn); }
+.threat.danger { border-color: var(--danger); animation: alarm 0.6s steps(2) infinite; } .threat.danger small { color: var(--danger-text); }
+.ammo { position: relative; min-height: var(--touch); min-width: 150px; padding: 6px 12px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 4px; background: var(--overlay-strong); color: var(--ink); border: var(--border) solid var(--line-strong); border-radius: var(--radius); font: inherit; cursor: pointer; overflow: hidden; box-shadow: var(--shadow-float); }
+.ammo-name { font-family: var(--font-display); font-size: var(--ui-2xs); letter-spacing: var(--display-tracking); color: var(--muted); }
 .rounds { display: flex; gap: 2px; flex-wrap: wrap; max-width: 210px; }
 .rounds i { width: 5px; height: 12px; background: var(--ammo); border-radius: 1px; }
 .rounds i.spent { background: var(--ammo-spent); }
@@ -71,118 +171,90 @@ body.siege { overflow: hidden; display: flex; flex-direction: column; height: 10
 .ammo.reloading .ammo-name::after { content: ' · RELOADING'; color: var(--accent); }
 .ammo.flash { animation: ammo-flash 0.25s steps(2); }
 @keyframes ammo-flash { 50% { border-color: var(--danger); } }
-.strike { position: relative; width: 60px; height: 60px; border-radius: 50%; border: var(--border) solid var(--line-strong); background: var(--strike); color: var(--strike-ink); font-size: 26px; cursor: pointer; box-shadow: var(--shadow-float); display: grid; place-items: center; }
+.early { min-height: var(--touch); padding: 4px 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: var(--accent); color: var(--accent-ink); border: var(--border) solid var(--accent-shade); border-radius: var(--radius); font: inherit; cursor: pointer; box-shadow: var(--shadow-float); }
+.early b { font-family: var(--font-display); font-size: var(--ui-2xs); letter-spacing: var(--display-tracking); }
+.early small { font-family: var(--font-mono); font-size: var(--ui-xs); }
+.early:disabled { background: var(--overlay-strong); color: var(--muted); border-color: var(--line); cursor: default; }
+/* Powers: one row of round buttons, only the unlocked ones. */
+.powers { display: flex; gap: 6px; }
+.strike { position: relative; width: var(--touch); height: var(--touch); border-radius: 50%; border: var(--border) solid var(--line-strong); background: var(--strike); color: var(--strike-ink); font-size: 20px; cursor: pointer; box-shadow: var(--shadow-float); display: grid; place-items: center; }
 .strike.aiming { animation: alarm 0.35s steps(2) infinite; outline: 3px solid var(--accent); }
 .strike.cooling { background: var(--overlay-strong); color: var(--muted); }
-.strike-cd { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--font-display); font-size: var(--text-xs); color: var(--ink); }
-/* Call the next surge early (between surges). */
-.early { min-height: var(--touch); padding: 4px 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: var(--accent); color: var(--accent-ink); border: var(--border) solid var(--accent-shade); border-radius: var(--radius); font: inherit; cursor: pointer; box-shadow: var(--shadow-float); }
-.early b { font-family: var(--font-display); font-size: var(--text-2xs); letter-spacing: var(--display-tracking); }
-.early small { font-family: var(--font-mono); font-size: var(--text-xs); }
-.early:disabled { background: var(--overlay-strong); color: var(--muted); border-color: var(--line); cursor: default; }
-/* The walkthrough's coach: a big prompt above the ammo bar. */
-.coach { position: absolute; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 6; max-width: min(92vw, 420px); padding: 10px 14px; text-align: center; font-family: var(--font-display); font-size: var(--text-xs); letter-spacing: var(--display-tracking); line-height: 1.5; color: var(--coach-ink); background: var(--coach); border: var(--border) solid var(--coach-edge); border-radius: var(--radius); box-shadow: var(--shadow-float); pointer-events: none; animation: coach-in 0.25s ease-out; }
-@keyframes coach-in { from { opacity: 0; transform: translate(-50%, 8px); } }
-/* Threat meter: your defence vs the next surge. */
-.threat { position: absolute; bottom: calc(100% + 8px); right: 0; display: flex; align-items: center; gap: 6px; padding: 4px 10px; background: var(--overlay-strong); border: var(--border) solid var(--line-strong); border-radius: var(--radius); font-family: var(--font-mono); font-size: var(--text-md); color: var(--ink); white-space: nowrap; pointer-events: auto; }
-.threat .vs { color: var(--muted); }
-.threat small { font-family: var(--font-display); font-size: var(--text-2xs); letter-spacing: var(--display-tracking); }
-.threat.safe { border-color: var(--good); } .threat.safe small { color: var(--good); }
-.threat.close { border-color: var(--warn); } .threat.close small { color: var(--warn); }
-.threat.danger { border-color: var(--danger); animation: alarm 0.6s steps(2) infinite; } .threat.danger small { color: var(--danger-text); }
-/* The basic-base checklist (guidance). */
-.objectives { position: absolute; left: 8px; top: calc(var(--touch) * 2 + 24px); z-index: 4; max-width: 240px; padding: 8px 10px; background: var(--overlay-strong); border: var(--border) solid var(--accent); border-radius: var(--radius); box-shadow: var(--shadow-float); font-size: var(--text-xs); pointer-events: none; }
-.objectives b { display: block; margin-bottom: 4px; font-family: var(--font-display); font-size: var(--text-2xs); letter-spacing: var(--display-tracking); color: var(--accent); }
-.objectives ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; }
-.objectives li::before { content: '\2610  '; color: var(--muted); }
-.objectives li.done { color: var(--muted); text-decoration: line-through; }
-.objectives li.done::before { content: '\2611  '; color: var(--good); text-decoration: none; }
-.combo { position: absolute; bottom: calc(100% + 8px); left: 0; right: 0; text-align: center; font-family: var(--font-display); font-size: var(--text-md); letter-spacing: var(--display-tracking); color: var(--combo); text-shadow: 2px 2px 0 var(--combo-shadow); white-space: nowrap; pointer-events: none; }
-.combo.bump { animation: combo-bump 0.18s ease-out; }
-@keyframes combo-bump { from { transform: scale(1.35); } }
-/* Red pulse when your Main Tower is hit; --hurt (0..1) is set per hit. */
-.hurt { position: absolute; inset: 0; pointer-events: none; background: var(--hurt-vignette); opacity: 0; }
-.hurt.pulse { animation: hurt 0.7s ease-out; }
-@keyframes hurt { 0% { opacity: var(--hurt, 0.6); } 100% { opacity: 0; } }
+.strike-cd { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--font-display); font-size: var(--ui-xs); color: var(--ink); }
+.strike.squad.out { background: var(--good); color: var(--good-ink); }
+.squad-hp { position: absolute; left: 6px; bottom: 5px; height: 3px; max-width: calc(100% - 12px); background: var(--good-ink); border-radius: 2px; }
 
-.minimap { position: absolute; right: 8px; top: 8px; width: var(--minimap); height: var(--minimap); border: var(--border) solid var(--line-strong); border-radius: var(--radius); background: var(--map-void); image-rendering: pixelated; cursor: pointer; touch-action: none; box-shadow: var(--shadow-float); }
-.map-tools { position: absolute; left: 8px; top: 8px; display: flex; gap: var(--gap); flex-wrap: wrap; max-width: calc(100% - var(--minimap) - 32px); }
-.zoom-tools { position: absolute; right: 8px; top: calc(var(--minimap) + 20px); display: flex; flex-direction: column; gap: var(--gap); }
-.tool { min-height: var(--touch); padding: 0 14px; font: inherit; font-weight: var(--weight-bold); font-size: var(--text-sm); color: var(--ink); background: var(--overlay); border: var(--border) solid var(--line); border-radius: var(--radius); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: var(--shadow-float); backdrop-filter: blur(4px); }
-.tool:hover { border-color: var(--line-strong); }
-.tool.sq { width: var(--touch); padding: 0; justify-content: center; font-size: var(--text-xl); }
-.tool.on { border-color: var(--accent); color: var(--accent); }
-.tool.danger { background: var(--danger); border-color: var(--danger); color: var(--danger-ink); }
-.badge { background: var(--danger); color: var(--danger-ink); border-radius: var(--radius-pill); padding: 0 7px; font-size: var(--text-2xs); line-height: 18px; font-weight: var(--weight-heavy); }
-
-.feed { position: absolute; left: 8px; bottom: 8px; right: calc(var(--minimap) + 24px); display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
-.feed div { align-self: flex-start; max-width: 100%; background: var(--overlay); border-left: 4px solid var(--line-strong); padding: 4px 10px; font-size: var(--text-xs); color: var(--ink); border-radius: var(--radius-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: toast-in 0.25s ease-out; transition: opacity 1s; }
-.feed div.raid { border-left-color: var(--danger); }
-.feed div.join { border-left-color: var(--good); }
-.feed div.crate { border-left-color: var(--info); }
-.feed div.rank { border-left-color: var(--accent); }
-.feed div.old { opacity: 0; }
-
-/* ---- raid controls ---- */
-.attack-bar { position: absolute; left: 0; right: 0; bottom: 0; background: var(--overlay-strong); border-top: var(--border) solid var(--danger); padding: 10px 12px; padding-bottom: max(10px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: var(--gap); }
-.board-wrap.raiding .feed { bottom: 150px; }
-.attack-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: var(--text-sm); }
-.attack-top > span:first-child { font-weight: var(--weight-heavy); color: var(--danger-text); flex: 1; min-width: 120px; }
-.raid-stat { color: var(--muted); }
+/* ---- raid controls (in the rail, instead of the Commander's bar) ---- */
+.attack-bar { align-self: center; width: min(100%, 640px); background: var(--overlay-strong); border: var(--border) solid var(--danger); border-radius: var(--radius-lg); padding: 10px 12px; display: flex; flex-direction: column; gap: var(--gap); }
+.attack-top { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; font-size: var(--text-sm); }
+.attack-top > span:first-child { font-weight: var(--weight-heavy); color: var(--danger-text); flex: 1; min-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.raid-stat { color: var(--muted); white-space: nowrap; }
 .raid-stars { font-size: var(--text-lg); letter-spacing: 2px; color: var(--star); text-shadow: 1px 1px 0 var(--star-shadow); }
 .raid-stat b { color: var(--ink); font-family: var(--font-mono); }
 .troops { display: flex; gap: var(--gap); overflow-x: auto; }
 .troop { flex: 1 0 88px; min-height: 56px; border-radius: var(--radius); border: var(--border) solid var(--line); background: var(--surface-2); color: var(--ink); font: inherit; font-weight: var(--weight-bold); font-size: var(--text-sm); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
-.troop small { font-weight: var(--weight-body); color: var(--muted); font-size: var(--text-2xs); }
+.troop small { font-weight: var(--weight-body); color: var(--muted); font-size: var(--ui-2xs); }
 .troop.on { border-color: var(--accent); background: var(--accent-soft); }
 .troop:disabled { opacity: 0.45; cursor: default; }
-.attack-hint { margin: 0; font-size: var(--text-xs); color: var(--muted); }
+.attack-hint { margin: 0; font-size: var(--ui-xs); color: var(--muted); }
 
-/* ---- side panel ---- */
-.panel { background: var(--surface); border-top: var(--border) solid var(--line); padding: 14px 16px; padding-bottom: max(14px, env(safe-area-inset-bottom)); max-height: var(--panel-max-height); overflow: auto; }
+/* ---- map buttons ---- */
+.tool { min-height: var(--touch); min-width: var(--hit); padding: 0 14px; font: inherit; font-weight: var(--weight-bold); font-size: var(--text-sm); color: var(--ink); background: var(--overlay); border: var(--border) solid var(--line); border-radius: var(--radius); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; box-shadow: var(--shadow-float); backdrop-filter: blur(4px); white-space: nowrap; }
+.tool:hover { border-color: var(--line-strong); }
+.tool.sq { width: var(--touch); padding: 0; font-size: var(--text-xl); }
+.tool.on { border-color: var(--accent); color: var(--accent); }
+.tool.danger { background: var(--danger); border-color: var(--danger); color: var(--danger-ink); }
+.badge { background: var(--danger); color: var(--danger-ink); border-radius: var(--radius-pill); padding: 0 7px; font-size: var(--ui-2xs); line-height: 18px; font-weight: var(--weight-heavy); }
+.crate-tool.on { border-color: var(--accent); color: var(--accent); animation: crate-pulse 1.2s ease-in-out infinite; }
+@keyframes crate-pulse { 50% { box-shadow: 0 0 0 4px var(--accent-soft); } }
+
+/* ---- side panel (wide) / bottom sheet (phones) ---- */
+.panel { grid-area: panel; z-index: var(--z-panel); min-width: 0; min-height: 0; background: var(--surface); border-top: var(--border) solid var(--line); padding: 14px 16px; padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); padding-bottom: max(14px, env(safe-area-inset-bottom)); max-height: var(--panel-max-height); overflow: auto; overscroll-behavior: contain; }
 .panel-head { display: flex; align-items: flex-start; gap: var(--gap); }
-.panel-head h2 { flex: 1; }
+.panel-head h2 { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .panel h2 { margin: 0 0 4px; font-size: var(--text-lg); font-weight: var(--weight-heavy); }
-.panel h3 { margin: 16px 0 6px; font-size: var(--text-xs); font-weight: var(--weight-heavy); color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.panel h3 { margin: 16px 0 6px; font-size: var(--ui-xs); font-weight: var(--weight-heavy); color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
 .panel .sub { color: var(--muted); font-size: var(--text-sm); margin: 0 0 10px; line-height: 1.45; }
-.close { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); color: var(--ink); font-size: var(--text-xl); line-height: 1; cursor: pointer; min-width: var(--touch-sm); min-height: var(--touch-sm); }
-.status { display: inline-block; font-size: var(--text-xs); font-weight: var(--weight-bold); padding: 3px 10px; border-radius: var(--radius-pill); background: var(--surface-2); border: 1px solid var(--line); }
+.close, .sheet-toggle { flex: none; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); color: var(--ink); font-size: var(--text-xl); line-height: 1; cursor: pointer; min-width: var(--hit); min-height: var(--hit); }
+/* The sheet handle only exists where the panel is a bottom sheet. */
+.sheet-toggle { display: none; font-size: var(--text-md); }
+.panel.collapsed > :not(.panel-head) { display: none; }
+.status { display: inline-block; font-size: var(--ui-xs); font-weight: var(--weight-bold); padding: 3px 10px; border-radius: var(--radius-pill); background: var(--surface-2); border: 1px solid var(--line); }
 .status.bad { color: var(--danger-text); background: var(--danger-soft); border-color: var(--danger); }
 .status.shield { color: var(--shield); background: var(--shield-soft); border-color: var(--shield); }
-.why { font-size: var(--text-xs); color: var(--muted); margin: 6px 0 0; }
+.why { font-size: var(--ui-xs); color: var(--muted); margin: 6px 0 0; }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: var(--gap); margin: 8px 0 12px; }
-.stats div { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; font-size: var(--text-xs); color: var(--muted); }
+.stats div { min-width: 0; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; font-size: var(--ui-xs); color: var(--muted); overflow-wrap: anywhere; }
 .stats b { display: block; color: var(--ink); font-family: var(--font-mono); font-size: var(--text-md); margin-top: 2px; }
 .list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
 .list button { width: 100%; display: flex; align-items: center; gap: var(--gap); min-height: var(--touch); padding: 6px 12px; font: inherit; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer; text-align: left; }
 .list button:hover { background: var(--surface-3); }
 .list button.me { border-color: var(--accent); }
-.list .rank { font-family: var(--font-mono); color: var(--muted); width: 2.4em; }
-.list .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--weight-bold); }
-.list .val { font-family: var(--font-mono); font-weight: var(--weight-bold); }
+.list .rank { font-family: var(--font-mono); color: var(--muted); width: 2.4em; flex: none; }
+.list .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--weight-bold); }
+.list .val { font-family: var(--font-mono); font-weight: var(--weight-bold); flex: none; }
 .empty { color: var(--muted); font-size: var(--text-sm); }
-.note { font-size: var(--text-xs); color: var(--muted); margin: 10px 0 0; line-height: 1.45; }
+.note { font-size: var(--ui-xs); color: var(--muted); margin: 10px 0 0; line-height: 1.45; }
+.note a, .panel p a { display: inline-flex; align-items: center; min-height: var(--hit); }
 
 /* ---- buttons ---- */
 .actions { display: flex; flex-wrap: wrap; gap: var(--gap); }
-.btn { flex: 1 1 140px; min-height: var(--touch); border: 0; border-radius: var(--radius); padding: 10px 14px; font: inherit; font-weight: var(--weight-heavy); font-size: var(--text-md); cursor: pointer; background: var(--accent); color: var(--accent-ink); box-shadow: var(--shadow-press) var(--accent-shade); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
-.btn small { font-weight: var(--weight-bold); font-size: var(--text-xs); opacity: 0.8; }
+.btn { flex: 1 1 140px; min-height: var(--touch); border: 0; border-radius: var(--radius); padding: 10px 14px; font: inherit; font-weight: var(--weight-heavy); font-size: var(--text-md); cursor: pointer; background: var(--accent); color: var(--accent-ink); box-shadow: var(--shadow-press) var(--accent-shade); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.btn small { font-weight: var(--weight-bold); font-size: var(--ui-xs); opacity: 0.8; }
 .btn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--accent-shade); }
 .btn:disabled { background: var(--surface-2); color: var(--muted); box-shadow: none; cursor: default; opacity: 0.75; }
 .btn.secondary { background: var(--surface-2); color: var(--ink); box-shadow: var(--shadow-press) var(--bg); border: 1px solid var(--line-strong); }
-.link { background: none; border: 0; padding: 8px 0; min-height: var(--touch-sm); color: var(--accent); font: inherit; font-size: var(--text-sm); font-weight: var(--weight-bold); text-decoration: underline; cursor: pointer; }
+.link { background: none; border: 0; padding: 8px 0; min-height: var(--hit); color: var(--accent); font: inherit; font-size: var(--text-sm); font-weight: var(--weight-bold); text-decoration: underline; cursor: pointer; }
 
-/* ---- toasts & menu ---- */
-.toasts { position: absolute; left: 50%; top: 72px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 6px; z-index: 10; width: min(92vw, 440px); pointer-events: none; }
-.toast { background: var(--overlay-strong); border: 1px solid var(--line-strong); border-left: 6px solid var(--accent); padding: 10px 14px; border-radius: var(--radius); font-size: var(--text-sm); font-weight: var(--weight-bold); box-shadow: var(--shadow-float); animation: toast-in 0.2s ease-out; }
-.toast.bad { border-left-color: var(--danger); }
-.toast.good { border-left-color: var(--good); }
-@keyframes toast-in { from { opacity: 0; transform: translateY(-6px); } }
-.menu { position: absolute; right: 10px; top: 64px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius-lg); padding: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 20; box-shadow: var(--shadow-float); }
+/* ---- menu (a modal sheet) ---- */
+.menu { position: fixed; inset: 0; z-index: var(--z-modal); display: grid; place-items: start end; padding: 64px 10px 10px; padding-top: calc(64px + env(safe-area-inset-top)); background: rgba(5, 10, 25, 0.55); }
+.menu-card { background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius-lg); padding: 8px; display: flex; flex-direction: column; gap: 6px; box-shadow: var(--shadow-float); width: min(100%, 300px); }
 .menu button { min-height: var(--touch); min-width: 160px; font: inherit; font-weight: var(--weight-bold); background: var(--surface-2); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer; }
+.menu-credit { margin: 4px 4px 0; font-size: var(--ui-2xs); color: var(--muted); }
+.menu-credit a { display: inline-flex; align-items: center; min-height: var(--hit); color: var(--muted); }
 
 /* ---- login & connecting ---- */
-.login, .connecting { position: absolute; inset: 0; z-index: 30; background: var(--login-glow); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; }
+.login, .connecting { position: absolute; inset: 0; z-index: var(--z-connecting); background: var(--login-glow); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; }
 .connecting { color: var(--muted); font-family: var(--font-mono); }
 .connecting[hidden], .login[hidden] { display: none; }
 .login h1 { font-weight: var(--weight-heavy); font-size: clamp(2.2rem, 10vw, 3.4rem); margin: 0; color: var(--accent); text-shadow: 0 3px 0 var(--accent-shade); }
@@ -193,30 +265,18 @@ body.siege { overflow: hidden; display: flex; flex-direction: column; height: 10
 .login button { min-height: 52px; font: inherit; font-weight: var(--weight-heavy); font-size: var(--text-lg); border: 0; border-radius: var(--radius); background: var(--accent); color: var(--accent-ink); cursor: pointer; box-shadow: var(--shadow-press) var(--accent-shade); }
 .login .error { color: var(--danger-text); min-height: 1.2em; margin: 0; font-size: var(--text-sm); font-weight: var(--weight-bold); }
 
-.credit { font-size: var(--text-2xs); color: var(--muted); text-align: center; padding: 4px 8px; padding-bottom: max(4px, env(safe-area-inset-bottom)); background: var(--bg); }
+.credit { font-size: var(--ui-2xs); color: var(--muted); text-align: center; padding: 4px 8px; padding-bottom: max(4px, env(safe-area-inset-bottom)); background: var(--bg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .credit a { color: var(--muted); }
 
-@media (orientation: landscape) and (min-width: 820px) {
-  .stage { flex-direction: row; }
-  .panel { width: var(--panel-width); max-height: none; border-top: 0; border-left: var(--border) solid var(--line); }
-  .attack-bar { left: 8px; right: auto; bottom: 8px; width: min(580px, calc(100% - var(--minimap) - 32px)); border: var(--border) solid var(--danger); border-radius: var(--radius-lg); }
-  .board-wrap.raiding .feed { bottom: 8px; left: auto; right: calc(var(--minimap) + 24px); width: 320px; }
-}
-
-/* ---- immunity, crates, boosts ---- */
-.chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
-.chip { font-family: var(--font-mono); font-size: var(--text-2xs); font-weight: var(--weight-bold); padding: 0 8px; border-radius: var(--radius-pill); background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-shade); line-height: 18px; }
-.chip.shield { color: var(--shield); background: var(--shield-soft); border-color: var(--shield); }
+/* ---- crates, boosts ---- */
 .boosts { margin: 0; padding-left: 18px; font-size: var(--text-sm); line-height: 1.6; }
-.crate-tool.on { border-color: var(--accent); color: var(--accent); animation: crate-pulse 1.2s ease-in-out infinite; }
-@keyframes crate-pulse { 50% { box-shadow: 0 0 0 4px var(--accent-soft); } }
 .rarity { text-transform: capitalize; padding: 1px 10px; border-radius: var(--radius-pill); color: var(--accent-ink); font-weight: var(--weight-heavy); }
 .r-rare { background: var(--rarity-rare); }
 .r-epic { background: var(--rarity-epic); }
 .r-legendary { background: var(--rarity-legendary); color: var(--danger-ink); }
 .q-prompt { margin: 8px 0 6px; font-weight: var(--weight-bold); line-height: 1.4; }
 .code { margin: 0 0 10px; padding: 12px 14px; background: var(--code-bg); border: 1px solid var(--line); border-radius: var(--radius); font-family: var(--font-mono); font-size: var(--text-sm); line-height: 1.5; overflow-x: auto; white-space: pre; color: var(--code-ink); position: relative; }
-.code::before { content: attr(data-lang); position: absolute; right: 10px; top: 6px; font-size: var(--text-2xs); color: var(--muted); text-transform: uppercase; }
+.code::before { content: attr(data-lang); position: absolute; right: 10px; top: 6px; font-size: var(--ui-2xs); color: var(--muted); text-transform: uppercase; }
 .crate-form { display: flex; gap: var(--gap); }
 .crate-form input { flex: 1; min-width: 0; min-height: var(--touch); font: inherit; font-family: var(--font-mono); font-size: var(--text-md); padding: 10px 12px; border-radius: var(--radius); border: var(--border) solid var(--line); background: var(--surface-2); color: var(--ink); }
 .crate-form input:focus { outline: none; border-color: var(--accent); }
@@ -227,46 +287,152 @@ body.siege { overflow: hidden; display: flex; flex-direction: column; height: 10
 .answer-reveal code { font-family: var(--font-mono); background: var(--code-bg); padding: 2px 8px; border-radius: var(--radius-sm); }
 
 /* ---- retro display face on headings, buttons and big labels ---- */
-.hud-who > span:first-child, .wave-banner, .tool, .btn, .troop, .panel h2, .panel h3, .menu button, .login h1, .login button, .attack-top > span:first-child, .rarity, .badge, .status {
+.hud-name, .wave-banner, .tool, .btn, .troop, .panel h2, .panel h3, .menu button, .login h1, .login button, .attack-top > span:first-child, .rarity, .badge, .status {
   font-family: var(--font-display);
   letter-spacing: var(--display-tracking);
 }
 .btn small, .troop small { font-family: var(--font); letter-spacing: 0; }
 
 /* ---- arcade title screen: one pixel canvas, letterboxed; real inputs sit invisibly over its fields ---- */
-.title { position: fixed; inset: 0; z-index: 40; background: var(--title-bg); overflow: hidden; touch-action: manipulation; }
+.title { position: fixed; inset: 0; z-index: var(--z-title); background: var(--title-bg); overflow: hidden; touch-action: manipulation; }
 .title canvas { position: absolute; image-rendering: pixelated; image-rendering: crisp-edges; outline: none; }
 .title-crt { position: absolute; pointer-events: none; background: var(--title-scanlines), var(--title-crt-vignette); }
 .title-input { position: absolute; opacity: 0; border: 0; padding: 0; margin: 0; background: transparent; color: transparent; caret-color: transparent; font-size: 16px; /* 16px: phones don't zoom in */ }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
-/* Powers: the ability buttons sit in a 2-row grid next to the ammo bar (2x2 once all four are unlocked). */
-.powers { display: grid; grid-auto-flow: column; grid-template-rows: auto auto; gap: 6px; pointer-events: none; }
-.powers > button { pointer-events: auto; width: 48px; height: 48px; font-size: 20px; }
-.powers > button[hidden] { display: none; }
-.strike.squad.out { background: var(--good); color: var(--good-ink); }
-.squad-hp { position: absolute; left: 6px; bottom: 5px; height: 3px; max-width: calc(100% - 12px); background: var(--good-ink); border-radius: 2px; }
-
 /* The powers list on the Main Tower card: locked ones greyed out. */
 .powers-list { list-style: none; margin: 0 0 var(--gap); padding: 0; display: grid; gap: 6px; }
-.power { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); }
-.power small { display: block; color: var(--muted); font-size: var(--text-2xs); }
-.power em { font-style: normal; font-size: var(--text-2xs); color: var(--good); white-space: nowrap; }
+.power { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); }
+.power small { display: block; color: var(--muted); font-size: var(--ui-2xs); }
+.power em { font-style: normal; font-size: var(--ui-2xs); color: var(--good); white-space: nowrap; }
 .power-icon { font-size: 20px; text-align: center; }
 .power.locked { opacity: 0.45; filter: grayscale(1); }
 .power.locked em { color: var(--muted); }
 .squad-pick { display: flex; gap: 6px; flex-wrap: wrap; }
-.squad-pick .troop { min-height: var(--touch-sm); }
+.squad-pick .troop { min-height: var(--hit); }
 
-/* "New power unlocked!" after a Main Tower upgrade. */
-.unlock { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 16px; background: rgba(5, 10, 25, 0.55); cursor: pointer; }
+/* "New power unlocked!" after a Main Tower upgrade (a modal: tap to dismiss). */
+.unlock { position: fixed; inset: 0; z-index: var(--z-modal); display: grid; place-items: center; padding: 16px; background: rgba(5, 10, 25, 0.55); cursor: pointer; }
 .unlock[hidden] { display: none; }
-.unlock-card { width: min(100%, 340px); padding: 16px; border: var(--border) solid var(--accent); border-radius: var(--radius-lg); background: var(--overlay-strong); box-shadow: var(--shadow-float); text-align: left; }
+.unlock-card { width: min(100%, 340px); max-height: 100%; overflow: auto; padding: 16px; border: var(--border) solid var(--accent); border-radius: var(--radius-lg); background: var(--overlay-strong); box-shadow: var(--shadow-float); text-align: left; }
 .unlock.show .unlock-card { animation: unlock-pop 0.45s cubic-bezier(0.2, 1.6, 0.4, 1); }
 .unlock-title { margin: 0 0 10px; font-family: var(--font-display); letter-spacing: var(--display-tracking); color: var(--accent); text-align: center; font-size: var(--text-md); }
 .unlock-item { display: grid; grid-template-columns: 36px 1fr; gap: 10px; align-items: center; margin: 8px 0; }
-.unlock-item small { display: block; color: var(--muted); font-size: var(--text-xs); }
+.unlock-item small { display: block; color: var(--muted); font-size: var(--ui-xs); }
 .unlock-icon { font-size: 28px; text-align: center; }
-.unlock-tap { margin: 10px 0 0; text-align: center; color: var(--muted); font-size: var(--text-2xs); }
+.unlock-tap { margin: 10px 0 0; text-align: center; color: var(--muted); font-size: var(--ui-2xs); }
 @keyframes unlock-pop { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .unlock.show .unlock-card { animation: none; } }
+
+/* =====================================================================================================
+   Wide screens (landscape, 820px+): the panel is a column beside the map.
+   ===================================================================================================== */
+@media (orientation: landscape) and (min-width: 820px) {
+  .stage { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: minmax(0, 1fr); grid-template-areas: "map panel"; }
+  .panel { width: var(--panel-width); max-height: none; border-top: 0; border-left: var(--border) solid var(--line); }
+}
+
+/* =====================================================================================================
+   Phones, portrait (and any narrow window): two-line top bar, banner over the toggles, the HUD grid
+   in two columns, a compact rail, and the panel as a collapsible bottom sheet.
+   ===================================================================================================== */
+@media (max-width: 600px) {
+  :root { --hud-corner: auto; --hud-pad: 6px; }
+  .hud { grid-template-columns: minmax(0, 1fr) auto auto auto auto; grid-template-areas: "who coins trophies sound menu" "chips chips chips chips chips"; padding-left: max(8px, env(safe-area-inset-left)); padding-right: max(8px, env(safe-area-inset-right)); column-gap: 6px; }
+  .hud-who { max-width: none; }
+  .hud-stat { padding: 0 8px; gap: 4px; font-size: var(--text-sm); }
+  .chips:empty { display: none; }
+  .banner-row { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "banner banner" "mode pause"; }
+  .wave-banner { border-bottom: 1px solid var(--line); }
+  .mode-toggle { padding: 4px 0 4px 6px; }
+  .pause-btn { justify-self: end; max-width: 100%; }
+  .credit { display: none; }
+  .hud-layer {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
+    grid-template-areas:
+      "tools corner"
+      "notes corner"
+      "free  free"
+      "feed  feed"
+      "coach coach"
+      "rail  rail";
+  }
+  .map-tools { grid-template-columns: repeat(2, minmax(0, max-content)); }
+  .map-tools .tool { padding: 0 10px; }
+  .map-corner { flex-direction: row; align-items: flex-start; }
+  .minimap { width: min(var(--minimap), 26vw); height: min(var(--minimap), 26vw); }
+  .zoom-tools { flex-direction: column; }
+  /* One feed line, in a reserved slot (so it never pushes the map around). */
+  .feed { height: 30px; }
+  .feed div:not(:last-child) { display: none; }
+  .objectives { padding: 4px 10px; }
+  .rail-row { gap: 6px; }
+  .threat { font-size: var(--text-sm); padding: 4px 8px; }
+  .ammo { min-width: 112px; padding: 4px 10px; }
+  .rounds { max-width: 150px; }
+  .early { padding: 2px 10px; }
+  .powers { gap: 4px; }
+  .attack-bar { padding: 8px; }
+  .attack-hint { display: none; }
+  /* Bottom sheet: pushes the map up; its handle folds it down to just its title. */
+  .panel { max-height: 52dvh; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+  .sheet-toggle { display: inline-flex; align-items: center; justify-content: center; }
+  .panel.collapsed { overflow: hidden; }
+  /* The bottom zone holds the open sheet OR the action rail (fold the sheet to get the rail back). */
+  #app.sheet-open .rail, #app.sheet-open .feed, #app.sheet-open .coach { display: none; }
+}
+@media (max-width: 360px) {
+  .mode-toggle .lbl { display: none; }
+  .mode-toggle button { min-width: var(--hit); }
+}
+
+/* =====================================================================================================
+   Phones, landscape (short screens): top bar and banner share one row, the tools stand in a column
+   beside the free area, the rail is a single row, and the panel is a side drawer.
+   ===================================================================================================== */
+@media (orientation: landscape) and (max-height: 500px) {
+  :root { --hud-side: 232px; --hud-corner: auto; --hud-pad: 6px; }
+  #app { grid-template-columns: minmax(0, auto) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "hud banner" "stage stage"; }
+  .hud { grid-template-columns: minmax(0, auto) minmax(0, 80px) auto auto auto auto; padding-top: max(4px, env(safe-area-inset-top)); padding-bottom: 4px; padding-right: 6px; column-gap: 6px; border-bottom: var(--border) solid var(--line); }
+  .hud-who { max-width: 14ch; }
+  .hud-sub { display: none; }
+  .hud-stat { padding: 0 8px; gap: 4px; font-size: var(--text-sm); }
+  .banner-row { border-bottom: var(--border) solid var(--line); padding-left: 0; }
+  .mode-toggle .lbl, .pause-btn .lbl { display: none; }
+  .mode-toggle button, .pause-btn { min-width: var(--hit); padding: 0 8px; }
+  .credit { display: none; }
+  .hud-layer {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "tools free corner"
+      "notes free corner"
+      ".     free corner"
+      "coach coach coach"
+      "feed  rail  rail";
+  }
+  .map-tools .tool { padding: 0 10px; }
+  .minimap { width: 88px; height: 88px; }
+  .map-corner { align-items: flex-end; }
+  .zoom-tools { flex-direction: row; }
+  .feed { align-self: end; max-width: 220px; height: auto; }
+  .feed div:not(:last-child) { display: none; }
+  .objectives { max-width: 200px; padding: 4px 8px; }
+  /* No room for a combo line: it floats just above the rail, over the map. */
+  .cmd-bar { position: relative; }
+  .combo { position: absolute; left: 0; right: 0; bottom: 100%; }
+  .rail { align-self: end; }
+  .rail-row { flex-wrap: nowrap; gap: 6px; }
+  .threat { font-size: var(--text-sm); padding: 4px 8px; }
+  .ammo { min-width: 104px; padding: 2px 10px; }
+  .rounds { max-width: 120px; }
+  .early { padding: 2px 8px; }
+  .attack-bar { padding: 6px 8px; gap: 6px; }
+  .attack-hint { display: none; }
+  .troop { min-height: var(--hit); }
+  .stage { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: minmax(0, 1fr); grid-template-areas: "map panel"; }
+  .panel { width: min(var(--panel-width), 44vw); max-height: none; border-top: 0; border-left: var(--border) solid var(--line); }
+  /* With the drawer open the map is too narrow for the rail: it comes back when the drawer closes. */
+  #app.sheet-open .rail, #app.sheet-open .feed, #app.sheet-open .coach { display: none; }
+}

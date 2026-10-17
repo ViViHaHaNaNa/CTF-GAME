@@ -11,18 +11,22 @@
   </head>
   <body class="siege">
     <div id="app">
+      <!-- Layout zones (siege.css): top bar, banner row, then the stage = map viewport + side panel / bottom sheet.
+           Everything over the map sits in one grid (.hud-layer): tools, corner (minimap + zoom), notes, feed,
+           coach, the action rail, and the free zone in the middle where your base is framed. -->
       <header class="hud" id="hud" hidden>
-        <div class="hud-who"><span id="hud-name"></span><span class="hud-sub"><span id="hud-hq"></span><span class="chips" id="hud-chips"></span></span></div>
-        <div class="hud-stat"><span class="coin"></span><span id="hud-coins">0</span><span class="delta" id="hud-delta"></span></div>
-        <div class="hud-stat" title="Trophies"><span class="trophy">&#9819;</span><span id="hud-trophies">0</span></div>
+        <div class="hud-who"><span class="hud-name" id="hud-name"></span><span class="hud-sub" id="hud-hq"></span></div>
+        <div class="chips" id="hud-chips"></div>
+        <div class="hud-stat" id="hud-coins-box" title="Coins"><span class="coin"></span><span id="hud-coins">0</span><span class="delta" id="hud-delta"></span></div>
+        <div class="hud-stat" id="hud-trophies-box" title="Trophies"><span class="trophy">&#9819;</span><span id="hud-trophies">0</span></div>
         <button class="icon-btn" id="sound-btn" aria-label="Sound on">&#128266;</button>
         <button class="icon-btn" id="menu-btn" aria-label="Menu">&#9776;</button>
       </header>
       <div class="banner-row" id="banner-row" hidden>
         <button class="wave-banner" id="wave-banner"></button>
         <div class="mode-toggle" id="mode-toggle" role="group" aria-label="Mode">
-          <button data-mode="pve" aria-pressed="true">&#9935; Grind</button>
-          <button data-mode="pvp" aria-pressed="false">&#9876; Raid</button>
+          <button data-mode="pve" aria-pressed="true" aria-label="Grind"><span class="ico">&#9935;</span><span class="lbl">Grind</span></button>
+          <button data-mode="pvp" aria-pressed="false" aria-label="Raid"><span class="ico">&#9876;</span><span class="lbl">Raid</span></button>
           <span class="mode-cd" id="mode-cd"></span>
         </div>
         <button class="pause-btn" id="pause-btn" aria-keyshortcuts="P" hidden></button>
@@ -32,51 +36,66 @@
           <canvas id="board"></canvas>
           <div class="vignette" aria-hidden="true"></div>
           <div class="hurt" id="hurt" aria-hidden="true"></div>
-          <canvas class="minimap" id="minimap" width="180" height="180" aria-label="Map"></canvas>
-          <div class="map-tools" id="map-tools" hidden>
-            <button class="tool" id="home-btn">My base</button>
-            <button class="tool" id="ranks-btn">Ranks</button>
-            <button class="tool" id="live-btn">Live <span class="badge" id="live-count" hidden>0</span></button>
-            <button class="tool crate-tool" id="crate-btn">Crate <span class="badge" id="crate-badge" hidden>!</span></button>
-          </div>
-          <div class="zoom-tools">
-            <button class="tool sq" id="zoom-in" aria-label="Zoom in">+</button>
-            <button class="tool sq" id="zoom-out" aria-label="Zoom out">&minus;</button>
-          </div>
-          <div class="feed" id="feed"></div>
-          <div class="coach" id="coach" hidden></div>
-          <div class="objectives" id="objectives" hidden><b>Build your base</b><ul id="objectives-list"></ul></div>
-          <div class="cmd-bar" id="cmd-bar" hidden>
-            <div class="combo" id="combo" hidden></div>
-            <div class="threat" id="threat" title="Your defence against the next surge: upgrade to keep up"><span>&#128737; <b id="threat-def">0</b></span><span class="vs">/</span><span>&#9760; <b id="threat-next">0</b></span><small id="threat-word"></small></div>
-            <button class="early" id="early-btn" hidden><b>&#9193; Call early</b><small id="early-sub"></small></button>
-            <button class="ammo" id="ammo" aria-label="Reload (R)"><span class="ammo-name" id="ammo-name">Pistol</span><span class="rounds" id="rounds"></span><span class="reload-fill" id="reload-fill"></span></button>
-            <div class="powers">
-              <button class="strike" id="strike-btn" aria-label="Airstrike (Q)" hidden><span class="strike-icon">&#9992;</span><span class="strike-cd" id="strike-cd"></span></button>
-              <button class="strike" id="molotov-btn" aria-label="Molotov (E)" hidden><span class="strike-icon">&#128293;</span><span class="strike-cd" id="molotov-cd"></span></button>
-              <button class="strike squad" id="squad-btn" aria-label="Squad member (F)" hidden><span class="strike-icon">&#129686;</span><span class="strike-cd" id="squad-cd"></span><span class="squad-hp" id="squad-hp"></span></button>
-              <button class="strike" id="ult-btn" aria-label="Carpet bomb (X)" hidden><span class="strike-icon">&#128163;</span><span class="strike-cd" id="ult-cd"></span></button>
+          <div class="hud-layer" id="hud-layer">
+            <div class="hud-free" id="hud-free" aria-hidden="true"></div>
+            <div class="toasts" id="toasts" aria-live="polite"></div>
+            <nav class="map-tools" id="map-tools" aria-label="Map" hidden>
+              <button class="tool" id="home-btn">My base</button>
+              <button class="tool" id="ranks-btn">Ranks</button>
+              <button class="tool" id="live-btn">Live <span class="badge" id="live-count" hidden>0</span></button>
+              <button class="tool crate-tool" id="crate-btn">Crate <span class="badge" id="crate-badge" hidden>!</span></button>
+            </nav>
+            <div class="map-corner">
+              <canvas class="minimap" id="minimap" width="180" height="180" aria-label="Map"></canvas>
+              <div class="zoom-tools">
+                <button class="tool sq" id="zoom-in" aria-label="Zoom in">+</button>
+                <button class="tool sq" id="zoom-out" aria-label="Zoom out">&minus;</button>
+              </div>
             </div>
-          </div>
-          <div class="attack-bar" id="attack-bar" hidden>
-            <div class="attack-top">
-              <span id="raid-title"></span>
-              <span class="raid-stars" id="raid-stars" aria-label="Stars">☆☆☆</span>
-              <span class="raid-stat"><b id="raid-dmg">0%</b> destroyed</span>
-              <span class="raid-stat"><b id="raid-army">40</b> raiders left</span>
-              <button class="tool danger" id="retreat-btn">End attack</button>
+            <div class="objectives" id="objectives" hidden>
+              <button class="obj-head" id="objectives-head" aria-expanded="true"><b>Build your base</b><span id="objectives-count"></span></button>
+              <ul id="objectives-list"></ul>
             </div>
-            <div class="troops" id="troops"></div>
-            <p class="attack-hint">Tap the red ground outside their walls to send a raider. ★ 50% destroyed · ★ Main Tower · ★ everything. Crack the vault for more loot.</p>
+            <div class="feed" id="feed"></div>
+            <div class="coach" id="coach" hidden></div>
+            <div class="rail" id="rail">
+              <div class="cmd-bar" id="cmd-bar" hidden>
+                <div class="combo" id="combo" hidden></div>
+                <div class="rail-row">
+                  <div class="threat" id="threat" title="Your defence against the next surge: upgrade to keep up"><span>&#128737; <b id="threat-def">0</b></span><span class="vs">/</span><span>&#9760; <b id="threat-next">0</b></span><small id="threat-word"></small></div>
+                  <button class="early" id="early-btn" hidden><b>&#9193; Call early</b><small id="early-sub"></small></button>
+                  <button class="ammo" id="ammo" aria-label="Reload (R)"><span class="ammo-name" id="ammo-name">Pistol</span><span class="rounds" id="rounds"></span><span class="reload-fill" id="reload-fill"></span></button>
+                  <div class="powers">
+                    <button class="strike" id="strike-btn" aria-label="Airstrike (Q)" hidden><span class="strike-icon">&#9992;</span><span class="strike-cd" id="strike-cd"></span></button>
+                    <button class="strike" id="molotov-btn" aria-label="Molotov (E)" hidden><span class="strike-icon">&#128293;</span><span class="strike-cd" id="molotov-cd"></span></button>
+                    <button class="strike squad" id="squad-btn" aria-label="Squad member (F)" hidden><span class="strike-icon">&#129686;</span><span class="strike-cd" id="squad-cd"></span><span class="squad-hp" id="squad-hp"></span></button>
+                    <button class="strike" id="ult-btn" aria-label="Carpet bomb (X)" hidden><span class="strike-icon">&#128163;</span><span class="strike-cd" id="ult-cd"></span></button>
+                  </div>
+                </div>
+              </div>
+              <div class="attack-bar" id="attack-bar" hidden>
+                <div class="attack-top">
+                  <span id="raid-title"></span>
+                  <span class="raid-stars" id="raid-stars" aria-label="Stars">☆☆☆</span>
+                  <span class="raid-stat"><b id="raid-dmg">0%</b> destroyed</span>
+                  <span class="raid-stat"><b id="raid-army">40</b> raiders left</span>
+                  <button class="tool danger" id="retreat-btn">End attack</button>
+                </div>
+                <div class="troops" id="troops"></div>
+                <p class="attack-hint">Tap the red ground outside their walls to send a raider. ★ 50% destroyed · ★ Main Tower · ★ everything. Crack the vault for more loot.</p>
+              </div>
+            </div>
           </div>
         </div>
         <aside class="panel" id="panel" hidden></aside>
       </main>
-      <div class="toasts" id="toasts"></div>
       <div class="unlock" id="unlock" hidden></div>
       <div class="menu" id="menu" hidden>
-        <button id="logout-btn">Log out</button>
-        <button id="close-menu">Close</button>
+        <div class="menu-card" role="dialog" aria-label="Menu">
+          <button id="logout-btn">Log out</button>
+          <button id="close-menu">Close</button>
+          <p class="menu-credit">Art: <a href="https://thelazystone.itch.io/post-apocalyptic-pixel-art-asset-pack" target="_blank" rel="noopener">Post-Apocalypse asset pack by TheLazyStone</a></p>
+        </div>
       </div>
       <section class="title" id="title" hidden aria-label="Code Siege title screen">
         <canvas id="title-canvas" aria-hidden="true"></canvas>
@@ -93,7 +112,8 @@
       </section>
       <div class="connecting" id="connecting">Connecting...</div>
     </div>
-    <footer class="credit">Art: <a href="https://thelazystone.itch.io/post-apocalyptic-pixel-art-asset-pack" target="_blank" rel="noopener">Post-Apocalypse asset pack by TheLazyStone</a> · IETE-SF MPSTME</footer>
+    <!-- The asset pack's credit (its link is in the menu, where it gets a full-size touch target). -->
+    <footer class="credit">Art: Post-Apocalypse asset pack by TheLazyStone · IETE-SF MPSTME</footer>
     <script type="module" src="/src/siege/main.ts"></script>
   </body>
 </html>

@@ -132,10 +132,35 @@ async function boot() {
   }
   $('connecting').textContent = 'Connecting...';
   // Dev-only handle for poking at the map from the browser console.
-  if (import.meta.env.DEV) (window as unknown as { siege: unknown }).siege = { view, tap: (x: number, y: number) => tap(x, y), frame: (now: number) => frame(now) };
+  // `ui` lets the layout audit (server/scripts/ui-audit.ts) put the screen into each state.
+  if (import.meta.env.DEV)
+    (window as unknown as { siege: unknown }).siege = {
+      view,
+      tap: (x: number, y: number) => tap(x, y),
+      frame: (now: number) => frame(now),
+      ui: {
+        toast,
+        feed: (text: string, kind = 'raid') => addFeed({ kind, text } as FeedItem),
+        coach,
+        openPanel: (mode: PanelMode, plot = -1) => openPanel(mode, plot),
+        openHq: () => {
+          if (!player) return;
+          view.selectedPick = { kind: 'hq' };
+          openPanel('mine', player.plot);
+        },
+        showUnlocked: (hq: number) => showUnlocked(powersUnlockedAt(hq)),
+        flash: (text: string, cls = 'alarm') => (flash = { text, cls, until: performance.now() + 60_000 }),
+      },
+    };
   const wrap = $('board-wrap');
-  new ResizeObserver(() => view.fit(wrap.clientWidth, wrap.clientHeight)).observe(wrap);
+  new ResizeObserver(() => {
+    view.fit(wrap.clientWidth, wrap.clientHeight);
+    measureFree();
+  }).observe(wrap);
   view.fit(wrap.clientWidth, wrap.clientHeight);
+  // The free zone of the HUD grid (nothing over it): the camera frames your base in there.
+  new ResizeObserver(measureFree).observe($('hud-free'));
+  measureFree();
   net = new Net();
   // New visitors get the title screen straight away (even before the server answers).
   if (!savedToken()) showTitle();
@@ -577,8 +602,8 @@ function bindInput() {
   $('zoom-out').addEventListener('click', () => view.zoomAt(-1, ...centre()));
   $('home-btn').addEventListener('click', () => {
     if (!player) return;
-    view.centerOnPlot(player.plot, Math.max(view.zoom, view.baseZoom()));
     openPanel('mine', player.plot);
+    view.frame(player.plot);
   });
   $('ranks-btn').addEventListener('click', () => openPanel(panel === 'ranks' ? 'none' : 'ranks'));
   $('live-btn').addEventListener('click', () => openPanel(panel === 'live' ? 'none' : 'live'));
@@ -590,10 +615,20 @@ function bindInput() {
     void submitAnswer();
   });
   $('wave-banner').addEventListener('click', () => {
-    if (player) view.centerOnPlot(player.plot, Math.max(view.zoom, view.baseZoom()));
+    if (player) view.frame(player.plot);
   });
 
   $('menu-btn').addEventListener('click', () => ($('menu').hidden = !$('menu').hidden));
+  $('menu').addEventListener('click', (e) => {
+    if (e.target === $('menu')) $('menu').hidden = true;
+  });
+  // The objectives fold down to one line on small screens (tap to open).
+  $('objectives-head').addEventListener('click', () => {
+    const el = $('objectives');
+    el.classList.toggle('closed');
+    $('objectives-head').setAttribute('aria-expanded', String(!el.classList.contains('closed')));
+  });
+  if (SMALL.matches) $('objectives').classList.add('closed');
   $('ammo').addEventListener('click', () => reloadGun());
   $('early-btn').addEventListener('click', () => void callEarly());
   $('mode-toggle').addEventListener('click', (e) => {
@@ -937,6 +972,12 @@ function renderCmdBar(now: number) {
 async function panelClick(e: MouseEvent) {
   const el = e.target as HTMLElement;
   if (el.closest('[data-close]')) return openPanel('none');
+  if (el.closest('[data-sheet]')) {
+    $('panel').classList.toggle('collapsed');
+    sheetState();
+    panelHtml = '';
+    return renderPanel();
+  }
   const jump = el.closest<HTMLElement>('[data-jump]');
   if (jump) return jumpTo(Number(jump.dataset.jump));
   if (el.closest('[data-crate-jump]')) {
@@ -1208,6 +1249,8 @@ function renderObjectives() {
   if (done) return;
   const html = BASIC_BASE.map((i) => `<li class="${i.done(player!.base) ? 'done' : ''}">${esc(i.label)}</li>`).join('');
   if ($('objectives-list').innerHTML !== html) $('objectives-list').innerHTML = html;
+  const count = `${BASIC_BASE.filter((i) => i.done(player!.base)).length}/${BASIC_BASE.length}`;
+  if ($('objectives-count').textContent !== count) $('objectives-count').textContent = count;
 }
 
 function renderChips() {
@@ -1280,12 +1323,32 @@ async function submitAnswer() {
 }
 
 let deltaTimer = 0;
+
+/** Long numbers in the top bar: 98765, 123.4K, 1.2M (the exact number is in the tooltip). */
+function compact(n: number): string {
+  const a = Math.abs(n);
+  if (a < 100_000) return String(n);
+  if (a < 1_000_000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+  return `${(n / 1_000_000).toFixed(a < 10_000_000 ? 1 : 0).replace(/\.0$/, '')}M`;
+}
+
+/** Phones (portrait or landscape): panels fold, the objectives start folded. */
+const SMALL = window.matchMedia('(max-width: 600px), (orientation: landscape) and (max-height: 500px)');
+
+/** Tell the camera where the free zone is (CSS px, relative to the map canvas). */
+function measureFree() {
+  const f = $('hud-free').getBoundingClientRect();
+  const c = view.canvas.getBoundingClientRect();
+  view.setFree({ x: f.left - c.left, y: f.top - c.top, w: f.width, h: f.height });
+}
 function renderHud(delta = 0) {
   if (!player) return;
   $('hud-name').textContent = player.name;
   $('hud-hq').textContent = `Main Tower Lv ${player.base.hq} · ${player.roll}`;
-  $('hud-coins').textContent = String(player.coins);
-  $('hud-trophies').textContent = String(player.trophies);
+  $('hud-coins').textContent = compact(player.coins);
+  $('hud-trophies').textContent = compact(player.trophies);
+  $('hud-coins-box').title = `${player.coins.toLocaleString()} coins`;
+  $('hud-trophies-box').title = `${player.trophies.toLocaleString()} trophies`;
   if (delta > 0) {
     const d = $('hud-delta');
     d.textContent = `+${delta}`;
@@ -1387,7 +1450,9 @@ function renderPauseButton(now: number) {
   if (key === pauseShown) return;
   pauseShown = key;
   btn.hidden = !show;
-  btn.textContent = text;
+  const [ico, ...rest] = text.split(' ');
+  btn.innerHTML = text ? `<span class="ico">${ico}</span><span class="lbl">${esc(rest.join(' '))}</span>` : '';
+  btn.setAttribute('aria-label', text);
   btn.disabled = disabled;
   btn.dataset.state = state;
   btn.title = state === 'pending' ? 'Tap to cancel the pause' : state === 'paused' ? 'Tap (or P) to resume' : 'Pause surges (P)';
@@ -1433,8 +1498,15 @@ function renderAttackBar() {
   if ($('troops').innerHTML !== html) $('troops').innerHTML = html;
 }
 
+/** On phones an open (unfolded) panel takes the bottom zone from the action rail. */
+function sheetState() {
+  $('app').classList.toggle('sheet-open', panel !== 'none' && !$('panel').classList.contains('collapsed'));
+}
+
 function openPanel(mode: PanelMode, plot = -1) {
+  if (mode !== panel) $('panel').classList.remove('collapsed');
   panel = mode;
+  sheetState();
   selectedPlot = plot;
   if (mode !== 'mine') view.selectedPick = null;
   view.selectedPlot = mode === 'mine' || mode === 'other' ? plot : -1;
@@ -1447,7 +1519,8 @@ function esc(s: string) {
 }
 
 function head(title: string) {
-  return `<div class="panel-head"><h2>${title}</h2><button class="close" data-close aria-label="Close">&times;</button></div>`;
+  const folded = $('panel').classList.contains('collapsed');
+  return `<div class="panel-head"><h2>${title}</h2><button class="sheet-toggle" data-sheet aria-label="${folded ? 'Open' : 'Fold'} the panel" aria-expanded="${!folded}">${folded ? '&#9650;' : '&#9660;'}</button><button class="close" data-close aria-label="Close">&times;</button></div>`;
 }
 
 function button(label: string, action: BaseAction, extra = ''): string {

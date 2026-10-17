@@ -1,0 +1,1970 @@
+# Layout audit (2026-10-17 13:03)
+
+85 screenshots, 1775 issues.
+
+| State | 1920x1080 | 1366x768 | 1280x720 | phone-portrait-390x844 | phone-landscape-844x390 |
+|---|---|---|---|---|---|
+| 01-map-hud | 17 | 20 | 22 | 26 | 24 |
+| 02-banners-at-once | 20 | 21 | 22 | 36 | 35 |
+| 03-upgrade-panel | 29 | 32 | 32 | 67 | 40 |
+| 04-unlock-popup | 17 | 18 | 18 | 19 | 18 |
+| 05-paused | 17 | 20 | 22 | 25 | 22 |
+| 06-crate | 19 | 21 | 22 | 56 | 34 |
+| 07-ranks | 21 | 24 | 23 | 56 | 29 |
+| 08-live-list | 19 | 21 | 24 | 31 | 30 |
+| 09-menu | 17 | 17 | 17 | 18 | 17 |
+| 10-objectives | 14 | 16 | 17 | 25 | 25 |
+| 11-target-card | 9 | 9 | 9 | 10 | 9 |
+| 12-raid-army-picker | 14 | 14 | 14 | 20 | 21 |
+| 13-raid-deploying | 13 | 13 | 13 | 14 | 17 |
+| 14-raid-result | 9 | 9 | 9 | 12 | 9 |
+| 20-arena | 5 | 4 | 4 | 4 | 4 |
+| 21-arena-projector | 2 | 1 | 1 | 1 | 1 |
+| 22-admin | 50 | 50 | 50 | 49 | 50 |
+
+## Issues by screenshot
+
+### 1920x1080 · 01-map-hud
+- TEXT UNDER 12PX: span.chip.shield "Immune 59:49" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 59:49" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause surges" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause surges" 152x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+- COVERS OWN BASE: div#threat.threat.safe "🛡 1634/☠ 1028READY" (3681 px²)
+
+### 1920x1080 · 02-banners-at-once
+- OVERLAP button#wave-banner.wave-banner.alarm "☠ HORDE! A much bigger s"  x  div.toast.bad "Maximilian Alexander is " (17160 px²)
+- OVERLAP div#coach.coach "Nice shooting! Keep tapp"  x  div#threat.threat.safe "🛡 1634/☠ 1028READY" (6941 px²)
+- OVERLAP div#coach.coach "Nice shooting! Keep tapp"  x  button#strike-btn.strike "✈" (768 px²)
+- OVERLAP div#coach.coach "Nice shooting! Keep tapp"  x  button#squad-btn.strike.squad "🪖" (768 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 59:48" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 59:48" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause surges" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause surges" 152x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1920x1080 · 03-upgrade-panel
+- TEXT UNDER 12PX: span.chip.shield "Immune 59:46" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 59:46" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause surges" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: small "Harder hits and a 24-rou" 11.2px
+- TEXT UNDER 12PX: em "Armed" 11.2px
+- TEXT UNDER 12PX: small "Tap ✈ then a spot: a bom" 11.2px
+- TEXT UNDER 12PX: em "Ready" 11.2px
+- TEXT UNDER 12PX: small "Five pellets a shot: shr" 11.2px
+- TEXT UNDER 12PX: small "Tap 🔥 then a spot: a fi" 11.2px
+- TEXT UNDER 12PX: small "Summon a survivor from y" 11.2px
+- TEXT UNDER 12PX: small "Your ultimate: bombs eve" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause surges" 152x40
+- SMALL TARGET: button.close "×" 42x42
+- SMALL TARGET: button.troop "Bat" 105x42
+- SMALL TARGET: button.troop "Pistol" 105x42
+- SMALL TARGET: button.troop.on "Brute" 105x42
+- SMALL TARGET: button.troop "Shotgun" 326x42
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1920x1080 · 04-unlock-popup
+- TEXT UNDER 12PX: span.chip.shield "Immune 59:44" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 59:44" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause surges" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: p.unlock-tap "Tap to continue" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause surges" 152x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1920x1080 · 05-paused
+- OVERLAP button#wave-banner.wave-banner.paused "⏸ PAUSED · surges resume"  x  div.toast.good "Surges paused. Upgrade, " (18480 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 59:41" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 59:41" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "▶ Surges paused · Resume" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "▶ Surges paused · Resume" 285x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+- COVERS OWN BASE: div#threat.threat.safe "🛡 1634/☠ 871READY" (3535 px²)
+
+### 1920x1080 · 06-crate
+- OVERLAP button#wave-banner.wave-banner.alarm "▶ Surges resume in 2..."  x  div.toast "A legendary crate droppe" (18480 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 59:39" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 59:39" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause in 0:28" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause in 0:28" 161x40
+- SMALL TARGET: button.close "×" 42x42
+- SMALL TARGET: button.link "Show it on the map" 132x42
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1920x1080 · 07-ranks
+- OVERLAP button#wave-banner.wave-banner "Surge 1 in 1:15"  x  div.toast "A legendary crate droppe" (18480 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 59:37" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 59:37" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause in 0:26" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: span.mode-chip.pve "Grinding" 11.2px
+- TEXT UNDER 12PX: span.mode-chip.pvp "Raiding" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause in 0:26" 161x40
+- SMALL TARGET: button.close "×" 42x42
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1920x1080 · 08-live-list
+- TEXT UNDER 12PX: span.chip.shield "Immune 59:35" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 59:35" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause in 0:25" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause in 0:25" 161x40
+- SMALL TARGET: button.close "×" 42x42
+- SMALL TARGET: a "Open the Live Arena" 120x14
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1920x1080 · 09-menu
+- TEXT UNDER 12PX: span.chip.shield "Immune 59:32" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 59:32" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause in 0:21" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause in 0:21" 161x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1920x1080 · 10-objectives
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause surges" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: b "Build your base" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "PISTOL" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause surges" 152x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1920x1080 · 11-target-card
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button.close "×" 42x42
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1920x1080 · 12-raid-army-picker
+- OVERLAP button#wave-banner.wave-banner.attack "⚔ Raiding Target Tom"  x  div.toast "Raid on! Tap the red zon" (17160 px²)
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: span#live-count.badge "1" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small "54 coins" 11.2px
+- TEXT UNDER 12PX: small "68 coins" 11.2px
+- TEXT UNDER 12PX: small "135 coins" 11.2px
+- TEXT UNDER 12PX: small "122 coins" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1920x1080 · 13-raid-deploying
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: span#live-count.badge "1" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small "54 coins" 11.2px
+- TEXT UNDER 12PX: small "68 coins" 11.2px
+- TEXT UNDER 12PX: small "135 coins" 11.2px
+- TEXT UNDER 12PX: small "122 coins" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1920x1080 · 14-raid-result
+- OVERLAP button#wave-banner.wave-banner.attack "⚔ Raid mode: the swarms "  x  div.toast.bad "Raid failed (0% destroye" (17160 px²)
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1920x1080 · 20-arena
+- TEXT UNDER 12PX: span.mode-chip.pve "Grinding" 11.2px
+- TEXT UNDER 12PX: span.mode-chip.pvp "Raiding" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1920x1080 · 21-arena-projector
+- TEXT UNDER 12PX: span.mode-chip.pve "Grinding" 11.2px
+- TEXT UNDER 12PX: span.mode-chip.pvp "Raiding" 11.2px
+
+### 1920x1080 · 22-admin
+- TEXT UNDER 12PX: th "#" 11.2px
+- TEXT UNDER 12PX: th "Name" 11.2px
+- TEXT UNDER 12PX: th "Roll" 11.2px
+- TEXT UNDER 12PX: th "HQ" 11.2px
+- TEXT UNDER 12PX: th "Coins" 11.2px
+- TEXT UNDER 12PX: th "Trophies" 11.2px
+- TEXT UNDER 12PX: th "Status" 11.2px
+- SMALL TARGET: button.btn.secondary "Blue" 120x42
+- SMALL TARGET: button.btn.secondary "Red" 120x42
+- SMALL TARGET: input#search 240x42
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+
+### 1366x768 · 01-map-hud
+- TEXT UNDER 12PX: span.chip.shield "Immune 59:02" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 59:02" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause surges" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause surges" 152x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+- COVERS OWN BASE: div#threat.threat.safe "🛡 1634/☠ 855READY" (6667 px²)
+- COVERS OWN BASE: button#strike-btn.strike "✈" (984 px²)
+- COVERS OWN BASE: button#squad-btn.strike.squad "🪖" (984 px²)
+
+### 1366x768 · 02-banners-at-once
+- OVERLAP button#wave-banner.wave-banner.alarm "☠ HORDE! A much bigger s"  x  div.toast.bad "Maximilian Alexander is " (17160 px²)
+- OVERLAP div#coach.coach "Nice shooting! Keep tapp"  x  div#threat.threat.safe "🛡 1634/☠ 855READY" (6667 px²)
+- OVERLAP div#coach.coach "Nice shooting! Keep tapp"  x  button#strike-btn.strike "✈" (768 px²)
+- OVERLAP div#coach.coach "Nice shooting! Keep tapp"  x  button#squad-btn.strike.squad "🪖" (768 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 59:01" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 59:01" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause surges" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause surges" 152x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1366x768 · 03-upgrade-panel
+- OVERLAP div.crate "A legendary crate droppe"  x  button#early-btn.early "⏩ Call early+13 coins" (1747 px²)
+- OVERLAP div.raid "Target Tom fought off Ra"  x  button#early-btn.early "⏩ Call early+13 coins" (225 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 58:59" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 58:59" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause surges" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: small "Harder hits and a 24-rou" 11.2px
+- TEXT UNDER 12PX: em "Armed" 11.2px
+- TEXT UNDER 12PX: small "Tap ✈ then a spot: a bom" 11.2px
+- TEXT UNDER 12PX: em "Ready" 11.2px
+- TEXT UNDER 12PX: small "Five pellets a shot: shr" 11.2px
+- TEXT UNDER 12PX: small "Tap 🔥 then a spot: a fi" 11.2px
+- TEXT UNDER 12PX: small "Summon a survivor from y" 11.2px
+- TEXT UNDER 12PX: small "Your ultimate: bombs eve" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause surges" 152x40
+- SMALL TARGET: button.close "×" 42x42
+- SMALL TARGET: button.troop "Bat" 105x42
+- SMALL TARGET: button.troop "Pistol" 105x42
+- SMALL TARGET: button.troop.on "Brute" 105x42
+- SMALL TARGET: button.troop "Shotgun" 326x42
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1366x768 · 04-unlock-popup
+- TEXT UNDER 12PX: span.chip.shield "Immune 58:57" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 58:57" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause surges" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: p.unlock-tap "Tap to continue" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause surges" 152x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1366x768 · 05-paused
+- OVERLAP button#wave-banner.wave-banner.paused "⏸ PAUSED · surges resume"  x  div.toast.good "Surges paused. Upgrade, " (18480 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 58:55" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 58:55" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "▶ Surges paused · Resume" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "▶ Surges paused · Resume" 285x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+- COVERS OWN BASE: div#threat.threat.safe "🛡 1634/☠ 804READY" (6667 px²)
+- COVERS OWN BASE: button#strike-btn.strike "✈" (984 px²)
+- COVERS OWN BASE: button#squad-btn.strike.squad "🪖" (984 px²)
+
+### 1366x768 · 06-crate
+- OVERLAP button#wave-banner.wave-banner.alarm "▶ Surges resume in 1..."  x  div.toast "A legendary crate droppe" (18480 px²)
+- OVERLAP canvas#minimap.minimap  x  div.toast "A legendary crate droppe" (132 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#ammo.ammo "SHOTGUN LV3" (87 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 58:52" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 58:52" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause in 0:28" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause in 0:28" 161x40
+- SMALL TARGET: button.close "×" 42x42
+- SMALL TARGET: button.link "Show it on the map" 132x42
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1366x768 · 07-ranks
+- OVERLAP button#wave-banner.wave-banner "Surge 1 in 1:15"  x  div.toast "A legendary crate droppe" (18480 px²)
+- OVERLAP canvas#minimap.minimap  x  div.toast "A legendary crate droppe" (132 px²)
+- OVERLAP div.crate "Nobody cracked the legen"  x  button#early-btn.early "⏩ Call earlyin 30s" (9 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#early-btn.early "⏩ Call earlyin 30s" (1588 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 58:51" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 58:51" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause in 0:27" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: span.mode-chip.pve "Grinding" 11.2px
+- TEXT UNDER 12PX: span.mode-chip.pvp "Raiding" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause in 0:27" 161x40
+- SMALL TARGET: button.close "×" 42x42
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1366x768 · 08-live-list
+- OVERLAP div.crate "Nobody cracked the legen"  x  button#early-btn.early "⏩ Call earlyin 28s" (9 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#early-btn.early "⏩ Call earlyin 28s" (1588 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 58:49" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 58:49" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause in 0:25" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause in 0:25" 161x40
+- SMALL TARGET: button.close "×" 42x42
+- SMALL TARGET: a "Open the Live Arena" 120x14
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1366x768 · 09-menu
+- TEXT UNDER 12PX: span.chip.shield "Immune 58:45" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 58:45" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause in 0:21" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause in 0:21" 161x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1366x768 · 10-objectives
+- OVERLAP button#wave-banner.wave-banner "Surge 1 in 0:06 · from t"  x  div.toast.good "While you were away: 1 z" (18480 px²)
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause surges" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: b "Build your base" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "PISTOL" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause surges" 152x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+- COVERS OWN BASE: div#threat.threat.safe "🛡 42/☠ 33READY" (1328 px²)
+
+### 1366x768 · 11-target-card
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button.close "×" 42x42
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1366x768 · 12-raid-army-picker
+- OVERLAP button#wave-banner.wave-banner.attack "⚔ Raiding Target Tom"  x  div.toast "Raid on! Tap the red zon" (17160 px²)
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: span#live-count.badge "1" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small "54 coins" 11.2px
+- TEXT UNDER 12PX: small "68 coins" 11.2px
+- TEXT UNDER 12PX: small "135 coins" 11.2px
+- TEXT UNDER 12PX: small "122 coins" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1366x768 · 13-raid-deploying
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: span#live-count.badge "1" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small "54 coins" 11.2px
+- TEXT UNDER 12PX: small "68 coins" 11.2px
+- TEXT UNDER 12PX: small "135 coins" 11.2px
+- TEXT UNDER 12PX: small "122 coins" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1366x768 · 14-raid-result
+- OVERLAP button#wave-banner.wave-banner.attack "⚔ Raid mode: the swarms "  x  div.toast.bad "Raid failed (0% destroye" (17160 px²)
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1366x768 · 20-arena
+- TEXT UNDER 12PX: span.mode-chip.pve "Grinding" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1366x768 · 21-arena-projector
+- TEXT UNDER 12PX: span.mode-chip.pve "Grinding" 11.2px
+
+### 1366x768 · 22-admin
+- TEXT UNDER 12PX: th "#" 11.2px
+- TEXT UNDER 12PX: th "Name" 11.2px
+- TEXT UNDER 12PX: th "Roll" 11.2px
+- TEXT UNDER 12PX: th "HQ" 11.2px
+- TEXT UNDER 12PX: th "Coins" 11.2px
+- TEXT UNDER 12PX: th "Trophies" 11.2px
+- TEXT UNDER 12PX: th "Status" 11.2px
+- SMALL TARGET: button.btn.secondary "Blue" 120x42
+- SMALL TARGET: button.btn.secondary "Red" 120x42
+- SMALL TARGET: input#search 240x42
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+
+### 1280x720 · 01-map-hud
+- OVERLAP button#wave-banner.wave-banner.attack "Surge 1 in 0:05"  x  div.toast.good "While you were away: 1 z" (18480 px²)
+- OVERLAP button#crate-btn.tool.crate-tool "Crate !"  x  div.toast.good "While you were away: 1 z" (22 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 58:18" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 58:18" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause surges" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause surges" 152x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+- COVERS OWN BASE: div#threat.threat.safe "🛡 1634/☠ 784READY" (6667 px²)
+- COVERS OWN BASE: button#strike-btn.strike "✈" (2136 px²)
+- COVERS OWN BASE: button#squad-btn.strike.squad "🪖" (2136 px²)
+
+### 1280x720 · 02-banners-at-once
+- OVERLAP button#wave-banner.wave-banner.alarm "☠ HORDE! A much bigger s"  x  div.toast.bad "Maximilian Alexander is " (17160 px²)
+- OVERLAP button#crate-btn.tool.crate-tool "Crate !"  x  div.toast.bad "Surges paused. Upgrade, " (263 px²)
+- OVERLAP div#coach.coach "Nice shooting! Keep tapp"  x  div#threat.threat.safe "🛡 1634/☠ 784READY" (6667 px²)
+- OVERLAP div#coach.coach "Nice shooting! Keep tapp"  x  button#strike-btn.strike "✈" (768 px²)
+- OVERLAP div#coach.coach "Nice shooting! Keep tapp"  x  button#squad-btn.strike.squad "🪖" (768 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 58:17" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 58:17" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause surges" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause surges" 152x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1280x720 · 03-upgrade-panel
+- OVERLAP div.crate "A legendary crate droppe"  x  button#early-btn.early "⏩ Call early+13 coins" (2693 px²)
+- OVERLAP div.raid "Target Tom fought off Ra"  x  button#early-btn.early "⏩ Call early+13 coins" (1085 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 58:14" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 58:14" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause surges" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: small "Harder hits and a 24-rou" 11.2px
+- TEXT UNDER 12PX: em "Armed" 11.2px
+- TEXT UNDER 12PX: small "Tap ✈ then a spot: a bom" 11.2px
+- TEXT UNDER 12PX: em "Ready" 11.2px
+- TEXT UNDER 12PX: small "Five pellets a shot: shr" 11.2px
+- TEXT UNDER 12PX: small "Tap 🔥 then a spot: a fi" 11.2px
+- TEXT UNDER 12PX: small "Summon a survivor from y" 11.2px
+- TEXT UNDER 12PX: small "Your ultimate: bombs eve" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause surges" 152x40
+- SMALL TARGET: button.close "×" 42x42
+- SMALL TARGET: button.troop "Bat" 105x42
+- SMALL TARGET: button.troop "Pistol" 105x42
+- SMALL TARGET: button.troop.on "Brute" 105x42
+- SMALL TARGET: button.troop "Shotgun" 326x42
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1280x720 · 04-unlock-popup
+- TEXT UNDER 12PX: span.chip.shield "Immune 58:13" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 58:13" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause surges" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: p.unlock-tap "Tap to continue" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause surges" 152x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1280x720 · 05-paused
+- OVERLAP button#wave-banner.wave-banner.paused "⏸ PAUSED · surges resume"  x  div.toast.good "Surges paused. Upgrade, " (16746 px²)
+- OVERLAP div#mode-toggle.mode-toggle "⛏ Grind ⚔ Raid"  x  div.toast.good "Surges paused. Upgrade, " (1734 px²)
+- OVERLAP button#crate-btn.tool.crate-tool "Crate !"  x  div.toast.good "Surges paused. Upgrade, " (22 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 58:11" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 58:11" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "▶ Surges paused · Resume" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "▶ Surges paused · Resume" 285x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+- COVERS OWN BASE: div#threat.threat.safe "🛡 1634/☠ 975READY" (6667 px²)
+- COVERS OWN BASE: button#strike-btn.strike "✈" (2136 px²)
+- COVERS OWN BASE: button#squad-btn.strike.squad "🪖" (2136 px²)
+
+### 1280x720 · 06-crate
+- OVERLAP button#wave-banner.wave-banner.alarm "▶ Surges resume in 2..."  x  div.toast.good "Surges resume in 3..." (17160 px²)
+- OVERLAP canvas#minimap.minimap  x  div.toast "A legendary crate droppe" (3724 px²)
+- OVERLAP button#crate-btn.tool.crate-tool "Crate !"  x  div.toast "A legendary crate droppe" (263 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#ammo.ammo "SHOTGUN LV3" (947 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 58:09" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 58:09" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause in 0:29" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause in 0:29" 161x40
+- SMALL TARGET: button.close "×" 42x42
+- SMALL TARGET: button.link "Show it on the map" 132x42
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1280x720 · 07-ranks
+- OVERLAP button#wave-banner.wave-banner.alarm "▶ Surges resume in 1..."  x  div.toast "A legendary crate droppe" (18480 px²)
+- OVERLAP canvas#minimap.minimap  x  div.toast "A legendary crate droppe" (304 px²)
+- OVERLAP button#crate-btn.tool.crate-tool "Crate !"  x  div.toast "A legendary crate droppe" (22 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#ammo.ammo "SHOTGUN LV3" (947 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 58:08" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 58:08" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause in 0:27" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: span.mode-chip.pve "Grinding" 11.2px
+- TEXT UNDER 12PX: span.mode-chip.pvp "Raiding" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause in 0:27" 161x40
+- SMALL TARGET: button.close "×" 42x42
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1280x720 · 08-live-list
+- OVERLAP button#wave-banner.wave-banner "Surge 1 in 1:14"  x  div.toast "A legendary crate droppe" (18480 px²)
+- OVERLAP canvas#minimap.minimap  x  div.toast "A legendary crate droppe" (304 px²)
+- OVERLAP button#crate-btn.tool.crate-tool "Crate !"  x  div.toast "A legendary crate droppe" (22 px²)
+- OVERLAP div.crate "Nobody cracked the legen"  x  button#early-btn.early "⏩ Call earlyin 29s" (955 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#early-btn.early "⏩ Call earlyin 29s" (2448 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 58:06" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 58:06" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause in 0:26" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause in 0:26" 161x40
+- SMALL TARGET: button.close "×" 42x42
+- SMALL TARGET: a "Open the Live Arena" 120x14
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1280x720 · 09-menu
+- TEXT UNDER 12PX: span.chip.shield "Immune 58:05" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 58:05" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause in 0:24" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause in 0:24" 161x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1280x720 · 10-objectives
+- OVERLAP button#wave-banner.wave-banner "Surge 1 in 0:06 · from t"  x  div.toast.good "While you were away: 3 z" (18480 px²)
+- OVERLAP button#crate-btn.tool.crate-tool "Crate !"  x  div.toast.good "While you were away: 3 z" (22 px²)
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause surges" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: b "Build your base" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "PISTOL" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause surges" 152x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+- COVERS OWN BASE: div#threat.threat.safe "🛡 42/☠ 32READY" (5577 px²)
+
+### 1280x720 · 11-target-card
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button.close "×" 42x42
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1280x720 · 12-raid-army-picker
+- OVERLAP button#wave-banner.wave-banner.attack "⚔ Raiding Target Tom"  x  div.toast "Raid on! Tap the red zon" (17160 px²)
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: span#live-count.badge "1" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small "54 coins" 11.2px
+- TEXT UNDER 12PX: small "68 coins" 11.2px
+- TEXT UNDER 12PX: small "135 coins" 11.2px
+- TEXT UNDER 12PX: small "122 coins" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1280x720 · 13-raid-deploying
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: span#live-count.badge "1" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small "54 coins" 11.2px
+- TEXT UNDER 12PX: small "68 coins" 11.2px
+- TEXT UNDER 12PX: small "135 coins" 11.2px
+- TEXT UNDER 12PX: small "122 coins" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1280x720 · 14-raid-result
+- OVERLAP button#wave-banner.wave-banner.attack "⚔ Raid mode: the swarms "  x  div.toast.bad "Raid failed (0% destroye" (17160 px²)
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1280x720 · 20-arena
+- TEXT UNDER 12PX: span.mode-chip.pve "Grinding" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### 1280x720 · 21-arena-projector
+- TEXT UNDER 12PX: span.mode-chip.pve "Grinding" 11.2px
+
+### 1280x720 · 22-admin
+- TEXT UNDER 12PX: th "#" 11.2px
+- TEXT UNDER 12PX: th "Name" 11.2px
+- TEXT UNDER 12PX: th "Roll" 11.2px
+- TEXT UNDER 12PX: th "HQ" 11.2px
+- TEXT UNDER 12PX: th "Coins" 11.2px
+- TEXT UNDER 12PX: th "Trophies" 11.2px
+- TEXT UNDER 12PX: th "Status" 11.2px
+- SMALL TARGET: button.btn.secondary "Blue" 120x42
+- SMALL TARGET: button.btn.secondary "Red" 120x42
+- SMALL TARGET: input#search 240x42
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+
+### phone-portrait-390x844 · 01-map-hud
+- OVERLAP div.hud-stat "2345678"  x  span#hud-chips.chips "Immune 57:39ATK +50% ×3D" (844 px²)
+- OVERLAP div.crate "Nobody cracked the legen"  x  button#early-btn.early "⏩ Call early+9 coins" (1601 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#early-btn.early "⏩ Call early+9 coins" (1601 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#ammo.ammo "SHOTGUN LV3" (2917 px²)
+- OVERLAP div.raid "Target Tom fought off Ra"  x  button#early-btn.early "⏩ Call early+9 coins" (1456 px²)
+- OVERLAP div.raid "Target Tom fought off Ra"  x  button#ammo.ammo "SHOTGUN LV3" (2652 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 57:39" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 57:39" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button#wave-banner.wave-banner.attack "Surge 1 in 0:05" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause surges" 9.6px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause surges" 126x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+- COVERS OWN BASE: canvas#minimap.minimap (689 px²)
+- COVERS OWN BASE: div#threat.threat.safe "🛡 1634/☠ 858READY" (4318 px²)
+
+### phone-portrait-390x844 · 02-banners-at-once
+- OVERLAP div.hud-who "Maximilian AlexanderMain"  x  div.toast.bad "Maximilian Alexander is " (620 px²)
+- OVERLAP div.hud-who "Maximilian AlexanderMain"  x  div.toast.bad "Surges paused. Upgrade, " (890 px²)
+- OVERLAP div.hud-who "Maximilian AlexanderMain"  x  div.toast.bad "Crate claimed by Raiding" (890 px²)
+- OVERLAP div.hud-stat "2345678"  x  span#hud-chips.chips "Immune 57:37ATK +50% ×3D" (844 px²)
+- OVERLAP div.hud-stat "2345678"  x  div.toast.bad "Surges paused. Upgrade, " (3753 px²)
+- OVERLAP div.hud-stat "♛1234567"  x  div.toast.bad "Surges paused. Upgrade, " (3825 px²)
+- OVERLAP button#sound-btn.icon-btn "🔊"  x  div.toast.bad "Surges paused. Upgrade, " (2231 px²)
+- OVERLAP button#menu-btn.icon-btn "☰"  x  div.toast.bad "Surges paused. Upgrade, " (2063 px²)
+- OVERLAP span#hud-chips.chips "Immune 57:37ATK +50% ×3D"  x  div.toast.bad "Maximilian Alexander is " (885 px²)
+- OVERLAP span#hud-chips.chips "Immune 57:37ATK +50% ×3D"  x  div.toast.bad "Surges paused. Upgrade, " (2764 px²)
+- OVERLAP span#hud-chips.chips "Immune 57:37ATK +50% ×3D"  x  div.toast.bad "Crate claimed by Raiding" (2764 px²)
+- OVERLAP div.raid "Raiding Rhea Longname ra"  x  button#early-btn.early "⏩ Call early+6 coins" (1747 px²)
+- OVERLAP div.raid "Newcomer Nine joined the"  x  button#early-btn.early "⏩ Call early+6 coins" (1601 px²)
+- OVERLAP div.raid "Newcomer Nine joined the"  x  button#ammo.ammo "SHOTGUN LV3" (2514 px²)
+- OVERLAP div.raid "Maximilian Alexander is "  x  button#early-btn.early "⏩ Call early+6 coins" (1456 px²)
+- OVERLAP div.raid "Maximilian Alexander is "  x  button#ammo.ammo "SHOTGUN LV3" (2652 px²)
+- OVERLAP div#coach.coach "Nice shooting! Keep tapp"  x  div#threat.threat.safe "🛡 1634/☠ 858READY" (4261 px²)
+- OVERLAP div#coach.coach "Nice shooting! Keep tapp"  x  button#strike-btn.strike "✈" (466 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 57:37" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 57:37" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button#wave-banner.wave-banner.alarm "☠ HORDE! A much bigger s" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause surges" 9.6px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause surges" 126x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### phone-portrait-390x844 · 03-upgrade-panel
+- OVERLAP div.hud-stat "2345678"  x  span#hud-chips.chips "Immune 57:35ATK +50% ×3D" (844 px²)
+- OVERLAP button#wave-banner.wave-banner "Surge 1 in 0:07"  x  button#early-btn.early "⏩ Call early+13 coins" (335 px²)
+- OVERLAP div#mode-toggle.mode-toggle "⛏ Grind ⚔ Raid"  x  div#threat.threat.safe "🛡 1634/☠ 789READY" (1136 px²)
+- OVERLAP div#mode-toggle.mode-toggle "⛏ Grind ⚔ Raid"  x  button#early-btn.early "⏩ Call early+13 coins" (51 px²)
+- OVERLAP button#pause-btn.pause-btn "⏸ Pause surges"  x  div#threat.threat.safe "🛡 1634/☠ 789READY" (808 px²)
+- OVERLAP button#pause-btn.pause-btn "⏸ Pause surges"  x  button#strike-btn.strike "✈" (1166 px²)
+- OVERLAP button#pause-btn.pause-btn "⏸ Pause surges"  x  button#squad-btn.strike.squad "🪖" (1166 px²)
+- OVERLAP canvas#minimap.minimap  x  button#ammo.ammo "SHOTGUN LV3" (67 px²)
+- OVERLAP canvas#minimap.minimap  x  button#strike-btn.strike "✈" (466 px²)
+- OVERLAP canvas#minimap.minimap  x  button#molotov-btn.strike "🔥" (2304 px²)
+- OVERLAP canvas#minimap.minimap  x  button#squad-btn.strike.squad "🪖" (466 px²)
+- OVERLAP canvas#minimap.minimap  x  button#ult-btn.strike "💣" (2304 px²)
+- OVERLAP canvas#minimap.minimap  x  aside#panel.panel "Main Tower · Lv 8×The he" (6950 px²)
+- OVERLAP button#home-btn.tool "My base"  x  div.crate "Nobody cracked the legen" (1519 px²)
+- OVERLAP button#home-btn.tool "My base"  x  div.crate "A legendary crate droppe" (2439 px²)
+- OVERLAP button#home-btn.tool "My base"  x  div.raid "Target Tom fought off Ra" (476 px²)
+- OVERLAP button#home-btn.tool "My base"  x  button#early-btn.early "⏩ Call early+13 coins" (3494 px²)
+- OVERLAP button#home-btn.tool "My base"  x  button#ammo.ammo "SHOTGUN LV3" (434 px²)
+- OVERLAP button#ranks-btn.tool "Ranks"  x  div.crate "Nobody cracked the legen" (1210 px²)
+- OVERLAP button#ranks-btn.tool "Ranks"  x  div.crate "A legendary crate droppe" (1943 px²)
+- OVERLAP button#ranks-btn.tool "Ranks"  x  div.raid "Target Tom fought off Ra" (379 px²)
+- OVERLAP button#ranks-btn.tool "Ranks"  x  button#ammo.ammo "SHOTGUN LV3" (2852 px²)
+- OVERLAP button#live-btn.tool "Live 0"  x  div.raid "Target Tom fought off Ra" (748 px²)
+- OVERLAP button#live-btn.tool "Live 0"  x  button#early-btn.early "⏩ Call early+13 coins" (466 px²)
+- OVERLAP button#live-btn.tool "Live 0"  x  aside#panel.panel "Main Tower · Lv 8×The he" (2334 px²)
+- OVERLAP button#crate-btn.tool.crate-tool "Crate !"  x  div.raid "Target Tom fought off Ra" (1138 px²)
+- OVERLAP button#crate-btn.tool.crate-tool "Crate !"  x  button#early-btn.early "⏩ Call early+13 coins" (33 px²)
+- OVERLAP button#crate-btn.tool.crate-tool "Crate !"  x  button#ammo.ammo "SHOTGUN LV3" (808 px²)
+- OVERLAP button#crate-btn.tool.crate-tool "Crate !"  x  aside#panel.panel "Main Tower · Lv 8×The he" (3553 px²)
+- OVERLAP button#zoom-in.tool.sq "+"  x  aside#panel.panel "Main Tower · Lv 8×The he" (2304 px²)
+- OVERLAP button#zoom-out.tool.sq "−"  x  aside#panel.panel "Main Tower · Lv 8×The he" (2304 px²)
+- OVERLAP div.crate "Nobody cracked the legen"  x  button#early-btn.early "⏩ Call early+13 coins" (1601 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#early-btn.early "⏩ Call early+13 coins" (1601 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#ammo.ammo "SHOTGUN LV3" (2917 px²)
+- OVERLAP div.raid "Target Tom fought off Ra"  x  button#early-btn.early "⏩ Call early+13 coins" (1456 px²)
+- OVERLAP div.raid "Target Tom fought off Ra"  x  button#ammo.ammo "SHOTGUN LV3" (2652 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 57:35" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 57:35" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button#wave-banner.wave-banner "Surge 1 in 0:07" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause surges" 9.6px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: small "Harder hits and a 24-rou" 11.2px
+- TEXT UNDER 12PX: em "Armed" 11.2px
+- TEXT UNDER 12PX: small "Tap ✈ then a spot: a bom" 11.2px
+- TEXT UNDER 12PX: em "Ready" 11.2px
+- TEXT UNDER 12PX: small "Five pellets a shot: shr" 11.2px
+- TEXT UNDER 12PX: small "Tap 🔥 then a spot: a fi" 11.2px
+- TEXT UNDER 12PX: small "Summon a survivor from y" 11.2px
+- TEXT UNDER 12PX: small "Your ultimate: bombs eve" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause surges" 126x40
+- SMALL TARGET: button.close "×" 42x42
+- SMALL TARGET: button.troop "Bat" 115x42
+- SMALL TARGET: button.troop "Pistol" 115x42
+- SMALL TARGET: button.troop.on "Brute" 115x42
+- SMALL TARGET: button.troop "Shotgun" 358x42
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### phone-portrait-390x844 · 04-unlock-popup
+- TEXT UNDER 12PX: span.chip.shield "Immune 57:34" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 57:34" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button#wave-banner.wave-banner "Surge 1 in 0:06" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause surges" 9.6px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: p.unlock-tap "Tap to continue" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause surges" 126x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### phone-portrait-390x844 · 05-paused
+- OVERLAP div.hud-who "Maximilian AlexanderMain"  x  div.toast.good "Surges paused. Upgrade, " (890 px²)
+- OVERLAP div.hud-stat "2345678"  x  span#hud-chips.chips "Immune 57:31ATK +50% ×3D" (844 px²)
+- OVERLAP button#sound-btn.icon-btn "🔊"  x  div.toast.good "Surges paused. Upgrade, " (71 px²)
+- OVERLAP button#menu-btn.icon-btn "☰"  x  div.toast.good "Surges paused. Upgrade, " (65 px²)
+- OVERLAP span#hud-chips.chips "Immune 57:31ATK +50% ×3D"  x  div.toast.good "Surges paused. Upgrade, " (1724 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 57:31" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 57:31" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button#wave-banner.wave-banner.paused "⏸ PAUSED · surges resume" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "▶ Surges paused · Resume" 9.6px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button#wave-banner.wave-banner.paused "⏸ PAUSED · surges resume" 16x48
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "▶ Surges paused · Resume" 239x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+- COVERS OWN BASE: canvas#minimap.minimap (689 px²)
+- COVERS OWN BASE: div#threat.threat.safe "🛡 1634/☠ 789READY" (5532 px²)
+
+### phone-portrait-390x844 · 06-crate
+- OVERLAP div.hud-who "Maximilian AlexanderMain"  x  div.toast.good "Surges resume in 3..." (620 px²)
+- OVERLAP div.hud-who "Maximilian AlexanderMain"  x  div.toast "A legendary crate droppe" (890 px²)
+- OVERLAP div.hud-stat "2345678"  x  span#hud-chips.chips "Immune 57:30ATK +50% ×3D" (844 px²)
+- OVERLAP div.hud-stat "2345678"  x  div.toast "A legendary crate droppe" (3753 px²)
+- OVERLAP div.hud-stat "♛1234567"  x  div.toast "A legendary crate droppe" (3825 px²)
+- OVERLAP button#sound-btn.icon-btn "🔊"  x  div.toast "A legendary crate droppe" (2231 px²)
+- OVERLAP button#menu-btn.icon-btn "☰"  x  div.toast "A legendary crate droppe" (2063 px²)
+- OVERLAP span#hud-chips.chips "Immune 57:30ATK +50% ×3D"  x  div.toast.good "Surges resume in 3..." (885 px²)
+- OVERLAP span#hud-chips.chips "Immune 57:30ATK +50% ×3D"  x  div.toast "A legendary crate droppe" (2764 px²)
+- OVERLAP div#mode-toggle.mode-toggle "⛏ Grind ⚔ Raid"  x  div#threat.threat.safe "🛡 1634/☠ 789READY" (1519 px²)
+- OVERLAP div#mode-toggle.mode-toggle "⛏ Grind ⚔ Raid"  x  button#strike-btn.strike "✈" (843 px²)
+- OVERLAP button#pause-btn.pause-btn "⏸ Pause in 0:29"  x  div#threat.threat.safe "🛡 1634/☠ 789READY" (556 px²)
+- OVERLAP button#pause-btn.pause-btn "⏸ Pause in 0:29"  x  button#strike-btn.strike "✈" (442 px²)
+- OVERLAP button#pause-btn.pause-btn "⏸ Pause in 0:29"  x  button#squad-btn.strike.squad "🪖" (1166 px²)
+- OVERLAP canvas#minimap.minimap  x  button#strike-btn.strike "✈" (165 px²)
+- OVERLAP canvas#minimap.minimap  x  button#molotov-btn.strike "🔥" (816 px²)
+- OVERLAP canvas#minimap.minimap  x  button#squad-btn.strike.squad "🪖" (466 px²)
+- OVERLAP canvas#minimap.minimap  x  button#ult-btn.strike "💣" (2304 px²)
+- OVERLAP canvas#minimap.minimap  x  aside#panel.panel "legendary crate×First co" (6950 px²)
+- OVERLAP button#home-btn.tool "My base"  x  div.crate "Nobody cracked the legen" (2439 px²)
+- OVERLAP button#home-btn.tool "My base"  x  div.crate "A legendary crate droppe" (476 px²)
+- OVERLAP button#home-btn.tool "My base"  x  button#ammo.ammo "SHOTGUN LV3" (1739 px²)
+- OVERLAP button#ranks-btn.tool "Ranks"  x  div.crate "Nobody cracked the legen" (1943 px²)
+- OVERLAP button#ranks-btn.tool "Ranks"  x  div.crate "A legendary crate droppe" (379 px²)
+- OVERLAP button#ranks-btn.tool "Ranks"  x  button#ammo.ammo "SHOTGUN LV3" (2847 px²)
+- OVERLAP button#live-btn.tool "Live 0"  x  div.crate "A legendary crate droppe" (748 px²)
+- OVERLAP button#live-btn.tool "Live 0"  x  button#ammo.ammo "SHOTGUN LV3" (154 px²)
+- OVERLAP button#live-btn.tool "Live 0"  x  aside#panel.panel "legendary crate×First co" (2334 px²)
+- OVERLAP button#crate-btn.tool.crate-tool "Crate !"  x  div.crate "A legendary crate droppe" (1138 px²)
+- OVERLAP button#crate-btn.tool.crate-tool "Crate !"  x  button#ammo.ammo "SHOTGUN LV3" (903 px²)
+- OVERLAP button#crate-btn.tool.crate-tool "Crate !"  x  aside#panel.panel "legendary crate×First co" (3553 px²)
+- OVERLAP button#zoom-in.tool.sq "+"  x  aside#panel.panel "legendary crate×First co" (2304 px²)
+- OVERLAP button#zoom-out.tool.sq "−"  x  aside#panel.panel "legendary crate×First co" (2304 px²)
+- OVERLAP div.crate "Nobody cracked the legen"  x  button#ammo.ammo "SHOTGUN LV3" (3300 px²)
+- OVERLAP div.crate "Nobody cracked the legen"  x  button#molotov-btn.strike "🔥" (330 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#ammo.ammo "SHOTGUN LV3" (3000 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#molotov-btn.strike "🔥" (300 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 57:30" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 57:30" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button#wave-banner.wave-banner.alarm "▶ Surges resume in 2..." 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause in 0:29" 9.6px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause in 0:29" 133x40
+- SMALL TARGET: button.close "×" 42x42
+- SMALL TARGET: button.link "Show it on the map" 132x42
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### phone-portrait-390x844 · 07-ranks
+- OVERLAP div.hud-who "Maximilian AlexanderMain"  x  div.toast "A legendary crate droppe" (890 px²)
+- OVERLAP div.hud-stat "2345678"  x  span#hud-chips.chips "Immune 57:28ATK +50% ×3D" (844 px²)
+- OVERLAP button#sound-btn.icon-btn "🔊"  x  div.toast "A legendary crate droppe" (71 px²)
+- OVERLAP button#menu-btn.icon-btn "☰"  x  div.toast "A legendary crate droppe" (65 px²)
+- OVERLAP span#hud-chips.chips "Immune 57:28ATK +50% ×3D"  x  div.toast "A legendary crate droppe" (1724 px²)
+- OVERLAP div#mode-toggle.mode-toggle "⛏ Grind ⚔ Raid"  x  div#threat.threat.safe "🛡 1634/☠ 827READY" (1047 px²)
+- OVERLAP button#pause-btn.pause-btn "⏸ Pause in 0:27"  x  div#threat.threat.safe "🛡 1634/☠ 827READY" (867 px²)
+- OVERLAP button#pause-btn.pause-btn "⏸ Pause in 0:27"  x  button#strike-btn.strike "✈" (1166 px²)
+- OVERLAP button#pause-btn.pause-btn "⏸ Pause in 0:27"  x  button#squad-btn.strike.squad "🪖" (1166 px²)
+- OVERLAP canvas#minimap.minimap  x  button#ammo.ammo "SHOTGUN LV3" (67 px²)
+- OVERLAP canvas#minimap.minimap  x  button#strike-btn.strike "✈" (466 px²)
+- OVERLAP canvas#minimap.minimap  x  button#molotov-btn.strike "🔥" (2304 px²)
+- OVERLAP canvas#minimap.minimap  x  button#squad-btn.strike.squad "🪖" (466 px²)
+- OVERLAP canvas#minimap.minimap  x  button#ult-btn.strike "💣" (2304 px²)
+- OVERLAP canvas#minimap.minimap  x  aside#panel.panel "Leaderboard×Trophies com" (6950 px²)
+- OVERLAP button#home-btn.tool "My base"  x  div.crate "Nobody cracked the legen" (2439 px²)
+- OVERLAP button#home-btn.tool "My base"  x  div.crate "A legendary crate droppe" (476 px²)
+- OVERLAP button#home-btn.tool "My base"  x  button#early-btn.early "⏩ Call earlyin 30s" (3442 px²)
+- OVERLAP button#home-btn.tool "My base"  x  button#ammo.ammo "SHOTGUN LV3" (434 px²)
+- OVERLAP button#ranks-btn.tool "Ranks"  x  div.crate "Nobody cracked the legen" (1943 px²)
+- OVERLAP button#ranks-btn.tool "Ranks"  x  div.crate "A legendary crate droppe" (379 px²)
+- OVERLAP button#ranks-btn.tool "Ranks"  x  button#ammo.ammo "SHOTGUN LV3" (2852 px²)
+- OVERLAP button#live-btn.tool "Live 0"  x  div.crate "A legendary crate droppe" (748 px²)
+- OVERLAP button#live-btn.tool "Live 0"  x  button#early-btn.early "⏩ Call earlyin 30s" (466 px²)
+- OVERLAP button#live-btn.tool "Live 0"  x  aside#panel.panel "Leaderboard×Trophies com" (2334 px²)
+- OVERLAP button#crate-btn.tool.crate-tool "Crate !"  x  div.crate "A legendary crate droppe" (1138 px²)
+- OVERLAP button#crate-btn.tool.crate-tool "Crate !"  x  button#early-btn.early "⏩ Call earlyin 30s" (33 px²)
+- OVERLAP button#crate-btn.tool.crate-tool "Crate !"  x  button#ammo.ammo "SHOTGUN LV3" (808 px²)
+- OVERLAP button#crate-btn.tool.crate-tool "Crate !"  x  aside#panel.panel "Leaderboard×Trophies com" (3553 px²)
+- OVERLAP button#zoom-in.tool.sq "+"  x  aside#panel.panel "Leaderboard×Trophies com" (2304 px²)
+- OVERLAP button#zoom-out.tool.sq "−"  x  aside#panel.panel "Leaderboard×Trophies com" (2304 px²)
+- OVERLAP div.crate "Nobody cracked the legen"  x  button#early-btn.early "⏩ Call earlyin 30s" (1601 px²)
+- OVERLAP div.crate "Nobody cracked the legen"  x  button#ammo.ammo "SHOTGUN LV3" (2917 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#early-btn.early "⏩ Call earlyin 30s" (1456 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#ammo.ammo "SHOTGUN LV3" (2652 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 57:28" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 57:28" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button#wave-banner.wave-banner "Surge 1 in 1:15" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause in 0:27" 9.6px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: span.mode-chip.pve "Grinding" 11.2px
+- TEXT UNDER 12PX: span.mode-chip.pvp "Raiding" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause in 0:27" 133x40
+- SMALL TARGET: button.close "×" 42x42
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### phone-portrait-390x844 · 08-live-list
+- OVERLAP div.hud-who "Maximilian AlexanderMain"  x  div.toast "A legendary crate droppe" (890 px²)
+- OVERLAP div.hud-stat "2345678"  x  span#hud-chips.chips "Immune 57:27ATK +50% ×3D" (844 px²)
+- OVERLAP button#sound-btn.icon-btn "🔊"  x  div.toast "A legendary crate droppe" (71 px²)
+- OVERLAP button#menu-btn.icon-btn "☰"  x  div.toast "A legendary crate droppe" (65 px²)
+- OVERLAP span#hud-chips.chips "Immune 57:27ATK +50% ×3D"  x  div.toast "A legendary crate droppe" (1724 px²)
+- OVERLAP button#zoom-in.tool.sq "+"  x  div#threat.threat.safe "🛡 1634/☠ 827READY" (834 px²)
+- OVERLAP button#zoom-out.tool.sq "−"  x  button#squad-btn.strike.squad "🪖" (1305 px²)
+- OVERLAP div.crate "Nobody cracked the legen"  x  button#early-btn.early "⏩ Call earlyin 29s" (1601 px²)
+- OVERLAP div.crate "Nobody cracked the legen"  x  button#ammo.ammo "SHOTGUN LV3" (2917 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#early-btn.early "⏩ Call earlyin 29s" (1456 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#ammo.ammo "SHOTGUN LV3" (2652 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 57:27" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 57:27" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button#wave-banner.wave-banner "Surge 1 in 1:14" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause in 0:26" 9.6px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause in 0:26" 133x40
+- SMALL TARGET: button.close "×" 42x42
+- SMALL TARGET: a "Open the Live Arena" 120x14
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### phone-portrait-390x844 · 09-menu
+- TEXT UNDER 12PX: span.chip.shield "Immune 57:24" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 57:24" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button#wave-banner.wave-banner "Surge 1 in 1:12" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause in 0:24" 9.6px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause in 0:24" 133x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### phone-portrait-390x844 · 10-objectives
+- OVERLAP button#wave-banner.wave-banner "Surge 1 in 0:06 · from t"  x  div.toast.good "While you were away: 3 z" (3465 px²)
+- OVERLAP div#mode-toggle.mode-toggle "⛏ Grind ⚔ Raid"  x  div.toast.good "While you were away: 3 z" (8289 px²)
+- OVERLAP button#pause-btn.pause-btn "⏸ Pause surges"  x  div.toast.good "While you were away: 3 z" (4557 px²)
+- OVERLAP div.raid "Target Tom fought off Ra"  x  div#threat.threat.safe "🛡 42/☠ 26READY" (101 px²)
+- OVERLAP div.raid "Target Tom fought off Ra"  x  button#early-btn.early "⏩ Call earlyin 1s" (946 px²)
+- OVERLAP div.crate "Nobody cracked the legen"  x  button#early-btn.early "⏩ Call earlyin 1s" (1601 px²)
+- OVERLAP div.crate "Nobody cracked the legen"  x  button#ammo.ammo "PISTOL" (1795 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#early-btn.early "⏩ Call earlyin 1s" (1456 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#ammo.ammo "PISTOL" (1632 px²)
+- TEXT UNDER 12PX: button#wave-banner.wave-banner "Surge 1 in 0:06 · from t" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause surges" 9.6px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: b "Build your base" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "PISTOL" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause surges" 126x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+- COVERS OWN BASE: div#objectives.objectives "Build your baseBuy your " (1154 px²)
+
+### phone-portrait-390x844 · 11-target-card
+- TEXT UNDER 12PX: button#wave-banner.wave-banner.attack "⚔ Raid mode: the swarms " 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button.close "×" 42x42
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### phone-portrait-390x844 · 12-raid-army-picker
+- OVERLAP div.hud-who "Raiding Rhea LongnameMai"  x  div.toast "Raid on! Tap the red zon" (401 px²)
+- OVERLAP button#wave-banner.wave-banner.attack "⚔ Raiding Target Tom"  x  div.toast "Raid on! Tap the red zon" (4620 px²)
+- OVERLAP div#mode-toggle.mode-toggle "⛏ Grind ⚔ Raid"  x  div.toast "Raid on! Tap the red zon" (3598 px²)
+- OVERLAP div.raid "Target Tom fought off Ra"  x  div#attack-bar.attack-bar "Raiding Target Tom ☆☆☆ 0" (5060 px²)
+- OVERLAP div.crate "Nobody cracked the legen"  x  div#attack-bar.attack-bar "Raiding Target Tom ☆☆☆ 0" (5060 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  div#attack-bar.attack-bar "Raiding Target Tom ☆☆☆ 0" (5060 px²)
+- TEXT UNDER 12PX: button#wave-banner.wave-banner.attack "⚔ Raiding Target Tom" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: span#live-count.badge "1" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small "54 coins" 11.2px
+- TEXT UNDER 12PX: small "68 coins" 11.2px
+- TEXT UNDER 12PX: small "135 coins" 11.2px
+- TEXT UNDER 12PX: small "122 coins" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### phone-portrait-390x844 · 13-raid-deploying
+- TEXT UNDER 12PX: button#wave-banner.wave-banner.attack "⚔ Raiding Target Tom" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: span#live-count.badge "1" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small "54 coins" 11.2px
+- TEXT UNDER 12PX: small "68 coins" 11.2px
+- TEXT UNDER 12PX: small "135 coins" 11.2px
+- TEXT UNDER 12PX: small "122 coins" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### phone-portrait-390x844 · 14-raid-result
+- OVERLAP div.hud-who "Raiding Rhea LongnameMai"  x  div.toast.bad "Raid failed (0% destroye" (452 px²)
+- OVERLAP button#wave-banner.wave-banner.attack "⚔ Raid mode: the swarms "  x  div.toast.bad "Raid failed (0% destroye" (4620 px²)
+- OVERLAP div#mode-toggle.mode-toggle "⛏ Grind ⚔ Raid"  x  div.toast.bad "Raid failed (0% destroye" (3598 px²)
+- TEXT UNDER 12PX: button#wave-banner.wave-banner.attack "⚔ Raid mode: the swarms " 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### phone-portrait-390x844 · 20-arena
+- TEXT UNDER 12PX: span.mode-chip.pve "Grinding" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### phone-portrait-390x844 · 21-arena-projector
+- TEXT UNDER 12PX: span.mode-chip.pve "Grinding" 11.2px
+
+### phone-portrait-390x844 · 22-admin
+- TEXT UNDER 12PX: th "#" 11.2px
+- TEXT UNDER 12PX: th "Name" 11.2px
+- TEXT UNDER 12PX: th "Roll" 11.2px
+- TEXT UNDER 12PX: th "HQ" 11.2px
+- TEXT UNDER 12PX: th "Coins" 11.2px
+- TEXT UNDER 12PX: th "Trophies" 11.2px
+- TEXT UNDER 12PX: th "Status" 11.2px
+- SMALL TARGET: button.btn.secondary "Red" 324x42
+- SMALL TARGET: input#search 240x42
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+
+### phone-landscape-844x390 · 01-map-hud
+- OVERLAP button#wave-banner.wave-banner.attack "Surge 1 in 0:05"  x  div.toast.good "While you were away: 1 z" (15047 px²)
+- OVERLAP div#mode-toggle.mode-toggle "⛏ Grind ⚔ Raid"  x  div.toast.good "While you were away: 1 z" (6073 px²)
+- OVERLAP button#zoom-out.tool.sq "−"  x  footer.credit "Art: Post-Apocalypse ass" (536 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#early-btn.early "⏩ Call early+9 coins" (3126 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#ammo.ammo "SHOTGUN LV3" (226 px²)
+- OVERLAP div.raid "Target Tom fought off Ra"  x  button#early-btn.early "⏩ Call early+9 coins" (1845 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 56:59" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 56:59" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause surges" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause surges" 152x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+- COVERS OWN BASE: div#threat.threat.safe "🛡 1634/☠ 1018READY" (2022 px²)
+
+### phone-landscape-844x390 · 02-banners-at-once
+- OVERLAP button#wave-banner.wave-banner.alarm "☠ HORDE! A much bigger s"  x  div.toast.bad "Maximilian Alexander is " (10296 px²)
+- OVERLAP button#wave-banner.wave-banner.alarm "☠ HORDE! A much bigger s"  x  div.toast.bad "Surges paused. Upgrade, " (2870 px²)
+- OVERLAP div#mode-toggle.mode-toggle "⛏ Grind ⚔ Raid"  x  div.toast.bad "Maximilian Alexander is " (4155 px²)
+- OVERLAP div#mode-toggle.mode-toggle "⛏ Grind ⚔ Raid"  x  div.toast.bad "Surges paused. Upgrade, " (1158 px²)
+- OVERLAP button#ranks-btn.tool "Ranks"  x  div.toast.bad "Surges paused. Upgrade, " (485 px²)
+- OVERLAP button#ranks-btn.tool "Ranks"  x  div.toast.bad "Crate claimed by Raiding" (68 px²)
+- OVERLAP button#live-btn.tool "Live 0"  x  div.toast.bad "Surges paused. Upgrade, " (2839 px²)
+- OVERLAP button#live-btn.tool "Live 0"  x  div.toast.bad "Crate claimed by Raiding" (397 px²)
+- OVERLAP button#crate-btn.tool.crate-tool "Crate !"  x  div.toast.bad "Surges paused. Upgrade, " (4321 px²)
+- OVERLAP button#crate-btn.tool.crate-tool "Crate !"  x  div.toast.bad "Crate claimed by Raiding" (605 px²)
+- OVERLAP button#zoom-out.tool.sq "−"  x  footer.credit "Art: Post-Apocalypse ass" (536 px²)
+- OVERLAP div.raid "Newcomer Nine joined the"  x  button#early-btn.early "⏩ Call early+6 coins" (60 px²)
+- OVERLAP div.raid "Maximilian Alexander is "  x  button#early-btn.early "⏩ Call early+6 coins" (1761 px²)
+- OVERLAP div#coach.coach "Nice shooting! Keep tapp"  x  div#threat.threat.safe "🛡 1634/☠ 1018READY" (6941 px²)
+- OVERLAP div#coach.coach "Nice shooting! Keep tapp"  x  button#strike-btn.strike "✈" (768 px²)
+- OVERLAP div#coach.coach "Nice shooting! Keep tapp"  x  button#squad-btn.strike.squad "🪖" (768 px²)
+- OVERLAP div#coach.coach "Nice shooting! Keep tapp"  x  div.toast.bad "Crate claimed by Raiding" (9844 px²)
+- OVERLAP div#threat.threat.safe "🛡 1634/☠ 1018READY"  x  div.toast.bad "Crate claimed by Raiding" (3996 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 56:57" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 56:57" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause surges" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause surges" 152x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### phone-landscape-844x390 · 03-upgrade-panel
+- OVERLAP canvas#minimap.minimap  x  div#threat.threat.safe "🛡 1634/☠ 778READY" (2125 px²)
+- OVERLAP canvas#minimap.minimap  x  button#strike-btn.strike "✈" (74 px²)
+- OVERLAP canvas#minimap.minimap  x  button#squad-btn.strike.squad "🪖" (344 px²)
+- OVERLAP button#zoom-out.tool.sq "−"  x  footer.credit "Art: Post-Apocalypse ass" (536 px²)
+- OVERLAP div.crate "Nobody cracked the legen"  x  button#early-btn.early "⏩ Call early+13 coins" (1601 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#early-btn.early "⏩ Call early+13 coins" (1601 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#ammo.ammo "SHOTGUN LV3" (3300 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#molotov-btn.strike "🔥" (475 px²)
+- OVERLAP div.raid "Target Tom fought off Ra"  x  button#early-btn.early "⏩ Call early+13 coins" (1456 px²)
+- OVERLAP div.raid "Target Tom fought off Ra"  x  button#ammo.ammo "SHOTGUN LV3" (3000 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 56:55" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 56:55" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause surges" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: small "Harder hits and a 24-rou" 11.2px
+- TEXT UNDER 12PX: em "Armed" 11.2px
+- TEXT UNDER 12PX: small "Tap ✈ then a spot: a bom" 11.2px
+- TEXT UNDER 12PX: em "Ready" 11.2px
+- TEXT UNDER 12PX: small "Five pellets a shot: shr" 11.2px
+- TEXT UNDER 12PX: small "Tap 🔥 then a spot: a fi" 11.2px
+- TEXT UNDER 12PX: small "Summon a survivor from y" 11.2px
+- TEXT UNDER 12PX: small "Your ultimate: bombs eve" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause surges" 152x40
+- SMALL TARGET: button.close "×" 42x42
+- SMALL TARGET: button.troop "Bat" 105x42
+- SMALL TARGET: button.troop "Pistol" 105x42
+- SMALL TARGET: button.troop.on "Brute" 105x42
+- SMALL TARGET: button.troop "Shotgun" 326x42
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### phone-landscape-844x390 · 04-unlock-popup
+- TEXT UNDER 12PX: span.chip.shield "Immune 56:54" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 56:54" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause surges" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: p.unlock-tap "Tap to continue" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause surges" 152x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### phone-landscape-844x390 · 05-paused
+- OVERLAP button#wave-banner.wave-banner.paused "⏸ PAUSED · surges resume"  x  div.toast.good "Surges paused. Upgrade, " (8675 px²)
+- OVERLAP div#mode-toggle.mode-toggle "⛏ Grind ⚔ Raid"  x  div.toast.good "Surges paused. Upgrade, " (8289 px²)
+- OVERLAP button#pause-btn.pause-btn "▶ Surges paused · Resume"  x  div.toast.good "Surges paused. Upgrade, " (3464 px²)
+- OVERLAP button#zoom-out.tool.sq "−"  x  footer.credit "Art: Post-Apocalypse ass" (536 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 56:51" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 56:51" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "▶ Surges paused · Resume" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "▶ Surges paused · Resume" 285x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+- COVERS OWN BASE: div#threat.threat.safe "🛡 1634/☠ 778READY" (3696 px²)
+- COVERS OWN BASE: button#strike-btn.strike "✈" (1334 px²)
+
+### phone-landscape-844x390 · 06-crate
+- OVERLAP button#wave-banner.wave-banner.alarm "▶ Surges resume in 1..."  x  div.toast.good "Surges resume in 3..." (10002 px²)
+- OVERLAP button#wave-banner.wave-banner.alarm "▶ Surges resume in 1..."  x  div.toast "A legendary crate droppe" (2788 px²)
+- OVERLAP div#mode-toggle.mode-toggle "⛏ Grind ⚔ Raid"  x  div.toast.good "Surges resume in 3..." (4449 px²)
+- OVERLAP div#mode-toggle.mode-toggle "⛏ Grind ⚔ Raid"  x  div.toast "A legendary crate droppe" (1240 px²)
+- OVERLAP canvas#minimap.minimap  x  div#threat.threat.safe "🛡 1634/☠ 778READY" (792 px²)
+- OVERLAP canvas#minimap.minimap  x  button#squad-btn.strike.squad "🪖" (172 px²)
+- OVERLAP canvas#minimap.minimap  x  div.toast "A legendary crate droppe" (4716 px²)
+- OVERLAP button#ranks-btn.tool "Ranks"  x  div.toast "A legendary crate droppe" (485 px²)
+- OVERLAP button#live-btn.tool "Live 0"  x  div.toast "A legendary crate droppe" (2839 px²)
+- OVERLAP button#zoom-out.tool.sq "−"  x  footer.credit "Art: Post-Apocalypse ass" (536 px²)
+- OVERLAP div.crate "Nobody cracked the legen"  x  button#ammo.ammo "SHOTGUN LV3" (3300 px²)
+- OVERLAP div.crate "Nobody cracked the legen"  x  button#molotov-btn.strike "🔥" (624 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#ammo.ammo "SHOTGUN LV3" (3000 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#molotov-btn.strike "🔥" (960 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#ult-btn.strike "💣" (160 px²)
+- OVERLAP aside#panel.panel "legendary crate×First co"  x  div.toast "A legendary crate droppe" (7085 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 56:49" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 56:49" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause in 0:28" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause in 0:28" 161x40
+- SMALL TARGET: button.close "×" 42x42
+- SMALL TARGET: button.link "Show it on the map" 132x42
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### phone-landscape-844x390 · 07-ranks
+- OVERLAP button#wave-banner.wave-banner.alarm "▶ Surges resume in 1..."  x  div.toast "A legendary crate droppe" (14618 px²)
+- OVERLAP div#mode-toggle.mode-toggle "⛏ Grind ⚔ Raid"  x  div.toast "A legendary crate droppe" (6503 px²)
+- OVERLAP canvas#minimap.minimap  x  div#threat.threat.safe "🛡 1634/☠ 778READY" (792 px²)
+- OVERLAP canvas#minimap.minimap  x  button#squad-btn.strike.squad "🪖" (172 px²)
+- OVERLAP button#zoom-out.tool.sq "−"  x  footer.credit "Art: Post-Apocalypse ass" (536 px²)
+- OVERLAP div.crate "Nobody cracked the legen"  x  button#ammo.ammo "SHOTGUN LV3" (3300 px²)
+- OVERLAP div.crate "Nobody cracked the legen"  x  button#molotov-btn.strike "🔥" (624 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#ammo.ammo "SHOTGUN LV3" (3000 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#molotov-btn.strike "🔥" (960 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#ult-btn.strike "💣" (160 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 56:48" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 56:48" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause in 0:27" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: span.mode-chip.pve "Grinding" 11.2px
+- TEXT UNDER 12PX: span.mode-chip.pvp "Raiding" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause in 0:27" 161x40
+- SMALL TARGET: button.close "×" 42x42
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### phone-landscape-844x390 · 08-live-list
+- OVERLAP button#wave-banner.wave-banner "Surge 1 in 1:14"  x  div.toast "A legendary crate droppe" (14618 px²)
+- OVERLAP div#mode-toggle.mode-toggle "⛏ Grind ⚔ Raid"  x  div.toast "A legendary crate droppe" (6503 px²)
+- OVERLAP canvas#minimap.minimap  x  div#threat.threat.safe "🛡 1634/☠ 1020READY" (2125 px²)
+- OVERLAP canvas#minimap.minimap  x  button#strike-btn.strike "✈" (74 px²)
+- OVERLAP canvas#minimap.minimap  x  button#squad-btn.strike.squad "🪖" (344 px²)
+- OVERLAP button#zoom-out.tool.sq "−"  x  footer.credit "Art: Post-Apocalypse ass" (536 px²)
+- OVERLAP div.crate "Nobody cracked the legen"  x  button#early-btn.early "⏩ Call earlyin 29s" (1601 px²)
+- OVERLAP div.crate "Nobody cracked the legen"  x  button#ammo.ammo "SHOTGUN LV3" (3211 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#early-btn.early "⏩ Call earlyin 29s" (1456 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#ammo.ammo "SHOTGUN LV3" (3000 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#molotov-btn.strike "🔥" (432 px²)
+- TEXT UNDER 12PX: span.chip.shield "Immune 56:46" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 56:46" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause in 0:26" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause in 0:26" 161x40
+- SMALL TARGET: button.close "×" 42x42
+- SMALL TARGET: a "Open the Live Arena" 120x14
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### phone-landscape-844x390 · 09-menu
+- TEXT UNDER 12PX: span.chip.shield "Immune 56:44" 11.2px
+- TEXT UNDER 12PX: span.chip "ATK +50% ×3" 11.2px
+- TEXT UNDER 12PX: span.chip "DEF +25% 56:44" 11.2px
+- TEXT UNDER 12PX: span.chip "LOOT +75%" 11.2px
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause in 0:24" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "SHOTGUN LV3" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause in 0:24" 161x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### phone-landscape-844x390 · 10-objectives
+- OVERLAP button#wave-banner.wave-banner "Surge 1 in 0:06 · from t"  x  div.toast.good "While you were away: 6 z" (13166 px²)
+- OVERLAP div#mode-toggle.mode-toggle "⛏ Grind ⚔ Raid"  x  div.toast.good "While you were away: 6 z" (5314 px²)
+- OVERLAP button#ranks-btn.tool "Ranks"  x  div.toast.good "While you were away: 6 z" (53 px²)
+- OVERLAP button#live-btn.tool "Live 0"  x  div.toast.good "While you were away: 6 z" (308 px²)
+- OVERLAP button#crate-btn.tool.crate-tool "Crate !"  x  div.toast.good "While you were away: 6 z" (469 px²)
+- OVERLAP div.raid "Target Tom fought off Ra"  x  div#objectives.objectives "Build your baseBuy your " (5278 px²)
+- OVERLAP div.crate "Nobody cracked the legen"  x  div#objectives.objectives "Build your baseBuy your " (5278 px²)
+- OVERLAP div.crate "Nobody cracked the legen"  x  button#early-btn.early "⏩ Call earlyin 1s" (669 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  div#objectives.objectives "Build your baseBuy your " (5278 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  button#early-btn.early "⏩ Call earlyin 1s" (2188 px²)
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: button#pause-btn.pause-btn "⏸ Pause surges" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: b "Build your base" 11.2px
+- TEXT UNDER 12PX: small#threat-word "READY" 11.2px
+- TEXT UNDER 12PX: b "⏩ Call early" 11.2px
+- TEXT UNDER 12PX: span#ammo-name.ammo-name "PISTOL" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button#pause-btn.pause-btn "⏸ Pause surges" 152x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+- COVERS OWN BASE: div#threat.threat.safe "🛡 42/☠ 31READY" (2251 px²)
+
+### phone-landscape-844x390 · 11-target-card
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: button.close "×" 42x42
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### phone-landscape-844x390 · 12-raid-army-picker
+- OVERLAP button#wave-banner.wave-banner.attack "⚔ Raiding Target Tom"  x  div.toast "Raid on! Tap the red zon" (17160 px²)
+- OVERLAP button#home-btn.tool "My base"  x  div#attack-bar.attack-bar "Raiding Target Tom ☆☆☆ 0" (2660 px²)
+- OVERLAP button#ranks-btn.tool "Ranks"  x  div#attack-bar.attack-bar "Raiding Target Tom ☆☆☆ 0" (2120 px²)
+- OVERLAP button#live-btn.tool "Live 1"  x  div#attack-bar.attack-bar "Raiding Target Tom ☆☆☆ 0" (2544 px²)
+- OVERLAP button#crate-btn.tool.crate-tool "Crate !"  x  div#attack-bar.attack-bar "Raiding Target Tom ☆☆☆ 0" (2815 px²)
+- OVERLAP div.raid "Target Tom fought off Ra"  x  div#attack-bar.attack-bar "Raiding Target Tom ☆☆☆ 0" (4752 px²)
+- OVERLAP div.crate "Nobody cracked the legen"  x  div#attack-bar.attack-bar "Raiding Target Tom ☆☆☆ 0" (4752 px²)
+- OVERLAP div.crate "A legendary crate droppe"  x  div#attack-bar.attack-bar "Raiding Target Tom ☆☆☆ 0" (4752 px²)
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: span#live-count.badge "1" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small "54 coins" 11.2px
+- TEXT UNDER 12PX: small "68 coins" 11.2px
+- TEXT UNDER 12PX: small "135 coins" 11.2px
+- TEXT UNDER 12PX: small "122 coins" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### phone-landscape-844x390 · 13-raid-deploying
+- OVERLAP button#home-btn.tool "My base"  x  div#attack-bar.attack-bar "Raiding Target Tom ☆☆☆ 0" (2660 px²)
+- OVERLAP button#ranks-btn.tool "Ranks"  x  div#attack-bar.attack-bar "Raiding Target Tom ☆☆☆ 0" (2120 px²)
+- OVERLAP button#live-btn.tool "Live 1"  x  div#attack-bar.attack-bar "Raiding Target Tom ☆☆☆ 0" (2544 px²)
+- OVERLAP button#crate-btn.tool.crate-tool "Crate !"  x  div#attack-bar.attack-bar "Raiding Target Tom ☆☆☆ 0" (2815 px²)
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: span#live-count.badge "1" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: small "54 coins" 11.2px
+- TEXT UNDER 12PX: small "68 coins" 11.2px
+- TEXT UNDER 12PX: small "135 coins" 11.2px
+- TEXT UNDER 12PX: small "122 coins" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### phone-landscape-844x390 · 14-raid-result
+- OVERLAP button#wave-banner.wave-banner.attack "⚔ Raid mode: the swarms "  x  div.toast.bad "Raid failed (0% destroye" (17160 px²)
+- TEXT UNDER 12PX: button "⛏ Grind" 11.2px
+- TEXT UNDER 12PX: button "⚔ Raid" 11.2px
+- TEXT UNDER 12PX: span#crate-badge.badge "!" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: button "⛏ Grind" 89x40
+- SMALL TARGET: button "⚔ Raid" 76x40
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### phone-landscape-844x390 · 20-arena
+- TEXT UNDER 12PX: span.mode-chip.pve "Grinding" 11.2px
+- TEXT UNDER 12PX: footer.credit "Art: Post-Apocalypse ass" 11.2px
+- TEXT UNDER 12PX: a "Post-Apocalypse asset pa" 11.2px
+- SMALL TARGET: a "Post-Apocalypse asset pa" 253x13
+
+### phone-landscape-844x390 · 21-arena-projector
+- TEXT UNDER 12PX: span.mode-chip.pve "Grinding" 11.2px
+
+### phone-landscape-844x390 · 22-admin
+- TEXT UNDER 12PX: th "#" 11.2px
+- TEXT UNDER 12PX: th "Name" 11.2px
+- TEXT UNDER 12PX: th "Roll" 11.2px
+- TEXT UNDER 12PX: th "HQ" 11.2px
+- TEXT UNDER 12PX: th "Coins" 11.2px
+- TEXT UNDER 12PX: th "Trophies" 11.2px
+- TEXT UNDER 12PX: th "Status" 11.2px
+- SMALL TARGET: button.btn.secondary "Blue" 110x42
+- SMALL TARGET: button.btn.secondary "Red" 110x42
+- SMALL TARGET: input#search 240x42
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
+- SMALL TARGET: button.tool "Reset" 82x36
+- SMALL TARGET: button.tool.danger "Delete" 92x36
