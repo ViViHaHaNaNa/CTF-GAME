@@ -153,6 +153,12 @@ export const CONFIG = {
      * and damage). The ramp stops at `max` times the start.
      */
     ramp: { start: 30, growth: 1.15, growthLate: 1.05, taperOver: 40, max: 35, countCap: 8 },
+    /**
+     * The ramp never sits below this for your Main Tower level (index = level - 1), so a player who levels
+     * up fast (raids, crates, saved coins) still gets surges that fit their level, from their first one.
+     * About 60% of where a steady player's ramp is on reaching each level (they don't notice it).
+     */
+    levelFloor: [1, 1.2, 2.7, 5.5, 9.5, 16, 21, 25],
     /** Surge to surge, power varies by up to +/- `variance`; every `hordeEvery`th surge is a horde at `hordeMult` (announced on the threat meter). */
     variance: 0.15,
     hordeEvery: 5,

@@ -157,6 +157,23 @@ describe('zombie siege', () => {
     expect(d.ramp).toBe(before);
   });
 
+  it('a higher Main Tower means stronger surges, even for a player with few surges behind them', () => {
+    const F = CONFIG.siege.levelFloor;
+    const fresh = () => ({ ...newDirector(), surges: 6 }); // past the walkthrough, ramp still at 1
+    const built = (hq: number) => ({ hq, walls: hq, cmd: 0, posts: SLOTS.map((_, i) => (i < 4 ? { type: 'gun' as const, level: hq } : null)) });
+    const next = (hq: number) => new Siege(built(hq), plot, 3, fresh(), { firstDelay: 0 }).threat().next;
+    const powers = [2, 4, 6, 8].map(next);
+    for (let i = 1; i < powers.length; i++) expect(powers[i]!).toBeGreaterThan(powers[i - 1]! * 1.5);
+    expect(next(6)).toBeGreaterThan(CONFIG.siege.ramp.start * F[5]! * 0.8);
+    // The ramp then grows from the floor and keeps it.
+    const d = fresh();
+    const s = new Siege(built(6), plot, 3, d, { firstDelay: 0 });
+    s.runSurge();
+    expect(d.ramp).toBeGreaterThan(F[5]!);
+    // A new session at a high level starts at that level's strength (no beginner surges).
+    expect(new Siege(built(7), plot, 3, fresh(), { firstDelay: 30 }).threat().next).toBeGreaterThan(next(3) * 3);
+  });
+
   it('the surge power is spent on more zombies first, then tougher ones; hordes every few surges', () => {
     const R = CONFIG.siege.ramp;
     expect(surgePower(1)).toEqual({ power: R.start, count: R.start, toughness: 1 });
@@ -276,9 +293,10 @@ describe('zombie siege', () => {
   });
 
   it('a surge running past the rage time enrages what is left', () => {
-    // Walls and no posts: nothing kills them, so the surge runs long.
+    // No posts and a Main Tower that can't fall: nothing ends the surge, so it runs long.
     const base = { hq: 6, walls: 6, cmd: 0, posts: SLOTS.map(() => null) };
     const s = new Siege(base, plot, 4, { ...newDirector(), surges: 9 }, { firstDelay: 0 });
+    s.combat.hq!.hp = s.combat.hq!.maxHp = 1e7;
     let rageAt = -1;
     for (let t = 0; t < (CONFIG.siege.rage.after + 5) * rate && rageAt < 0; t++) {
       s.step();

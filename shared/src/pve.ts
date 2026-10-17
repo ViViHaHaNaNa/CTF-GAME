@@ -817,7 +817,7 @@ export class Siege {
     }
     // The coming surge's strength: the ramp (capped while guided), a little variety, and every so often a horde.
     const R = S.ramp;
-    const ramp = this.guided ? Math.min(this.director.ramp, S.guided.maxRamp) : this.director.ramp;
+    const ramp = this.guided ? Math.min(this.ramp(), S.guided.maxRamp) : this.ramp();
     this.nextHorde = !this.tutorial && !this.guided && (this.director.surges + 1) % S.hordeEvery === 0;
     const vary = 1 + S.variance * (2 * this.rng() - 1);
     this.nextPower = this.tutorial ? S.tutorial.size : R.start * Math.min(R.max, ramp) * vary * (this.nextHorde ? S.hordeMult : 1);
@@ -966,12 +966,18 @@ export class Siege {
     this.planIncoming();
   }
 
+  /** The ramp for this base: the player's, but never below its Main Tower level's floor. */
+  private ramp(): number {
+    return Math.max(this.director.ramp, this.byLevel(CONFIG.siege.levelFloor));
+  }
+
   /** After every live surge the ramp grows (gently while guided), whatever happened in it. */
   private advance() {
     const R = CONFIG.siege.ramp;
     const d = this.director;
     d.surges++;
-    if (this.counting && !this.tutorial) d.ramp = Math.min(R.max, d.ramp * rampGrowth(d.surges));
+    // Growing from the level floor if that's higher, so a fast leveller's ramp catches up for good.
+    if (this.counting && !this.tutorial) d.ramp = Math.min(R.max, (this.guided ? d.ramp : this.ramp()) * rampGrowth(d.surges));
   }
 
   private endSurge() {
