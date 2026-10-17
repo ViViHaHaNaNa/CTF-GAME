@@ -12,6 +12,8 @@ import { GameError, type GameServer } from './game.ts';
 //  retreat                                  coins {coins, delta} / player PlayerView / feed FeedItem
 //  tap {x, y}  (no ack: hits arrive as tap) tap {p, ...TapResult} (everyone watching) / airstrike {p, x, y, delay}
 //  airstrike {x, y} (ack) / reload          siege {p, ...SiegeEvent} / pressure {sides, hq, ammo, ...} (owner)
+//  molotov {x, y} (ack) / ultimate (ack)    molotov {p, x, y, radius, duration} / ultimate {p, spots, delay}
+//  summon {kind} (ack) / order {x, y}       (the squad member shows up in snapshots as a raider-kind unit)
 //  mode {mode: 'pve' | 'pvp'} (ack)
 //  immunity {minutes} (ack)                 crate CrateView            (a new crate, or it was claimed)
 //  answer {crate, answer} (ack)             status {paused, frozen}    (organiser switches)
@@ -205,6 +207,42 @@ export function attachSockets(io: Server, game: GameServer): Sessions {
       } catch (e) {
         fail(ack, e);
       }
+    });
+
+    socket.on('molotov', (data: unknown, ack: unknown) => {
+      if (playerId === null) return reply(ack, { ok: false, error: 'Not logged in' });
+      if (!allowAct()) return reply(ack, { ok: false, error: 'Slow down a little' });
+      try {
+        const d = (data ?? {}) as { x?: unknown; y?: unknown };
+        reply(ack, game.molotov(playerId, d.x, d.y));
+      } catch (e) {
+        fail(ack, e);
+      }
+    });
+    socket.on('ultimate', (_data: unknown, ack: unknown) => {
+      if (playerId === null) return reply(ack, { ok: false, error: 'Not logged in' });
+      if (!allowAct()) return reply(ack, { ok: false, error: 'Slow down a little' });
+      try {
+        reply(ack, game.ultimate(playerId));
+      } catch (e) {
+        fail(ack, e);
+      }
+    });
+    socket.on('summon', (data: unknown, ack: unknown) => {
+      if (playerId === null) return reply(ack, { ok: false, error: 'Not logged in' });
+      if (!allowAct()) return reply(ack, { ok: false, error: 'Slow down a little' });
+      try {
+        reply(ack, game.summon(playerId, (data as { kind?: unknown })?.kind));
+      } catch (e) {
+        fail(ack, e);
+      }
+    });
+    // Squad orders can come as a drag: the latest one wins, floods are dropped.
+    const allowOrder = limiter(10, 5);
+    socket.on('order', (data: unknown) => {
+      if (playerId === null || !allowOrder()) return;
+      const d = (data ?? {}) as { x?: unknown; y?: unknown };
+      game.order(playerId, d.x, d.y);
     });
 
     socket.on('mode', (data: unknown, ack: unknown) => {

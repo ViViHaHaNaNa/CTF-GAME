@@ -302,6 +302,7 @@
   --map-cmd-kill: #ff5a3c;           /* damage number that killed */
   --map-cmd-marker: #ffffff;         /* hit-marker X on a kill */
   --map-cmd-strike: 255, 60, 40;     /* airstrike warning ring */
+  --map-cmd-squad: 95, 224, 138;     /* your squad member's ring and order flag */
   --map-cmd-fire: 255, 150, 40;      /* airstrike fireball */
   --map-cmd-smoke: 60, 50, 50;
   --map-cmd-flash: #fffbe0;

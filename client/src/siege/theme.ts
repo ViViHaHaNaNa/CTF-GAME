@@ -141,6 +141,7 @@ export const THEME = {
     strike: rgb('--map-cmd-strike'),
     fire: rgb('--map-cmd-fire'),
     smoke: rgb('--map-cmd-smoke'),
+    squad: rgb('--map-cmd-squad'),
     flash: css('--map-cmd-flash'),
   },
   deploy: { fill: rgb('--map-deploy'), edge: css('--map-deploy-edge') },

@@ -84,6 +84,9 @@ export interface Unit {
   progAt: number;
   /** Already sent straight back to its base once by the stuck check. */
   rerouted: boolean;
+  /** Walks at `slow` x speed until this tick (a molotov fire). */
+  slowUntil: number;
+  slow: number;
 }
 
 export interface StepResult {
@@ -252,6 +255,8 @@ export class Combat {
     u.best = Infinity;
     u.progAt = this.tick + riseTicks;
     u.rerouted = false;
+    u.slowUntil = 0;
+    u.slow = 1;
     this.units.push(u);
     this.alive++;
     return u;
@@ -543,7 +548,7 @@ export class Combat {
       const tx = target.x + target.w / 2;
       const ty = target.y + target.h / 2;
       const d = Math.hypot(tx - u.x, ty - u.y) || 1;
-      const step = u.stats.speed * dt;
+      const step = u.stats.speed * (this.tick < u.slowUntil ? u.slow : 1) * dt;
       const nx = u.x + ((tx - u.x) / d) * step;
       const ny = u.y + ((ty - u.y) / d) * step;
       if (Math.abs(tx - u.x) > 0.05) u.facing = tx > u.x ? 1 : -1;

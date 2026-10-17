@@ -1,4 +1,5 @@
-import { CONFIG, RAIDER_KINDS, UNIT_KINDS, type RaiderKind } from './config.ts';
+import { CONFIG, UNIT_KINDS, type RaiderKind } from './config.ts';
+import { raiderStats, raiderUnlocked } from './powers.ts';
 import { Combat, type UnitStats } from './engine.ts';
 import { inDeployZone } from './layout.ts';
 import { VAULT_ID, baseBuildings } from './pve.ts';
@@ -7,26 +8,6 @@ import type { BaseState, RaidEndReason } from './types.ts';
 // PvP raids, Clash-of-Clans style, on the same combat engine as the zombie waves.
 // The defender's posts fight automatically; the attacker deploys raiders on the apron outside the walls.
 
-export function raiderStats(kind: RaiderKind, attackerHq: number, attackBoost = 0): UnitStats {
-  const r = CONFIG.pvp.raiders[kind];
-  const k = CONFIG.pvp.troopScale(attackerHq);
-  const pace = CONFIG.pace;
-  return { hp: Math.round(r.hp * k), speed: r.speed * pace.raiderSpeed, damage: Math.round(r.damage * k * (1 + attackBoost)), cooldown: r.cooldown * pace.raiderCooldown, range: r.range, wallMult: r.wallMult, target: 'nearest' };
-}
-
-/** What a raider costs an attacker at Main Tower level `hq`. */
-export function raiderCost(kind: RaiderKind, hq: number): number {
-  const s = CONFIG.pvp.costScale;
-  return Math.round(CONFIG.pvp.raiders[kind].cost * s[Math.min(s.length, Math.max(1, hq)) - 1]!);
-}
-
-export function raiderUnlocked(kind: RaiderKind, hq: number): boolean {
-  return hq >= CONFIG.pvp.raiders[kind].unlockHq;
-}
-
-export function isRaiderKind(k: unknown): k is RaiderKind {
-  return typeof k === 'string' && (RAIDER_KINDS as readonly string[]).includes(k);
-}
 
 /** Stars for a raid: 1 for destroying CONFIG.pvp.stars.destruction of what counts, 1 for the Main Tower, 1 for everything. */
 export function raidStars(destruction: number, hqDown: boolean): number {

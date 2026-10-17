@@ -1,4 +1,4 @@
-import { decodeSnapshot, type RaidResult, type RaidStatus } from '@siege/shared';
+import { CONFIG, decodeSnapshot, type RaidResult, type RaidStatus } from '@siege/shared';
 import type { Socket } from 'socket.io-client';
 import type { LiveState, WorldView } from './world.ts';
 
@@ -16,7 +16,7 @@ export interface BaseLive {
 
 export interface SiegeMessage {
   p: number;
-  type: 'surge' | 'held' | 'breach' | 'strike' | 'rage';
+  type: 'surge' | 'held' | 'breach' | 'strike' | 'rage' | 'bomb' | 'squad';
   n: number;
   size?: number;
   sides?: number[];
@@ -84,7 +84,7 @@ export function bindLiveStream(socket: Socket, view: WorldView) {
       view.airstrikeLand(m.p, m.x! * 16, m.y! * 16, performance.now());
       return;
     }
-    if (m.type === 'rage') return;
+    if (m.type === 'rage' || m.type === 'bomb' || m.type === 'squad') return;
     l.siege = { n: m.n, phase: m.type === 'surge' ? 'surge' : 'breather' };
   });
   // The Commander's shots: your own are drawn the moment you tap (prediction); everyone else's on arrival.
@@ -96,6 +96,15 @@ export function bindLiveStream(socket: Socket, view: WorldView) {
   });
   socket.on('airstrike', (m: { p: number; x: number; y: number; delay: number; radius: number }) => {
     if (view.live.has(m.p)) view.airstrikeWarn(m.p, m.x, m.y, m.radius * 16, m.delay * 1000, performance.now());
+  });
+  socket.on('molotov', (m: { p: number; x: number; y: number; radius: number; duration: number }) => {
+    if (view.live.has(m.p)) view.molotov(m.p, m.x, m.y, m.radius * 16, m.duration * 1000, performance.now());
+  });
+  // The carpet bomb: a warning marker on every spot, all landing together.
+  socket.on('ultimate', (m: { p: number; spots: [number, number][]; delay: number }) => {
+    if (!view.live.has(m.p)) return;
+    const now = performance.now();
+    m.spots.forEach(([x, y], i) => view.airstrikeWarn(m.p, x, y, CONFIG.commander.airstrike.radius * 16, m.delay * 1000 + i * 60, now));
   });
   socket.on('raid', (r: RaidStatus) => {
     const l = view.liveFor(r.plot);

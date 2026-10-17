@@ -8,6 +8,7 @@ import {
   RING,
   SLOTS,
   UNIT_KINDS,
+  ALLY_ID,
   VAULT_ID,
   VAULT_RECT,
   WALLS,
@@ -100,6 +101,8 @@ export interface LiveState {
   fx: { kind: number; x: number; y: number; vx: number; vy: number; at: number; img: HTMLCanvasElement | null; w: number }[];
   /** Airstrikes: the warning marker until `land`, then the blast. */
   strikes: { x: number; y: number; r: number; at: number; land: number }[];
+  /** Molotov fires (world px), burning until `until` (local ms). */
+  fires: { x: number; y: number; r: number; at: number; until: number }[];
 }
 
 type ZombieSheets = { walk: keyof Sprites; attack: keyof Sprites; death: keyof Sprites };
@@ -470,7 +473,7 @@ export class WorldView {
   liveFor(plot: number): LiveState {
     let l = this.live.get(plot);
     if (!l) {
-      l = { phase: 'calm', siege: null, units: new Map(), hp: new Map(), tracers: [], puffs: [], cracks: [], manholes: new Map(), pops: [], postFacing: new Map(), lastShot: new Map(), lastSnapAt: 0, raid: null, cmd: { face: 'down', shotAt: -1e9 }, shots: [], fx: [], strikes: [] };
+      l = { phase: 'calm', siege: null, units: new Map(), hp: new Map(), tracers: [], puffs: [], cracks: [], manholes: new Map(), pops: [], postFacing: new Map(), lastShot: new Map(), lastSnapAt: 0, raid: null, cmd: { face: 'down', shotAt: -1e9 }, shots: [], fx: [], strikes: [], fires: [] };
       this.live.set(plot, l);
     }
     return l;
@@ -692,6 +695,20 @@ export class WorldView {
     this.liveFor(plot).strikes.push({ x, y, r, at: now, land: now + delayMs });
   }
 
+  /** A molotov burst into flames at (x, y) world px. */
+  molotov(plot: number, x: number, y: number, r: number, ms: number, now: number) {
+    this.liveFor(plot).fires.push({ x, y, r, at: now, until: now + ms });
+  }
+
+  /** Your squad member's unit (if out) on a plot, world px. */
+  squadAt(plot: number): { x: number; y: number } | null {
+    const u = this.live.get(plot)?.units.get(ALLY_ID);
+    return u && u.state < 2 ? { x: u.x, y: u.y } : null;
+  }
+
+  /** Where you last sent your squad member (world px), shown as a flag for a moment. */
+  squadFlag: { plot: number; x: number; y: number; at: number } | null = null;
+
   /** The strike landed (server): blast now, even if the warning drifted. */
   airstrikeLand(plot: number, x: number, y: number, now: number) {
     const l = this.liveFor(plot);
@@ -777,6 +794,51 @@ export class WorldView {
         }
       }
       l.fx.length = keep;
+    }
+    if (l.fires.length) {
+      let keep = 0;
+      for (const f of l.fires) {
+        if (now > f.until) continue;
+        l.fires[keep++] = f;
+        // Scorched ground, then flickering pixel flames that die down at the end.
+        const fade = Math.min(1, (f.until - now) / 600, (now - f.at) / 150);
+        g.globalAlpha = 0.35 * fade;
+        g.fillStyle = `rgb(${THEME.cmd.smoke.join(', ')})`;
+        g.beginPath();
+        g.ellipse(f.x, f.y, f.r, f.r * 0.6, 0, 0, Math.PI * 2);
+        g.fill();
+        g.globalAlpha = fade;
+        for (let i = 0; i < 26; i++) {
+          const a = hash(i, f.x, 7) * Math.PI * 2;
+          const d = Math.sqrt(hash(i, f.y, 8)) * f.r * 0.9;
+          const x = Math.round(f.x + Math.cos(a) * d);
+          const y = Math.round(f.y + Math.sin(a) * d * 0.6);
+          const h = 3 + Math.round(4 * (0.5 + 0.5 * Math.sin(now / 90 + i * 1.7)));
+          g.fillStyle = `rgb(${THEME.cmd.strike.join(', ')})`;
+          g.fillRect(x - 1, y - h, 3, h);
+          g.fillStyle = `rgb(${THEME.cmd.fire.join(', ')})`;
+          g.fillRect(x, y - h + 1, 1, h - 2);
+        }
+        g.globalAlpha = 1;
+      }
+      l.fires.length = keep;
+    }
+    // Your squad member: a ring at their feet, and a flag where you sent them.
+    const ally = l.units.get(ALLY_ID);
+    if (ally && ally.state < 2) {
+      g.strokeStyle = `rgb(${THEME.cmd.squad.join(', ')})`;
+      g.lineWidth = 1;
+      g.beginPath();
+      g.ellipse(ally.x, ally.y, 7, 3.5, 0, 0, Math.PI * 2);
+      g.stroke();
+    }
+    const flag = this.squadFlag;
+    if (flag && l === this.live.get(flag.plot) && now - flag.at < 1500) {
+      g.globalAlpha = 1 - (now - flag.at) / 1500;
+      g.fillStyle = `rgb(${THEME.cmd.squad.join(', ')})`;
+      g.fillRect(Math.round(flag.x), Math.round(flag.y) - 10, 1, 10);
+      g.fillRect(Math.round(flag.x) + 1, Math.round(flag.y) - 10, 5, 3);
+      g.globalAlpha = 1;
     }
     if (l.strikes.length) {
       let keep = 0;
@@ -1593,7 +1655,8 @@ export class WorldView {
       return;
     }
     const frame = Math.floor(now / (u.state === 0 ? 100 / CONFIG.pace.raiderSpeed : 100) + u.id) % 6;
-    const img = this.survivor(look.weapon, look.helmet, frame, u.state === 0, THEME.raiderTint);
+    // Raiders are tinted red; your squad member (same roster) keeps their own colours.
+    const img = this.survivor(look.weapon, look.helmet, frame, u.state === 0, u.id === ALLY_ID ? null : THEME.raiderTint);
     const ox = Math.round(x - 14);
     const oy = Math.round(y - 19);
     if (u.facing < 0) {

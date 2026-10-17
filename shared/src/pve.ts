@@ -1,7 +1,8 @@
-import { COMMANDER_WEAPONS, CONFIG, UNIT_KINDS, postStats, type ZombieKind } from './config.ts';
+import { CONFIG, UNIT_KINDS, postStats, type RaiderKind, type ZombieKind } from './config.ts';
 import { Combat, mulberry32, type BuildingDef, type StepResult, type Unit, type UnitStats } from './engine.ts';
 import { HQ_RECT, PLOT, SLOTS, VAULT_RECT, WALLS } from './layout.ts';
-import type { BaseState } from './types.ts';
+import type { BaseState, Snapshot } from './types.ts';
+import { abilityUnlocked, commanderWeapon, raiderUnlocked, squadStats } from './powers.ts';
 import { basicBaseDone } from './economy.ts';
 import { getWorld, sideTile, type WorldPlot } from './world.ts';
 
@@ -128,7 +129,14 @@ export type SiegeEvent =
   /** The surge ran long: the rest are enraged. */
   | { type: 'rage'; n: number }
   /** An airstrike landed. */
-  | { type: 'strike'; x: number; y: number; kills: number; coins: number };
+  | { type: 'strike'; x: number; y: number; kills: number; coins: number }
+  /** The ultimate (carpet bomb) landed. */
+  | { type: 'bomb'; kills: number; coins: number }
+  /** The squad member went down. */
+  | { type: 'squad'; n: number; down: true };
+
+/** The squad member's unit id in snapshots (clear of zombie ids and building ids). */
+export const ALLY_ID = 65500;
 
 // ---- the Commander (tap-to-attack) -----------------------------------------------------------------------
 
@@ -163,11 +171,7 @@ export function postDps(base: BaseState, defenceBoost = 0): number {
 /** Most tap damage per second this base allows (a share of its posts' DPS, with a floor; attack boosts lift it). */
 export function tapDpsCap(base: BaseState, defenceBoost = 0, attackBoost = 0): number {
   const c = CONFIG.commander.dpsCap;
-  return Math.max(c.floor, c.share * postDps(base, defenceBoost)) * (1 + attackBoost);
-}
-
-export function commanderWeapon(base: BaseState) {
-  return CONFIG.commander.weapons[COMMANDER_WEAPONS[base.cmd ?? 0] ?? 'pistol'];
+  return Math.max(c.floor, c.share * postDps(base, defenceBoost)) * (1 + attackBoost) * commanderWeapon(base).capMult;
 }
 
 /** A resolved tap: every screen watching the base draws it. */
@@ -198,6 +202,26 @@ export interface TapRefused {
 }
 
 export type AirstrikeResult = { ok: true; x: number; y: number; delay: number; ready: number } | { ok: false; error: string; ready: number };
+/** A power used (molotov, ultimate, summon): ok with its cooldown, or why not. */
+export type PowerResult = { ok: true; ready: number; delay?: number } | { ok: false; error: string; ready: number };
+
+/** The squad member (fights outside the engine: zombies don't target them, posts don't shoot them). */
+interface Ally {
+  kind: RaiderKind;
+  x: number;
+  y: number;
+  hp: number;
+  maxHp: number;
+  stats: UnitStats;
+  /** Where they were sent (world tiles). */
+  tx: number;
+  ty: number;
+  cd: number;
+  state: 'move' | 'attack' | 'dead';
+  facing: 1 | -1;
+  diedAt: number;
+  shots: [number, number, number][];
+}
 
 export interface SiegeOptions {
   /** Extra post damage/health from a crate boost (0.25 = +25%). */
@@ -271,8 +295,13 @@ export class Siege {
   private readonly hqX: number;
   private readonly hqY: number;
   /** The Commander's gun: rounds, reload, fire-rate gate, damage budget, combo, airstrike cooldown (ticks). */
-  private gun = { weapon: -1, mag: 0, reloadUntil: 0, nextShot: 0, budget: 0, budgetAt: -1, combo: 0, comboAt: 0, airReady: 0 };
+  private gun = { weapon: -1, mag: 0, reloadUntil: 0, nextShot: 0, budget: 0, budgetAt: -1, combo: 0, comboAt: 0, airReady: 0, molReady: 0, ultReady: 0, allyReady: 0 };
   private strikes: { x: number; y: number; at: number }[] = [];
+  /** Molotov fires: burning until `until`, next burn tick at `next`. */
+  private fires: { x: number; y: number; until: number; next: number }[] = [];
+  /** Tick the carpet bomb lands (-1 = none coming). */
+  private bombAt = -1;
+  ally: Ally | null = null;
 
   constructor(base: BaseState, readonly plot: WorldPlot, seed: number, readonly director: DirectorState, opts: SiegeOptions = {}) {
     this.base = base;
@@ -320,8 +349,10 @@ export class Siege {
   private gunReady() {
     const g = this.gun;
     const w = commanderWeapon(this.base);
-    if (g.weapon !== (this.base.cmd ?? 0)) {
-      g.weapon = this.base.cmd ?? 0;
+    // A new weapon or an upgrade: a fresh magazine.
+    const key = (this.base.cmd ?? 0) * 10 + w.level;
+    if (g.weapon !== key) {
+      g.weapon = key;
       g.mag = w.magazine;
       g.reloadUntil = 0;
     }
@@ -332,12 +363,14 @@ export class Siege {
   }
 
   /** Rounds left and reload seconds left, for the ammo bar. */
-  ammo(): { mag: number; reload: number; weapon: number; airIn: number; combo: number } {
+  ammo(): { mag: number; reload: number; weapon: number; airIn: number; molIn: number; ultIn: number; squadIn: number; ally: number; combo: number } {
     this.gunReady();
     const g = this.gun;
     const t = this.combat.tick;
     const combo = t - g.comboAt > this.ticks(CONFIG.commander.combo.timeout) ? 0 : g.combo;
-    return { mag: g.mag, reload: g.reloadUntil ? (g.reloadUntil - t) / this.combat.rate : 0, weapon: g.weapon, airIn: Math.max(0, (g.airReady - t) / this.combat.rate), combo };
+    const left = (at: number) => Math.max(0, (at - t) / this.combat.rate);
+    const a = this.ally;
+    return { mag: g.mag, reload: g.reloadUntil ? (g.reloadUntil - t) / this.combat.rate : 0, weapon: this.base.cmd ?? 0, airIn: left(g.airReady), molIn: left(g.molReady), ultIn: left(g.ultReady), squadIn: left(g.allyReady), ally: a && a.state !== 'dead' ? Math.max(1, Math.round((100 * a.hp) / a.maxHp)) : 0, combo };
   }
 
   /** Start a reload now (an "R" press or a tap on the ammo bar), unless the magazine is full. */
@@ -416,7 +449,7 @@ export class Siege {
     const base = this.account(kills);
     const bonus = kills.length ? base * (mult - 1) : 0;
     this.coins += bonus;
-    return { ok: true, x: tx, y: ty, hits, kills: kills.length, coins: base + bonus, bonus, combo: g.combo, mult, mag: g.mag, reload: g.reloadUntil ? (g.reloadUntil - t) / c.rate : 0, weapon: g.weapon };
+    return { ok: true, x: tx, y: ty, hits, kills: kills.length, coins: base + bonus, bonus, combo: g.combo, mult, mag: g.mag, reload: g.reloadUntil ? (g.reloadUntil - t) / c.rate : 0, weapon: this.base.cmd ?? 0 };
   }
 
   /** A shot at empty ground flies from the Commander toward the point: the first zombie close to that path takes it. */
@@ -444,7 +477,8 @@ export class Siege {
     const A = CONFIG.commander.airstrike;
     const t = this.combat.tick;
     const g = this.gun;
-    if (t < g.airReady) return { ok: false, error: 'Airstrike not ready', ready: (g.airReady - t) / this.combat.rate };
+    if (!abilityUnlocked(this.base.hq, 'airstrike')) return { ok: false, error: `Airstrike unlocks at Main Tower level ${A.unlockHq}`, ready: 0 };
+    if (t < g.airReady) return { ok: false, error: `Airstrike ready in ${Math.ceil((g.airReady - t) / this.combat.rate)}s`, ready: (g.airReady - t) / this.combat.rate };
     g.airReady = t + this.ticks(A.cooldown);
     this.strikes.push({ x, y, at: t + this.ticks(A.delay) });
     return { ok: true, x, y, delay: A.delay, ready: A.cooldown };
@@ -467,6 +501,175 @@ export class Siege {
       return false;
     });
     return earned;
+  }
+
+  /** Throw a molotov at a spot (world tiles): it burns there for a while, hurting and slowing zombies. */
+  molotov(x: number, y: number): PowerResult {
+    const M = CONFIG.commander.molotov;
+    const t = this.combat.tick;
+    const g = this.gun;
+    if (!abilityUnlocked(this.base.hq, 'molotov')) return { ok: false, error: `Molotov unlocks at Main Tower level ${M.unlockHq}`, ready: 0 };
+    if (t < g.molReady) return { ok: false, error: `Molotov ready in ${Math.ceil((g.molReady - t) / this.combat.rate)}s`, ready: (g.molReady - t) / this.combat.rate };
+    g.molReady = t + this.ticks(M.cooldown);
+    this.fires.push({ x, y, until: t + this.ticks(M.duration), next: t });
+    return { ok: true, ready: M.cooldown };
+  }
+
+  /** Burning fires: every half second, damage and a slow to everything in them. */
+  private burnFires(): number {
+    if (!this.fires.length) return 0;
+    const M = CONFIG.commander.molotov;
+    const c = this.combat;
+    const every = this.ticks(0.5);
+    let earned = 0;
+    this.fires = this.fires.filter((f) => {
+      if (c.tick >= f.until) return false;
+      if (c.tick < f.next) return true;
+      f.next = c.tick + every;
+      const kills: StepResult['kills'] = [];
+      const dmg = Math.max(1, Math.round(M.dps * 0.5 * this.toughness));
+      for (const u of c.unitsNear(f.x, f.y, M.radius)) {
+        u.slowUntil = c.tick + every + 2;
+        u.slow = M.slow;
+        c.strike(u, dmg, kills);
+      }
+      earned += this.account(kills);
+      return true;
+    });
+    return earned;
+  }
+
+  /** The ultimate: a carpet bomb on everything around the base, after a short warning. */
+  ultimate(): PowerResult {
+    const U = CONFIG.commander.ultimate;
+    const t = this.combat.tick;
+    const g = this.gun;
+    if (!abilityUnlocked(this.base.hq, 'ultimate')) return { ok: false, error: `Carpet bomb unlocks at Main Tower level ${U.unlockHq}`, ready: 0 };
+    if (t < g.ultReady) return { ok: false, error: `Carpet bomb ready in ${Math.ceil((g.ultReady - t) / this.combat.rate)}s`, ready: (g.ultReady - t) / this.combat.rate };
+    g.ultReady = t + this.ticks(U.cooldown);
+    this.bombAt = t + this.ticks(U.delay);
+    return { ok: true, ready: U.cooldown, delay: U.delay };
+  }
+
+  /** Where the carpet bomb's blasts are drawn (world tiles): rings over the yard and the streets around it. */
+  bombSpots(): [number, number][] {
+    const cx = this.plot.x + PLOT / 2;
+    const cy = this.plot.y + PLOT / 2;
+    const out: [number, number][] = [[cx, cy]];
+    for (const [r, n] of [[PLOT * 0.3, 6], [PLOT * 0.62, 10]] as const) {
+      for (let i = 0; i < n; i++) out.push([cx + Math.cos((i / n) * Math.PI * 2) * r, cy + Math.sin((i / n) * Math.PI * 2) * r]);
+    }
+    return out;
+  }
+
+  private landBomb(): number {
+    if (this.bombAt < 0 || this.combat.tick < this.bombAt) return 0;
+    this.bombAt = -1;
+    const U = CONFIG.commander.ultimate;
+    const kills: StepResult['kills'] = [];
+    const dmg = Math.round(U.damage * this.toughness);
+    const r = (PLOT / 2) * Math.SQRT2 + CONFIG.commander.reach;
+    for (const u of this.combat.unitsNear(this.plot.x + PLOT / 2, this.plot.y + PLOT / 2, r)) this.combat.strike(u, dmg, kills);
+    const coins = this.account(kills);
+    this.events.push({ type: 'bomb', kills: kills.length, coins });
+    return coins;
+  }
+
+  /** Summon the squad member (a raider kind your Main Tower has unlocked) by the Main Tower. */
+  summon(kind: RaiderKind): PowerResult {
+    const Q = CONFIG.commander.squad;
+    const t = this.combat.tick;
+    const g = this.gun;
+    const hq = this.base.hq;
+    if (!abilityUnlocked(hq, 'squad')) return { ok: false, error: `Squad member unlocks at Main Tower level ${Q.unlockHq}`, ready: 0 };
+    if (!raiderUnlocked(kind, hq)) return { ok: false, error: `Needs Main Tower level ${CONFIG.pvp.raiders[kind].unlockHq}`, ready: 0 };
+    if (this.ally && this.ally.state !== 'dead') return { ok: false, error: 'Your squad member is already out', ready: 0 };
+    if (t < g.allyReady) return { ok: false, error: `Squad member back in ${Math.ceil((g.allyReady - t) / this.combat.rate)}s`, ready: (g.allyReady - t) / this.combat.rate };
+    const stats = squadStats(kind, hq);
+    const [x, y] = commanderSpot(this.plot);
+    const hp = this.allyHp(stats);
+    this.ally = { kind, x: x - 1, y, hp, maxHp: hp, stats, tx: x - 1, ty: y, cd: 0, state: 'move', facing: 1, diedAt: 0, shots: [] };
+    return { ok: true, ready: 0 };
+  }
+
+  /** Squad health keeps up with the surges: x their toughness, like the zombies' damage. */
+  private allyHp(stats: UnitStats): number {
+    return Math.round(stats.hp * Math.max(1, this.toughness));
+  }
+
+  /** Send the squad member to a spot (world tiles, kept within tap reach of the base). */
+  order(x: number, y: number): boolean {
+    const a = this.ally;
+    if (!a || a.state === 'dead' || !Number.isFinite(x) || !Number.isFinite(y)) return false;
+    const r = CONFIG.commander.reach;
+    a.tx = Math.max(this.plot.x - r + 0.5, Math.min(this.plot.x + PLOT + r - 0.5, x));
+    a.ty = Math.max(this.plot.y - r + 0.5, Math.min(this.plot.y + PLOT + r - 0.5, y));
+    return true;
+  }
+
+  /** The squad member's tick: fight a zombie in reach, else go for one near where they were sent, else walk there. */
+  private stepAlly(): number {
+    const a = this.ally;
+    if (!a) return 0;
+    const c = this.combat;
+    if (a.state === 'dead') {
+      if (c.tick - a.diedAt > 12) this.ally = null;
+      return 0;
+    }
+    const Q = CONFIG.commander.squad;
+    const dt = 1 / c.rate;
+    let earned = 0;
+    a.cd = Math.max(0, a.cd - dt);
+    const target = c.unitsNear(a.x, a.y, a.stats.range + 0.3)[0];
+    if (target) {
+      a.state = 'attack';
+      if (Math.abs(target.x - a.x) > 0.05) a.facing = target.x > a.x ? 1 : -1;
+      if (a.cd === 0) {
+        a.cd = a.stats.cooldown;
+        const kills: StepResult['kills'] = [];
+        c.strike(target, a.stats.damage, kills);
+        earned += this.account(kills);
+        if (a.stats.range > 1) a.shots.push([ALLY_ID, Math.round(target.x * 16), Math.round(target.y * 16)]);
+      }
+    } else {
+      const chase = c.unitsNear(a.tx, a.ty, Q.aggro)[0];
+      const gx = chase ? chase.x : a.tx;
+      const gy = chase ? chase.y : a.ty;
+      const d = Math.hypot(gx - a.x, gy - a.y);
+      if (d > 0.1) {
+        const step = Math.min(d, a.stats.speed * dt);
+        a.x += ((gx - a.x) / d) * step;
+        a.y += ((gy - a.y) / d) * step;
+        if (Math.abs(gx - a.x) > 0.05) a.facing = gx > a.x ? 1 : -1;
+      }
+      a.state = 'move';
+    }
+    // Zombies on top of them claw at them.
+    let dps = 0;
+    for (const z of c.unitsNear(a.x, a.y, Q.contact)) dps += z.stats.damage / z.stats.cooldown;
+    a.hp -= dps * dt;
+    if (a.hp <= 0) {
+      a.hp = 0;
+      a.state = 'dead';
+      a.diedAt = c.tick;
+      this.gun.allyReady = c.tick + this.ticks(Q.cooldown);
+      this.events.push({ type: 'squad', n: this.n, down: true });
+    }
+    return earned;
+  }
+
+  /** The engine's snapshot plus the squad member (as a raider-kind unit) and their shots. */
+  snapshot(full = false): Snapshot {
+    const s = this.combat.snapshot(full);
+    const a = this.ally;
+    if (a) {
+      s.u.push([ALLY_ID, UNIT_KINDS.indexOf(a.kind), Math.round(a.x * 16), Math.round(a.y * 16), Math.round((100 * a.hp) / a.maxHp), a.state === 'dead' ? 2 : a.state === 'attack' ? 1 : 0, a.facing]);
+      if (!full && a.shots.length) {
+        s.s.push(...a.shots);
+        a.shots.length = 0;
+      }
+    }
+    return s;
   }
 
   /** The base changed (an upgrade, a new post): it joins the fight right away. */
@@ -522,10 +725,10 @@ export class Siege {
       this.surgeAlive++;
     }
 
-    let earned = this.landStrikes() + this.held;
+    let earned = this.landStrikes() + this.landBomb() + this.burnFires() + this.held;
     this.held = 0;
     const r = c.step();
-    earned += this.account(r.kills);
+    earned += this.account(r.kills) + this.stepAlly();
 
     if (c.hqDestroyed) {
       this.breach();
@@ -753,6 +956,8 @@ export class Siege {
     this.qi = 0;
     this.assigned = 0;
     c.repair(S.repair);
+    // The squad member patches up between surges.
+    if (this.ally && this.ally.state !== 'dead') this.ally.hp = this.ally.maxHp = this.allyHp(this.ally.stats);
     const hq = c.hq;
     if (hq) hq.floor = undefined;
     this.tutorial = false;

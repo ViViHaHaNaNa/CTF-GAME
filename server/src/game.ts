@@ -393,7 +393,7 @@ export class GameServer {
     }
     const s = this.live.get(plot)?.siege;
     if (!s) return { p: plot, phase: 'calm' };
-    return { p: plot, phase: 'wave', siege: s.info(), snapshot: encodeSnapshot(plot, s.combat.snapshot(true)) };
+    return { p: plot, phase: 'wave', siege: s.info(), snapshot: encodeSnapshot(plot, s.snapshot(true)) };
   }
 
   // ---- actions ----------------------------------------------------------------------------------
@@ -546,9 +546,50 @@ export class GameServer {
     const plot = getWorld().plots[own.p.plot]!;
     if (!Number.isFinite(x) || !Number.isFinite(y) || !inTapReach(plot, x, y)) throw new GameError('out_of_reach', 'Call it on your own base');
     const r = own.siege.airstrike(x, y);
-    if (!r.ok) throw new GameError('cooldown', `Airstrike ready in ${Math.ceil(r.ready)}s`);
+    if (!r.ok) throw new GameError('cooldown', r.error);
     this.out.toBase(plot.id, 'airstrike', { p: plot.id, x: Math.round(x * 16), y: Math.round(y * 16), delay: r.delay, radius: CONFIG.commander.airstrike.radius });
     return { ok: true, ready: r.ready };
+  }
+
+  /** Throw a molotov on your own base's siege: a fire that burns and slows zombies. */
+  molotov(id: number, rawX: unknown, rawY: unknown): { ok: true; ready: number } {
+    const own = this.ownSiege(id);
+    if (!own) throw new GameError('no_siege', 'No zombies to burn right now');
+    const x = Number(rawX);
+    const y = Number(rawY);
+    const plot = getWorld().plots[own.p.plot]!;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !inTapReach(plot, x, y)) throw new GameError('out_of_reach', 'Throw it on your own base');
+    const r = own.siege.molotov(x, y);
+    if (!r.ok) throw new GameError('cooldown', r.error);
+    const M = CONFIG.commander.molotov;
+    this.out.toBase(plot.id, 'molotov', { p: plot.id, x: Math.round(x * 16), y: Math.round(y * 16), radius: M.radius, duration: M.duration });
+    return { ok: true, ready: r.ready };
+  }
+
+  /** The ultimate: a carpet bomb over your whole base. */
+  ultimate(id: number): { ok: true; ready: number } {
+    const own = this.ownSiege(id);
+    if (!own) throw new GameError('no_siege', 'No zombies to bomb right now');
+    const r = own.siege.ultimate();
+    if (!r.ok) throw new GameError('cooldown', r.error);
+    const plot = own.p.plot;
+    this.out.toBase(plot, 'ultimate', { p: plot, spots: own.siege.bombSpots().map(([x, y]) => [Math.round(x * 16), Math.round(y * 16)]), delay: r.delay ?? 0 });
+    return { ok: true, ready: r.ready };
+  }
+
+  /** Summon your squad member (a raider kind your Main Tower has unlocked). */
+  summon(id: number, kind: unknown): { ok: true } {
+    const own = this.ownSiege(id);
+    if (!own) throw new GameError('no_siege', 'Your squad fights zombies: switch to Grind mode');
+    if (!isRaiderKind(kind)) throw new GameError('bad_kind', 'Pick a survivor');
+    const r = own.siege.summon(kind);
+    if (!r.ok) throw new GameError('cooldown', r.error);
+    return { ok: true };
+  }
+
+  /** Send your squad member somewhere around your base. */
+  order(id: number, rawX: unknown, rawY: unknown) {
+    this.ownSiege(id)?.siege.order(Number(rawX), Number(rawY));
   }
 
   /** Start the next surge on your base before the countdown ends, for bonus coins (they fill the vault). */
@@ -702,7 +743,7 @@ export class GameServer {
     this.credit(p, s.step());
     for (const e of s.events) this.siegeEvent(p, plot, e);
     s.events.length = 0;
-    if (s.combat.tick % CONFIG.snapshotEvery === 0) this.out.toBase(plot, 'snap', encodeSnapshot(plot, s.combat.snapshot()));
+    if (s.combat.tick % CONFIG.snapshotEvery === 0) this.out.toBase(plot, 'snap', encodeSnapshot(plot, s.snapshot()));
     // Where the pressure is, for the owner's edge arrow and red vignette (even when the base is off screen).
     if (s.combat.tick % (CONFIG.tickRate / 2) === 0 && this.isOnline(p.id)) {
       this.out.toPlayer(p.id, 'pressure', { p: plot, sides: s.pressure(), hq: Math.round(100 * s.hqShare()), ...s.info(), ammo: s.ammo() });

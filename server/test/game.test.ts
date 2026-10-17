@@ -210,7 +210,11 @@ describe('commander taps', () => {
     expect(sent.filter((s) => s.ev === 'tap' && s.to === `base:${p.plot}`).length).toBe(hitsBefore);
     expect(sent.find((s) => s.ev === 'tap' && s.to === `p:${q.id}`)?.data).toMatchObject({ ok: false, error: 'no siege' });
     expect(sent.filter((s) => s.ev === 'tap' && s.to === `p:${p.id}`).at(-1)?.data).toMatchObject({ ok: false, error: 'out of reach' });
-    // Airstrike: once, then its cooldown.
+    // Airstrike: locked until Main Tower 3, then once, then its cooldown.
+    expect(() => game.airstrike(p.id, plot.x + 7, plot.y + 1)).toThrow(/Main Tower level 3/);
+    game.players.get(p.id)!.coins = 5000;
+    game.act(p.id, { kind: 'hq' });
+    game.act(p.id, { kind: 'hq' });
     expect(game.airstrike(p.id, plot.x + 7, plot.y + 1)).toMatchObject({ ok: true });
     expect(() => game.airstrike(p.id, plot.x + 7, plot.y + 1)).toThrow(/ready in/);
     expect(sent.some((s) => s.ev === 'airstrike' && s.to === `base:${p.plot}`)).toBe(true);
@@ -219,10 +223,14 @@ describe('commander taps', () => {
   it('the Commander weapon is bought with coins once the Main Tower allows it', () => {
     const { game } = setup();
     const p = game.login('Neha', 'R7009');
-    expect(() => game.act(p.id, { kind: 'commander' })).toThrow(/Main Tower level 2/);
+    expect(() => game.act(p.id, { kind: 'commander' })).toThrow(/Main Tower level 3/);
     game.players.get(p.id)!.coins = 5000;
+    // Weapon upgrades: the pistol first, then the gun starts again at Lv 1.
+    expect(game.act(p.id, { kind: 'cmdUp' }).base.cmdLv).toBe(2);
     game.act(p.id, { kind: 'hq' });
-    expect(game.act(p.id, { kind: 'commander' }).base.cmd).toBe(1);
+    game.act(p.id, { kind: 'hq' });
+    const armed = game.act(p.id, { kind: 'commander' }).base;
+    expect(armed).toMatchObject({ cmd: 1, cmdLv: 1 });
     expect(game.worldSummary().find((b) => b.id === p.id)!.cmd).toBe(1);
   });
 });

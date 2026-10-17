@@ -100,6 +100,24 @@ export class Net {
     return this.call<{ ready: number }>('airstrike', { x, y });
   }
 
+  molotov(x: number, y: number) {
+    return this.call<{ ready: number }>('molotov', { x, y });
+  }
+
+  ultimate() {
+    return this.call<{ ready: number }>('ultimate', {});
+  }
+
+  /** Summon the squad member (a raider kind). */
+  summon(kind: string) {
+    return this.call<object>('summon', { kind });
+  }
+
+  /** Send the squad member to a spot (world tiles). */
+  order(x: number, y: number) {
+    this.socket.emit('order', { x, y });
+  }
+
   /** Grind (pve) or Raid (pvp). */
   setMode(mode: 'pve' | 'pvp') {
     return this.call<{ player: PlayerView }>('mode', { mode });

@@ -240,14 +240,39 @@ export const CONFIG = {
     dpsCap: { share: 0.5, floor: 16, burst: 1.5 },
     weapons: {
       pistol: { unlockHq: 1, cost: 0, damage: 7, fireRate: 5, magazine: 12, reload: 1.1, pellets: 1, spread: 0 },
-      gun: { unlockHq: 2, cost: 300, damage: 10, fireRate: 5, magazine: 24, reload: 1.5, pellets: 1, spread: 0 },
+      gun: { unlockHq: 3, cost: 500, damage: 10, fireRate: 5, magazine: 24, reload: 1.5, pellets: 1, spread: 0 },
       /** Pellets: the first hits the target, the rest the zombies nearest it within `spread` tiles. */
-      shotgun: { unlockHq: 3, cost: 700, damage: 8, fireRate: 2.5, magazine: 6, reload: 1.8, pellets: 5, spread: 1.4 },
+      shotgun: { unlockHq: 5, cost: 1500, damage: 8, fireRate: 2.5, magazine: 6, reload: 1.8, pellets: 5, spread: 1.4 },
     } as Record<CommanderWeapon, { unlockHq: number; cost: number; damage: number; fireRate: number; magazine: number; reload: number; pellets: number; spread: number }>,
+    /**
+     * Weapon upgrades: each weapon goes from Lv 1 to `max` (a new weapon starts at Lv 1). Every level past 1
+     * adds `damage` to its damage (and to the tap damage cap), `magazine` to its rounds and takes `reload`
+     * off its reload time. `cost[weapon][i]` = coins for Lv i+1 -> i+2.
+     */
+    weaponLevels: {
+      max: 3,
+      damage: 0.2,
+      magazine: 0.25,
+      reload: 0.1,
+      cost: { pistol: [60, 150], gun: [350, 700], shotgun: [1000, 2000] } as Record<CommanderWeapon, number[]>,
+    },
     /** Kills in a row without a miss: every `step` kills add x1 (up to `max`); tap kills pay coins x the multiplier. Idle `timeout` s resets it. */
     combo: { step: 8, max: 3, timeout: 5 },
-    /** Tap a spot: after `delay` s, `damage` (x zombie hp scale) to everything within `radius` tiles. */
-    airstrike: { cooldown: 25, delay: 1.2, radius: 2.6, damage: 45 },
+    /** Powers unlock with the Main Tower (see shared/powers.ts). Damage is x the surge's toughness. */
+    /** Airstrike: tap a spot; after `delay` s, `damage` to everything within `radius` tiles. */
+    airstrike: { unlockHq: 3, cooldown: 25, delay: 1.2, radius: 2.6, damage: 45 },
+    /** Molotov: tap a spot; it burns for `duration` s: `dps` to everything within `radius`, and they walk at `slow` x speed. */
+    molotov: { unlockHq: 5, cooldown: 30, radius: 2, duration: 6, dps: 12, slow: 0.45 },
+    /**
+     * Squad member: a survivor from the raider roster (the same unlocks as raids) who fights by your base.
+     * Summoned by the Main Tower; the player taps or drags to move them. Raider stats x the attacker's
+     * troop scale, then health x `hpMult` (and x the surge's toughness) and damage x `damageMult`. They go for zombies within `aggro`
+     * tiles of where they were sent; zombies within `contact` tiles hurt them. Down, they can be summoned
+     * again after `cooldown` s; they heal fully between surges.
+     */
+    squad: { unlockHq: 7, cooldown: 25, hpMult: 4, damageMult: 2.5, aggro: 3, contact: 0.7 },
+    /** Ultimate (carpet bomb): after `delay` s, `damage` to every zombie around the base. */
+    ultimate: { unlockHq: 8, cooldown: 120, delay: 2, damage: 150 },
   },
 
   pvp: {

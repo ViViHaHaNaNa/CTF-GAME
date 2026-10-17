@@ -45,6 +45,8 @@ export interface BaseState {
   posts: (PostState | null)[];
   /** Commander weapon: index into COMMANDER_WEAPONS (missing on older saves = 0, the pistol). */
   cmd?: number;
+  /** The weapon's upgrade level (missing = 1; a new weapon starts at 1). */
+  cmdLv?: number;
 }
 
 /** What the client is told about its own player. */

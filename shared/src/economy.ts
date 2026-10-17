@@ -11,7 +11,9 @@ export type BaseAction =
   | { kind: 'build'; slot: number; type: PostType }
   | { kind: 'post'; slot: number }
   /** Arm the Commander with the next weapon. */
-  | { kind: 'commander' };
+  | { kind: 'commander' }
+  /** Upgrade the Commander's current weapon one level. */
+  | { kind: 'cmdUp' };
 
 export interface Quote {
   ok: boolean;
@@ -23,7 +25,7 @@ export interface Quote {
 export function newBase(): BaseState {
   const posts: BaseState['posts'] = SLOTS.map(() => null);
   posts[0] = { type: CONFIG.start.starterPost, level: 1 };
-  return { hq: 1, walls: 1, posts, cmd: 0 };
+  return { hq: 1, walls: 1, posts, cmd: 0, cmdLv: 1 };
 }
 
 /** What an action costs and whether the base allows it (coins are checked separately). */
@@ -54,6 +56,13 @@ export function quote(base: BaseState, a: BaseAction): Quote {
       const w = CONFIG.commander.weapons[next];
       if (base.hq < w.unlockHq) return { ok: false, cost: w.cost, reason: `Needs Main Tower level ${w.unlockHq}` };
       return { ok: true, cost: w.cost };
+    }
+    case 'cmdUp': {
+      const name = COMMANDER_WEAPONS[base.cmd ?? 0] ?? 'pistol';
+      const lv = base.cmdLv ?? 1;
+      const L = CONFIG.commander.weaponLevels;
+      if (lv >= L.max) return { ok: false, cost: 0, reason: 'Weapon is max level' };
+      return { ok: true, cost: L.cost[name][lv - 1]! };
     }
     case 'post': {
       const p = base.posts[a.slot];
@@ -90,7 +99,7 @@ export function vaultCapacity(hq: number): number {
 
 /** The base after an action (call only after `quote(...).ok`). */
 export function applyAction(base: BaseState, a: BaseAction): BaseState {
-  const next: BaseState = { hq: base.hq, walls: base.walls, posts: base.posts.map((p) => (p ? { ...p } : null)), cmd: base.cmd ?? 0 };
+  const next: BaseState = { hq: base.hq, walls: base.walls, posts: base.posts.map((p) => (p ? { ...p } : null)), cmd: base.cmd ?? 0, cmdLv: base.cmdLv ?? 1 };
   switch (a.kind) {
     case 'hq':
       next.hq++;
@@ -106,6 +115,10 @@ export function applyAction(base: BaseState, a: BaseAction): BaseState {
       break;
     case 'commander':
       next.cmd = (next.cmd ?? 0) + 1;
+      next.cmdLv = 1;
+      break;
+    case 'cmdUp':
+      next.cmdLv = (next.cmdLv ?? 1) + 1;
       break;
   }
   return next;
@@ -115,7 +128,7 @@ export function applyAction(base: BaseState, a: BaseAction): BaseState {
 export function parseAction(raw: unknown): BaseAction | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
-  if (r.kind === 'hq' || r.kind === 'walls' || r.kind === 'commander') return { kind: r.kind };
+  if (r.kind === 'hq' || r.kind === 'walls' || r.kind === 'commander' || r.kind === 'cmdUp') return { kind: r.kind };
   if (r.kind === 'build' && typeof r.slot === 'number' && typeof r.type === 'string' && (POST_TYPES as readonly string[]).includes(r.type)) {
     return { kind: 'build', slot: r.slot, type: r.type as PostType };
   }

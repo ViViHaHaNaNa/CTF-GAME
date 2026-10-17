@@ -49,6 +49,12 @@ import {
   matchFactor,
   starBonus,
   vaultCapacity,
+  ALLY_ID,
+  RAIDER_KINDS,
+  commanderWeapon,
+  powersUnlockedAt,
+  squadStats,
+  weaponStats,
 } from '../src/index.ts';
 
 const world = getWorld();
@@ -502,8 +508,9 @@ describe('commander (tap-to-attack)', () => {
 
   it('an airstrike clears a clump after its warning, then needs its cooldown', () => {
     // No posts, so only the airstrike can kill them.
-    const { s, z, wait } = range({ ...newBase(), posts: SLOTS.map(() => null) });
-    const clump = Array.from({ length: 12 }, (_, i) => z(plot.x + 11 + (i % 4) * 0.5, plot.y + 2 + Math.floor(i / 4) * 0.5));
+    expect(range().s.airstrike(plot.x + 11.8, plot.y + 2.5)).toMatchObject({ ok: false, error: expect.stringMatching(/level 3/) });
+    const { s, wait } = range({ ...newBase(), hq: 3, posts: SLOTS.map(() => null) });
+    const clump = Array.from({ length: 12 }, (_, i) => s.combat.addUnit(0, { ...zombieStats('z_small'), speed: 0 }, plot.x + 11 + (i % 4) * 0.5, plot.y + 2 + Math.floor(i / 4) * 0.5));
     expect(s.airstrike(plot.x + 11.8, plot.y + 2.5).ok).toBe(true);
     expect(s.airstrike(plot.x + 11.8, plot.y + 2.5).ok).toBe(false);
     wait(C.airstrike.delay - 0.2);
@@ -513,14 +520,110 @@ describe('commander (tap-to-attack)', () => {
     expect(s.events.some((e) => e.type === 'strike' && e.kills === 12)).toBe(true);
   });
 
+  it('powers unlock with the Main Tower: gun + airstrike at 3, shotgun + molotov at 5, squad at 7, ultimate at 8', () => {
+    const at = (hq: number) => powersUnlockedAt(hq).map((p) => p.id).sort();
+    expect(at(3)).toEqual(['airstrike', 'gun']);
+    expect(at(5)).toEqual(['molotov', 'shotgun']);
+    expect(at(7)).toEqual(['squad']);
+    expect(at(8)).toEqual(['ultimate']);
+    expect([1, 2, 4, 6].flatMap(at)).toEqual([]);
+  });
+
+  it('weapon upgrades: each level hits harder, holds more and reloads faster; a new weapon starts at Lv 1', () => {
+    const L = C.weaponLevels;
+    let b = newBase();
+    expect(quote(b, { kind: 'cmdUp' })).toEqual({ ok: true, cost: L.cost.pistol[0] });
+    b = applyAction(b, { kind: 'cmdUp' });
+    expect(quote(b, { kind: 'cmdUp' })).toEqual({ ok: true, cost: L.cost.pistol[1] });
+    b = applyAction(b, { kind: 'cmdUp' });
+    expect(quote(b, { kind: 'cmdUp' }).ok).toBe(false);
+    const [p1, p3] = [weaponStats('pistol', 1), commanderWeapon(b)];
+    expect(p3.damage).toBeGreaterThan(p1.damage);
+    expect(p3.magazine).toBeGreaterThan(p1.magazine);
+    expect(p3.reload).toBeLessThan(p1.reload);
+    // The tap damage cap grows with the weapon level too.
+    expect(tapDpsCap(b)).toBeGreaterThan(tapDpsCap(newBase()));
+    const gun = applyAction({ ...b, hq: 3 }, { kind: 'commander' });
+    expect(gun).toMatchObject({ cmd: 1, cmdLv: 1 });
+    expect(quote(gun, { kind: 'cmdUp' })).toEqual({ ok: true, cost: L.cost.gun[0] });
+    // The siege fires with the upgraded stats: a full upgraded magazine.
+    const { s } = range(b);
+    expect(s.ammo().mag).toBe(p3.magazine);
+  });
+
+  it('the molotov burns and slows zombies in its fire, from Main Tower 5', () => {
+    const M = C.molotov;
+    expect(range({ ...newBase(), hq: 4 }).s.molotov(plot.x + 12, plot.y + 3)).toMatchObject({ ok: false, error: expect.stringMatching(/level 5/) });
+    const { s, wait } = range({ ...newBase(), hq: 5, posts: SLOTS.map(() => null) });
+    const big = s.combat.addUnit(UNIT_KINDS.indexOf('z_big'), { ...zombieStats('z_big'), hp: 100000 }, plot.x + 12, plot.y + 3);
+    const out = s.combat.addUnit(UNIT_KINDS.indexOf('z_big'), { ...zombieStats('z_big'), hp: 100000 }, plot.x - 4, plot.y + 3);
+    expect(s.molotov(plot.x + 12, plot.y + 3).ok).toBe(true);
+    expect(s.molotov(plot.x + 12, plot.y + 3).ok).toBe(false);
+    wait(1);
+    expect(big.hp).toBeLessThan(big.maxHp);
+    expect(big.slowUntil).toBeGreaterThan(s.combat.tick);
+    expect(big.slow).toBe(M.slow);
+    expect(out.hp).toBe(out.maxHp);
+    // It burns out after its duration.
+    wait(M.duration);
+    const hp = big.hp;
+    wait(1);
+    expect(big.hp).toBe(hp);
+  });
+
+  it('the ultimate bombs every zombie around the base after its warning, from Main Tower 8', () => {
+    const U = C.ultimate;
+    expect(range({ ...newBase(), hq: 7 }).s.ultimate()).toMatchObject({ ok: false, error: expect.stringMatching(/level 8/) });
+    const { s, wait } = range({ ...newBase(), hq: 8, posts: SLOTS.map(() => null) });
+    const all = [[-3, 7], [7, 7], [PLOT + 3, 2], [4, -2], [PLOT - 1, PLOT + 2]].map(([dx, dy]) => s.combat.addUnit(0, { ...zombieStats('z_small'), speed: 0 }, plot.x + dx!, plot.y + dy!));
+    expect(s.ultimate().ok).toBe(true);
+    expect(s.ultimate().ok).toBe(false);
+    wait(U.delay - 0.2);
+    expect(all.every((u) => u.state !== 'dead')).toBe(true);
+    wait(0.4);
+    expect(all.every((u) => u.state === 'dead')).toBe(true);
+    expect(s.events.some((e) => e.type === 'bomb' && e.kills === all.length)).toBe(true);
+    expect(s.bombSpots().length).toBeGreaterThan(5);
+  });
+
+  it('the squad member: a raider from your roster that you send around, fights zombies and can go down', () => {
+    const Q = C.squad;
+    expect(range({ ...newBase(), hq: 6 }).s.summon('r_bat')).toMatchObject({ ok: false, error: expect.stringMatching(/level 7/) });
+    const { s, wait } = range({ ...newBase(), hq: 7, posts: SLOTS.map(() => null) });
+    expect(s.summon('r_shotgun').ok).toBe(true);
+    expect(s.summon('r_bat')).toMatchObject({ ok: false, error: expect.stringMatching(/already/) });
+    // Same roster, same unlocks as raids: the stats are the raider's, made sturdier.
+    expect(squadStats('r_shotgun', 7).damage).toBeGreaterThan(Math.round(CONFIG.pvp.raiders.r_shotgun.damage * CONFIG.pvp.troopScale(7)));
+    // Shows up in snapshots as that raider kind, under its own id; never counted as a zombie.
+    const snap = s.snapshot(true);
+    expect(snap.u.find((u) => u[0] === ALLY_ID)?.[1]).toBe(UNIT_KINDS.indexOf('r_shotgun'));
+    expect(s.combat.liveUnits).toBe(0);
+    // Sent somewhere, they walk there...
+    s.order(plot.x + 3, plot.y + 3);
+    wait(8);
+    expect(Math.hypot(s.ally!.x - (plot.x + 3), s.ally!.y - (plot.y + 3))).toBeLessThan(0.3);
+    // ...and fight zombies near them.
+    const z = s.combat.addUnit(0, { ...zombieStats('z_small'), speed: 0 }, plot.x + 4.5, plot.y + 3);
+    wait(2);
+    expect(z.state).toBe('dead');
+    // A mob on top of them takes them down; then a cooldown before the next summon.
+    for (let i = 0; i < 30; i++) s.combat.addUnit(0, { ...zombieStats('z_small'), hp: 1e6, speed: 0 }, s.ally!.x + (i % 3) * 0.05, s.ally!.y);
+    for (let t = 0; t < 60 * rate && !s.events.some((e) => e.type === 'squad'); t++) s.step();
+    expect(s.events.some((e) => e.type === 'squad')).toBe(true);
+    expect(s.summon('r_bat')).toMatchObject({ ok: false, error: expect.stringMatching(/back in/) });
+    expect(s.ammo().squadIn).toBeGreaterThan(0);
+    expect(s.ammo().squadIn).toBeLessThanOrEqual(Q.cooldown);
+    for (const k of RAIDER_KINDS) expect(squadStats(k, 7).hp).toBeGreaterThan(0);
+  });
+
   it('weapons unlock with Main Tower level and cost coins', () => {
-    expect(quote(newBase(), { kind: 'commander' })).toMatchObject({ ok: false, reason: expect.stringMatching(/Main Tower level 2/) });
-    const hq2 = { ...newBase(), hq: 2 };
-    expect(quote(hq2, { kind: 'commander' })).toEqual({ ok: true, cost: C.weapons.gun.cost });
-    const gun = applyAction(hq2, { kind: 'commander' });
+    expect(quote({ ...newBase(), hq: 2 }, { kind: 'commander' })).toMatchObject({ ok: false, reason: expect.stringMatching(/Main Tower level 3/) });
+    const hq3 = { ...newBase(), hq: 3 };
+    expect(quote(hq3, { kind: 'commander' })).toEqual({ ok: true, cost: C.weapons.gun.cost });
+    const gun = applyAction(hq3, { kind: 'commander' });
     expect(gun.cmd).toBe(1);
     expect(quote(gun, { kind: 'commander' }).ok).toBe(false);
-    expect(quote({ ...gun, hq: 3 }, { kind: 'commander' })).toEqual({ ok: true, cost: C.weapons.shotgun.cost });
+    expect(quote({ ...gun, hq: 5 }, { kind: 'commander' })).toEqual({ ok: true, cost: C.weapons.shotgun.cost });
     // Taps reach `reach` tiles around the plot (zombies jostled into an alley can still be shot)...
     expect(inTapReach(plot, plot.x + PLOT + C.reach - 0.5, plot.y + 7)).toBe(true);
     expect(inTapReach(plot, plot.x + PLOT + C.reach + 0.5, plot.y + 7)).toBe(false);
