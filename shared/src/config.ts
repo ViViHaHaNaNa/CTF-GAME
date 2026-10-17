@@ -131,8 +131,20 @@ export const CONFIG = {
     firstSurge: 8,
     /** Seconds a zombie spends climbing out of a grave, manhole or crack (harmless and untargetable). */
     riseTime: 0.6,
-    /** The countdown between surges, by Main Tower level (index = level - 1): regular, always shown, no trickle in between. */
-    gap: [20, 30, 45, 60, 80, 100, 130, 160],
+    /** The countdown between surges by Main Tower level (index = level - 1), from the moment the last zombie dies. No trickle in between. */
+    gap: [8, 12, 18, 25, 35, 45, 60, 75],
+    /**
+     * A surge arrives in pulses: `size` zombies (by level) land over `spread` s, and the next pulse comes as
+     * soon as fewer than `refillBelow` of the last one are left (or `maxWait` s after it started), so the
+     * field never sits empty mid-surge. The surge ends the moment everything has spawned and died.
+     */
+    pulse: { size: [18, 20, 22, 24, 26, 28, 30, 32], spread: 3, refillBelow: 0.5, maxWait: 12 },
+    /** A zombie that hasn't got closer or hit anything for this long is sent straight back to its base; stuck again, it drops (and counts as a kill). */
+    stuckAfter: 8,
+    /** A surge still going after `after` s enrages: the rest move `speed`x faster and hit `cooldown`x as often, and all its remaining zombies come at once. */
+    rage: { after: 60, speed: 2, cooldown: 0.5 },
+    /** Last resort: a surge still going after this long counts as held. */
+    maxSurge: 150,
     /**
      * The difficulty ramp. Every surge a player plays live is stronger than the last in total zombie power,
      * whatever happens in it: by `growth` at first, tapering to `growthLate` over `taperOver` surges (later
@@ -140,29 +152,21 @@ export const CONFIG = {
      * grows with the ramp up to `countCap` times the start, then each zombie gets tougher instead (health
      * and damage). The ramp stops at `max` times the start.
      */
-    ramp: { start: 25, growth: 1.14, growthLate: 1.07, taperOver: 40, max: 45, countCap: 8 },
+    ramp: { start: 30, growth: 1.15, growthLate: 1.05, taperOver: 40, max: 35, countCap: 8 },
     /** Surge to surge, power varies by up to +/- `variance`; every `hordeEvery`th surge is a horde at `hordeMult` (announced on the threat meter). */
     variance: 0.15,
     hordeEvery: 5,
     hordeMult: 1.5,
     /** Zombie power per kind (a Small is 1); the surge's power budget is spent on these. */
     power: { z_small: 1, z_axe: 3.5, z_big: 8, z_boss: 60 } as Record<ZombieKind, number>,
-    /** Seconds a surge's zombies keep arriving, by level: with the fighting, a surge lasts about 30-50 s. */
-    spawnWindow: [32, 33, 35, 37, 40, 43, 45, 47],
-    /** A surge arrives in this many pulses spread over its window, by level (each pulse lands within `pulseSpread` s). */
-    pulses: [2, 2, 3, 3, 3, 4, 4, 4],
-    pulseSpread: 4,
-    /** A surge still going after this long counts as held and the countdown starts. */
-    maxSurge: 60,
     /** Sides a surge comes from, by level: one side at level 1, then 2, 3, and all 4 from level 4. */
     sides: [1, 2, 3, 4, 4, 4, 4, 4],
     /** From this level the base's graveyard joins in, with this share of each surge. */
     graveyardFrom: 4,
     graveyardShare: 0.15,
-    /** From this level surges are pincers: `pincerShare` of a surge on 2-3 of its sides, arriving within `pincerBurst` s. */
+    /** From this level surges are pincers: `pincerShare` of a surge comes from 2-3 of its sides. */
     pincerFrom: 5,
     pincerShare: 0.6,
-    pincerBurst: 4,
     /** Where a side's zombies come from (weights): running in off the street/alley edge, a crack in the yard, the side's manhole. */
     sources: { edge: 0.45, crack: 0.35, manhole: 0.2 },
     /** Zombie types unlock with level: Big from 3, Axe from 4 (share of each surge by level; the rest are Small). */
@@ -173,14 +177,14 @@ export const CONFIG = {
     /** A boss joins a surge with this chance, by level (from level 6). */
     bossChance: [0, 0, 0, 0, 0, 0.5, 0.75, 1],
     /** A new player's very first surge: a walkthrough from one side, and the Main Tower can't drop below `hqFloor` of its health. */
-    tutorial: { size: 8, spawnWindow: 14, hqFloor: 0.5, bonus: 20 },
+    tutorial: { size: 8, pulse: 2, hqFloor: 0.5, bonus: 20 },
     /**
      * Guidance runs until the player has a basic base (BASIC_BASE: a bought post, both starter slots
      * filled, a post and the walls upgraded, Main Tower 2): prompts, incoming-side arrows, surges from at
      * most `maxSides` sides, no hordes, and the ramp capped at `maxRamp`. It ends for good the moment the
      * checklist is done. (The cap sits above where a starter base falls, so not upgrading still loses.)
      */
-    guided: { maxSides: 1, maxRamp: 4 },
+    guided: { maxSides: 1, maxRamp: 4, pulse: 18 },
     /** After guidance, the incoming sides show this many seconds before a surge. */
     warn: 10,
     /** The threat meter: Defence = the posts' damage per second x this; the next surge = its zombie power (x their toughness). */

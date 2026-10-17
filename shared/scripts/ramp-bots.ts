@@ -74,7 +74,7 @@ function nextBuy(base: BaseState): BaseAction | null {
 
 let BOUGHT = 0;
 
-interface SurgeLog { n: number; hq: number; held: boolean; postsLost: number; wallsLost: number; defence: number; threat: number; coins: number; spent: number }
+interface SurgeLog { n: number; hq: number; held: boolean; dead: number; secs: number; peak: number; avg: number; postsLost: number; wallsLost: number; defence: number; threat: number; coins: number; spent: number }
 
 function play(seed: number, upgrades: boolean, maxSurges: number, stopAfterHq8 = 12): SurgeLog[] {
   let base = newBase();
@@ -87,9 +87,16 @@ function play(seed: number, upgrades: boolean, maxSurges: number, stopAfterHq8 =
   let lostWalls = new Set<number>();
   let spent = 0;
   let atHq8 = 0;
+  let peak = 0, sum = 0, ticks = 0;
   const vault = () => vaultCapacity(base.hq);
   while (log.length < maxSurges && atHq8 < stopAfterHq8) {
     coins = Math.min(vault(), coins + s.step() + tap());
+    if (s.phase === 'surge') {
+      const n = s.combat.liveUnits;
+      peak = Math.max(peak, n);
+      sum += n;
+      ticks++;
+    }
     for (const b of s.combat.buildings.values()) {
       if (b.alive) continue;
       if (b.kind === 'post') lostPosts.add(b.id);
@@ -103,8 +110,11 @@ function play(seed: number, upgrades: boolean, maxSurges: number, stopAfterHq8 =
       if (e.type === 'held' || e.type === 'breach') {
         if (e.type === 'breach') coins -= breachLoss(coins, base.hq);
         const t = s.threat();
-        log.push({ n: e.n, hq: base.hq, held: e.type === 'held', postsLost: lostPosts.size, wallsLost: lostWalls.size, defence: t.defence, threat: t.next, coins, spent });
+        log.push({ n: e.n, hq: base.hq, held: e.type === 'held', dead: e.dead, secs: e.secs, peak, avg: ticks ? sum / ticks : 0, postsLost: lostPosts.size, wallsLost: lostWalls.size, defence: t.defence, threat: t.next, coins, spent });
         spent = 0;
+        peak = 0;
+        sum = 0;
+        ticks = 0;
         if (base.hq === 8) atHq8++;
       }
     }
@@ -139,6 +149,8 @@ R.countCap = env('CAP') ?? R.countCap;
 (CONFIG.siege as { holdPerPower: number }).holdPerPower = env('H') ?? CONFIG.siege.holdPerPower;
 (CONFIG.posts as { upgradeGrowth: number }).upgradeGrowth = env('PG') ?? CONFIG.posts.upgradeGrowth;
 (CONFIG.walls as { upgradeGrowth: number }).upgradeGrowth = env('WG') ?? CONFIG.walls.upgradeGrowth;
+(CONFIG.siege.guided as { pulse: number }).pulse = env('GP') ?? CONFIG.siege.guided.pulse;
+(CONFIG.siege.guided as { maxRamp: number }).maxRamp = env('MR') ?? CONFIG.siege.guided.maxRamp;
 const ONLY = process.env.ONLY;
 
 const pct = (a: number, b: number) => `${b ? Math.round((100 * a) / b) : 0}%`;
@@ -163,9 +175,11 @@ console.log('\n-- upgrades sensibly --');
 const byHq = new Map<number, { held: number; n: number }>();
 const reach: number[][] = [];
 const buys: number[] = [];
+const ALL: SurgeLog[] = [];
 let all = 0, allHeld = 0;
 for (let seed = 1; seed <= SEEDS; seed++) {
   const log = play(seed, true, 400);
+  ALL.push(...log);
   buys.push(BOUGHT / log.length);
   BOUGHT = 0;
   const r: number[] = [];
@@ -186,6 +200,9 @@ for (let seed = 1; seed <= SEEDS; seed++) {
 }
 for (const [hq, b] of [...byHq].sort((a, b) => a[0] - b[0])) console.log(`  HQ${hq}: held ${pct(b.held, b.n)} of ${b.n} surges`);
 console.log(`  upgrades bought per surge (median run): ${(med(buys) ).toFixed(2)}`);
+const early = ALL.filter((l) => l.hq <= 2);
+console.log(`  zombies on the field during early surges (HQ1-2): peak ${med(early.map((l) => l.peak))} (median), average ${(early.reduce((a, l) => a + l.avg, 0) / early.length).toFixed(1)}; surge length ${med(ALL.map((l) => l.secs)).toFixed(0)}s median`);
+console.log(`  dead time (nobody on the field mid-surge): max ${Math.max(...ALL.map((l) => l.dead)).toFixed(2)}s, mean ${(ALL.reduce((a, l) => a + l.dead, 0) / ALL.length).toFixed(2)}s over ${ALL.length} surges`);
 console.log(`  overall held ${pct(allHeld, all)}; surge reaching each Main Tower level (median): ${[2, 3, 4, 5, 6, 7, 8].map((h) => `HQ${h}@${med(reach.map((r) => r[h] ?? 999))}`).join(' ')}`);
 }
 void COMMANDER_WEAPONS;

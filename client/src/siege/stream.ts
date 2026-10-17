@@ -16,7 +16,7 @@ export interface BaseLive {
 
 export interface SiegeMessage {
   p: number;
-  type: 'surge' | 'held' | 'breach' | 'strike';
+  type: 'surge' | 'held' | 'breach' | 'strike' | 'rage';
   n: number;
   size?: number;
   sides?: number[];
@@ -84,6 +84,7 @@ export function bindLiveStream(socket: Socket, view: WorldView) {
       view.airstrikeLand(m.p, m.x! * 16, m.y! * 16, performance.now());
       return;
     }
+    if (m.type === 'rage') return;
     l.siege = { n: m.n, phase: m.type === 'surge' ? 'surge' : 'breather' };
   });
   // The Commander's shots: your own are drawn the moment you tap (prediction); everyone else's on arrival.

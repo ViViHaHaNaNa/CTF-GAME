@@ -123,8 +123,10 @@ export function newDirector(): DirectorState {
 
 export type SiegeEvent =
   | { type: 'surge'; n: number; size: number; sides: number[]; pincer: boolean; tutorial: boolean; boss: boolean; horde: boolean }
-  | { type: 'held'; n: number; kills: number; coins: number; bonus: number }
-  | { type: 'breach'; n: number }
+  | { type: 'held'; n: number; kills: number; coins: number; bonus: number; dead: number; secs: number }
+  | { type: 'breach'; n: number; dead: number; secs: number }
+  /** The surge ran long: the rest are enraged. */
+  | { type: 'rage'; n: number }
   /** An airstrike landed. */
   | { type: 'strike'; x: number; y: number; kills: number; coins: number };
 
@@ -248,6 +250,15 @@ export class Siege {
   private boost: number;
   private queue: Spawn[] = [];
   private qi = 0;
+  /** queue[0..assigned) have spawn times (released pulses); the rest wait for the field to thin out. */
+  private assigned = 0;
+  private pulseAt = 0;
+  private lastPulse = 0;
+  private raging = false;
+  /** Ticks this surge spent with nobody on the field (it should be ~0: the next pulse comes when the field thins). */
+  private deadTicks = 0;
+  /** Dead time of every surge so far, for the debug log and the balance scripts (seconds). */
+  deadLog: number[] = [];
   private surgeStart = 0;
   private surgeAlive = 0;
   private surgeKills = 0;
@@ -266,7 +277,7 @@ export class Siege {
   constructor(base: BaseState, readonly plot: WorldPlot, seed: number, readonly director: DirectorState, opts: SiegeOptions = {}) {
     this.base = base;
     this.boost = opts.defenceBoost ?? 0;
-    this.combat = new Combat(seed, baseBuildings(base, plot, opts.defenceBoost ?? 0, true), { crowd: true, coarse: opts.coarse });
+    this.combat = new Combat(seed, baseBuildings(base, plot, opts.defenceBoost ?? 0, true), { crowd: true, coarse: opts.coarse, stuckAfter: CONFIG.siege.stuckAfter });
     this.rng = mulberry32(seed ^ 0x9e3779b9);
     this.tutorial = (opts.ramp ?? true) && director.surges === 0;
     this.guided = !basicBaseDone(base);
@@ -488,9 +499,26 @@ export class Siege {
     if (this.counting) this.director.played += 1 / c.rate;
     if (this.phase !== 'surge' && c.tick >= this.until) this.startSurge();
     const rise = this.ticks(S.riseTime);
-    while (this.qi < this.queue.length && this.queue[this.qi]!.at <= c.tick && c.liveUnits < S.maxAlive) {
+    if (this.phase === 'surge') {
+      // The next pulse comes as soon as the field thins out (or after a while), never on a fixed clock.
+      const P = S.pulse;
+      const pending = this.assigned - this.qi;
+      const thin = this.surgeAlive <= Math.floor(this.lastPulse * P.refillBelow);
+      if (this.assigned < this.queue.length && pending === 0 && (thin || c.tick - this.pulseAt >= this.ticks(P.maxWait))) this.releasePulse();
+      // Running long: the rest enrage and everything left comes at once.
+      if (!this.raging && c.tick - this.surgeStart >= this.ticks(S.rage.after)) {
+        this.raging = true;
+        while (this.assigned < this.queue.length) this.releasePulse();
+        for (const u of c.units) if (u.state !== 'dead') u.stats = this.enrage(u.stats);
+        this.events.push({ type: 'rage', n: this.n });
+      }
+    }
+    // Never an empty field while zombies are waiting: bring the next one in now.
+    if (this.phase === 'surge' && c.liveUnits === 0 && this.qi < this.assigned) this.queue[this.qi]!.at = c.tick;
+    while (this.qi < this.assigned && this.queue[this.qi]!.at <= c.tick && c.liveUnits < S.maxAlive) {
       const s = this.queue[this.qi++]!;
-      c.addUnit(UNIT_KINDS.indexOf(s.kind), zombieStats(s.kind, this.toughness), s.x, s.y, s.rise ? rise : 0, this.n);
+      const stats = zombieStats(s.kind, this.toughness);
+      c.addUnit(UNIT_KINDS.indexOf(s.kind), this.raging ? this.enrage(stats) : stats, s.x, s.y, s.rise ? rise : 0, this.n);
       this.surgeAlive++;
     }
 
@@ -504,17 +532,44 @@ export class Siege {
       return earned;
     }
     if (this.phase === 'surge') {
+      // The surge ends the moment everything has spawned and died; the countdown starts right then.
       const cleared = this.qi >= this.queue.length && this.surgeAlive <= 0;
       if (cleared || c.tick - this.surgeStart >= this.ticks(S.maxSurge)) this.endSurge();
+      else if (c.liveUnits === 0) this.deadTicks++;
     }
     return earned;
+  }
+
+  /** Faster and angrier (a surge that ran too long). */
+  private enrage(stats: UnitStats): UnitStats {
+    const R = CONFIG.siege.rage;
+    return { ...stats, speed: stats.speed * R.speed, cooldown: stats.cooldown * R.cooldown };
+  }
+
+  /** Let the next pulse of the surge in: it lands over a few seconds, the first one at once. */
+  private releasePulse() {
+    const S = CONFIG.siege;
+    const c = this.combat;
+    const size = this.tutorial ? S.tutorial.pulse : this.guided ? S.guided.pulse : this.byLevel(S.pulse.size);
+    const end = Math.min(this.queue.length, this.assigned + size);
+    for (let i = this.assigned; i < end; i++) this.queue[i]!.at = c.tick + (i === this.assigned ? 0 : this.ticks(this.rng() * S.pulse.spread));
+    const slice = this.queue.slice(this.assigned, end).sort((a, b) => a.at - b.at);
+    for (let i = 0; i < slice.length; i++) this.queue[this.assigned + i] = slice[i]!;
+    this.lastPulse = end - this.assigned;
+    this.assigned = end;
+    this.pulseAt = c.tick;
+  }
+
+  /** Seconds of the current (or last) surge spent with nobody on the field. */
+  deadTime(): number {
+    return this.deadTicks / this.combat.rate;
   }
 
   /** Play one whole surge instantly, from now to its end (headless bases). Returns the seconds it took. */
   runSurge(): number {
     const c = this.combat;
     const t0 = c.tick;
-    const limit = t0 + this.ticks(CONFIG.siege.maxSurge + 30);
+    const limit = t0 + this.ticks(CONFIG.siege.maxSurge + 90);
     const n = this.n;
     while (c.tick < limit && !(this.n > n && this.phase === 'breather')) this.step();
     return (c.tick - t0) / c.rate;
@@ -605,7 +660,6 @@ export class Siege {
     // Spend the planned power: numbers first (up to the count cap), then toughness.
     const ramp = surgePower(this.nextPower / S.ramp.start);
     this.toughness = tutorial ? 1 : ramp.toughness;
-    const window = tutorial ? S.tutorial.spawnWindow : this.byLevel(S.spawnWindow);
     const sides = this.incoming.filter((s) => s !== GRAVEYARD_SIDE);
     const graveyard = this.incoming.includes(GRAVEYARD_SIDE);
     const pincer = !tutorial && this.base.hq >= S.pincerFrom && sides.length >= 3;
@@ -643,26 +697,25 @@ export class Siege {
       for (let i = 0; i < rest; i++) counts[sides[i % sides.length]!]!++;
     }
 
-    // The surge comes in pulses spread over its window: each pulse lands within a few seconds, from all the
-    // surge's sides (a pincer's main sides take theirs in one go). The walkthrough just trickles in.
-    const pulses = tutorial ? 1 : this.byLevel(S.pulses);
-    const pulseAt = (k: number) => (pulses === 1 ? 0 : (k * (window - S.pulseSpread)) / (pulses - 1));
+    // The surge is a list of zombies, mixed across its sides; it's let in pulse by pulse (releasePulse).
     const spawns: Spawn[] = [];
     counts.forEach((count, side) => {
-      for (let i = 0; i < count; i++) {
-        let t: number;
-        if (tutorial) t = i === 0 ? 0 : this.rng() * window;
-        else if (mains.includes(side)) t = pulseAt(Math.floor(pulses / 2)) + this.rng() * S.pincerBurst;
-        else t = pulseAt(i % pulses) + (i < pulses ? this.rng() * 0.3 : this.rng() * S.pulseSpread);
-        spawns.push(this.spawnAt(side, kinds.pop() ?? 'z_small', c.tick + this.ticks(t)));
-      }
+      for (let i = 0; i < count; i++) spawns.push(this.spawnAt(side, kinds.pop() ?? 'z_small', Infinity));
     });
-    if (boss) spawns.push({ ...this.spawnAt(sides[Math.floor(this.rng() * sides.length)]!, 'z_boss', c.tick + this.ticks(window * 0.4)), rise: false });
-    spawns.sort((a, b) => a.at - b.at);
+    for (let i = spawns.length - 1; i > 0; i--) {
+      const j = Math.floor(this.rng() * (i + 1));
+      [spawns[i], spawns[j]] = [spawns[j]!, spawns[i]!];
+    }
+    // The boss walks in with the middle of the surge.
+    if (boss) spawns.splice(Math.floor(spawns.length / 2), 0, { ...this.spawnAt(sides[Math.floor(this.rng() * sides.length)]!, 'z_boss', Infinity), rise: false });
     this.queue = spawns;
     this.qi = 0;
+    this.assigned = 0;
+    this.raging = false;
+    this.deadTicks = 0;
     this.phase = 'surge';
     this.surgeStart = c.tick;
+    this.releasePulse();
     this.surgeAlive = 0;
     this.surgeKills = 0;
     this.surgeCoins = 0;
@@ -698,6 +751,7 @@ export class Siege {
     const c = this.combat;
     this.queue = [];
     this.qi = 0;
+    this.assigned = 0;
     c.repair(S.repair);
     const hq = c.hq;
     if (hq) hq.floor = undefined;
@@ -722,7 +776,8 @@ export class Siege {
     const bonus = this.tutorial ? S.tutorial.bonus : Math.round(this.nextPower * S.holdPerPower);
     this.held += bonus;
     this.coins += bonus;
-    this.events.push({ type: 'held', n: this.n, kills: this.surgeKills, coins: this.surgeCoins + bonus, bonus });
+    this.deadLog.push(this.deadTime());
+    this.events.push({ type: 'held', n: this.n, kills: this.surgeKills, coins: this.surgeCoins + bonus, bonus, dead: this.deadTime(), secs: (this.combat.tick - this.surgeStart) / this.combat.rate });
     this.advance();
     this.countdown();
   }
@@ -732,7 +787,8 @@ export class Siege {
 
   private breach() {
     this.breaches++;
-    this.events.push({ type: 'breach', n: this.n });
+    this.deadLog.push(this.deadTime());
+    this.events.push({ type: 'breach', n: this.n, dead: this.deadTime(), secs: (this.combat.tick - this.surgeStart) / this.combat.rate });
     this.combat.killAll();
     this.combat.repair(1);
     this.advance();

@@ -125,7 +125,7 @@ describe('zombie siege', () => {
     const first = events.find((e) => e.type === 'surge');
     expect(first).toMatchObject({ type: 'surge', n: 1, size: CONFIG.siege.tutorial.size, tutorial: true, boss: false });
     if (first?.type === 'surge') expect(first.sides.filter((n) => n > 0)).toHaveLength(1);
-    expect(events.find((e) => e.type !== 'surge')).toMatchObject({ type: 'held', n: 1 });
+    expect(events.find((e) => e.type === 'held' || e.type === 'breach')).toMatchObject({ type: 'held', n: 1 });
     expect(s.combat.hq!.hp).toBeGreaterThanOrEqual(Math.round(s.combat.hq!.maxHp * CONFIG.siege.tutorial.hqFloor));
     expect(s.tutorial).toBe(false);
     // Only once: a player who has had surges gets no walkthrough.
@@ -231,6 +231,59 @@ describe('zombie siege', () => {
       for (const g of gaps) expect(g).toBeCloseTo(CONFIG.siege.gap[hq - 1]!, 0);
       expect(strays).toBe(0);
     }
+  });
+
+  it('a surge ends the tick its last zombie dies, the field is never left empty mid-surge', () => {
+    const base = { hq: 3, walls: 3, cmd: 0, posts: SLOTS.map((_, i) => (i < 5 ? { type: 'gun' as const, level: 3 } : null)) };
+    const s = new Siege(base, plot, 11, { ...newDirector(), surges: 9 }, { firstDelay: 0 });
+    let ends = 0;
+    for (let t = 0; t < 400 * rate && ends < 5; t++) {
+      s.step();
+      for (const e of s.events) {
+        if (e.type !== 'held' && e.type !== 'breach') continue;
+        ends++;
+        // Countdown already running on this tick, and every zombie of the surge is gone.
+        expect(s.phase).toBe('breather');
+        expect(s.nextIn()).toBeCloseTo(CONFIG.siege.gap[2]!, 0);
+        if (e.secs < CONFIG.siege.maxSurge) expect(s.combat.units.some((u) => u.state !== 'dead' && u.tag === e.n)).toBe(false);
+        expect(e.dead).toBeLessThan(2);
+      }
+      s.events.length = 0;
+    }
+    expect(ends).toBe(5);
+    expect(Math.max(...s.deadLog)).toBeLessThan(2);
+  });
+
+  it('a zombie that makes no progress is rerouted, then dropped as a kill', () => {
+    const c = new Combat(9, baseBuildings(newBase(), plot), { crowd: true, stuckAfter: CONFIG.siege.stuckAfter });
+    const u = c.addUnit(0, { ...zombieStats('z_small'), speed: 0 }, plot.x - 6, plot.y - 6);
+    const kills: number[] = [];
+    let reroutedAt = -1;
+    for (let t = 0; t < 3 * CONFIG.siege.stuckAfter * c.rate && u.state !== 'dead'; t++) {
+      for (const k of c.step().kills) kills.push(k.unitId);
+      if (reroutedAt < 0 && u.rerouted) reroutedAt = c.tick / c.rate;
+    }
+    expect(reroutedAt).toBeCloseTo(CONFIG.siege.stuckAfter, 0);
+    expect(u.state).toBe('dead');
+    expect(kills).toContain(u.id);
+    expect(c.tick / c.rate).toBeCloseTo(2 * CONFIG.siege.stuckAfter, 0);
+  });
+
+  it('a surge running past the rage time enrages what is left', () => {
+    // Walls and no posts: nothing kills them, so the surge runs long.
+    const base = { hq: 6, walls: 6, cmd: 0, posts: SLOTS.map(() => null) };
+    const s = new Siege(base, plot, 4, { ...newDirector(), surges: 9 }, { firstDelay: 0 });
+    let rageAt = -1;
+    for (let t = 0; t < (CONFIG.siege.rage.after + 5) * rate && rageAt < 0; t++) {
+      s.step();
+      if (s.events.some((e) => e.type === 'rage')) rageAt = s.combat.tick / rate;
+      s.events.length = 0;
+    }
+    expect(rageAt).toBeCloseTo(CONFIG.siege.rage.after, 0);
+    const live = s.combat.units.filter((u) => u.state !== 'dead');
+    expect(live.length).toBeGreaterThan(0);
+    const small = live.find((u) => u.kind === 0);
+    if (small) expect(small.stats.speed).toBeCloseTo(zombieStats('z_small').speed * CONFIG.siege.rage.speed, 5);
   });
 
   it('calling a surge early pays for the time skipped, once enough of the countdown has passed', () => {

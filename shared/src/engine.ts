@@ -79,6 +79,11 @@ export interface Unit {
   diedAt: number;
   /** Free for the caller (sieges store the surge number here). */
   tag: number;
+  /** Stuck check: closest it has been to its target, and the last tick it got closer or hit something. */
+  best: number;
+  progAt: number;
+  /** Already sent straight back to its base once by the stuck check. */
+  rerouted: boolean;
 }
 
 export interface StepResult {
@@ -89,6 +94,11 @@ export interface StepResult {
 export interface CombatOptions {
   /** Units push apart (zombie mobs). */
   crowd?: boolean;
+  /**
+   * Stuck failsafe (seconds; 0 = off): a unit that hasn't got closer to its target or hit anything for
+   * this long is sent straight back to its base (no crowd pushing); stuck again, it drops (counted as a kill).
+   */
+  stuckAfter?: number;
   /** Headless resolution: CONFIG.siege.coarseRate ticks/s; attack timers carry their remainder so rates stay exact. */
   coarse?: boolean;
 }
@@ -124,6 +134,7 @@ export class Combat {
   /** Ticks per second this fight runs at. */
   readonly rate: number;
   readonly crowd: boolean;
+  private readonly stuckTicks: number;
   private readonly carry: boolean;
   private nextUnitId = FIRST_UNIT_ID;
   private pool: Unit[] = [];
@@ -146,6 +157,7 @@ export class Combat {
     this.rate = opts.coarse ? CONFIG.siege.coarseRate : CONFIG.tickRate;
     this.dt = 1 / this.rate;
     this.crowd = !!opts.crowd;
+    this.stuckTicks = Math.round((opts.stuckAfter ?? 0) * this.rate);
     this.carry = !!opts.coarse;
     this.setBuildings(defs);
     this.dirty.clear();
@@ -237,6 +249,9 @@ export class Combat {
     u.cooldown = 0;
     u.diedAt = 0;
     u.tag = tag;
+    u.best = Infinity;
+    u.progAt = this.tick + riseTicks;
+    u.rerouted = false;
     this.units.push(u);
     this.alive++;
     return u;
@@ -487,16 +502,35 @@ export class Combat {
       if (u.state === 'rise') {
         if (this.tick < u.wakeAt) continue;
         u.state = 'move';
+        u.progAt = this.tick;
+      }
+      // Stuck failsafe: no progress for a while -> straight back to its base; still stuck -> it drops.
+      if (this.stuckTicks && this.tick - u.progAt > this.stuckTicks) {
+        if (u.rerouted) {
+          this.hurt(u, u.hp, res);
+          continue;
+        }
+        u.rerouted = true;
+        u.targetId = -1;
+        u.best = Infinity;
+        u.progAt = this.tick;
       }
       let target = this.buildings.get(u.targetId);
       if (!target?.alive) {
         target = this.pickTarget(u);
         u.targetId = target?.id ?? -1;
         u.state = 'move';
+        u.best = Infinity;
       }
       if (!target) continue;
-      const inRange = this.distTo(target, u.x, u.y) <= u.stats.range;
+      const dist = this.distTo(target, u.x, u.y);
+      if (dist < u.best - 0.05) {
+        u.best = dist;
+        u.progAt = this.tick;
+      }
+      const inRange = dist <= u.stats.range;
       if (this.ready(u, 'cooldown', inRange, u.stats.cooldown)) {
+        u.progAt = this.tick;
         this.damage(target, u.stats.damage * (target.kind === 'wall' ? u.stats.wallMult : 1), res);
         // Ranged attackers leave a visible shot (posts' shots are recorded below).
         if (u.stats.range > 1) this.shots.push([u.id, Math.round((target.x + target.w / 2) * 16), Math.round((target.y + target.h / 2) * 16)]);
@@ -517,13 +551,14 @@ export class Combat {
       if (blocker && blocker.id !== target.id) {
         // Something solid in the way: hack through it first.
         u.targetId = blocker.id;
+        u.best = Infinity;
         u.state = 'attack';
         continue;
       }
       u.x = nx;
       u.y = ny;
       u.state = 'move';
-      if (this.crowd) this.separate(i, u);
+      if (this.crowd && !u.rerouted) this.separate(i, u);
     }
 
     // 2. Posts shoot.

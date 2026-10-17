@@ -711,6 +711,12 @@ export class GameServer {
 
   private siegeEvent(p: PlayerRecord, plot: number, e: SiegeEvent) {
     const msg: SiegeMessage = { ...e, p: plot };
+    // Debug log: "dead time" = a surge with nobody on the field and no countdown running (should stay ~0).
+    if (e.type === 'held' || e.type === 'breach') {
+      const line = `[siege] ${p.name} surge ${e.n}: ${e.type}, ${e.secs.toFixed(1)}s, dead time ${e.dead.toFixed(1)}s`;
+      if (e.dead > 2) console.warn(`${line} (over 2s!)`);
+      else if (process.env.SIEGE_DEBUG) console.log(line);
+    }
     if (e.type === 'surge') this.setWaveFlag(plot, 2);
     if (e.type === 'breach') {
       this.flushCoins();

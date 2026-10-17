@@ -305,6 +305,9 @@ function bindNet() {
       if (!flash || flash.until < now + 500) flash = { text: `Surge ${m.n} held! ${m.kills} down, +${m.coins} coins${m.bonus ? ` (${m.bonus} bonus)` : ''}`, cls: 'held', until: now + 2200 };
       sfx.held();
       if (coachStep && coachStep < 3) coach(3);
+    } else if (m.type === 'rage') {
+      flash = { text: "😡 They're enraged! Finish them off!", cls: 'alarm', until: now + 2500 };
+      sfx.siren(false);
     } else if (m.type === 'strike') {
       view.shake(S.strike * view.dpr, 350);
       sfx.boom();
